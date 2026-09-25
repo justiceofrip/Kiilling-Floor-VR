@@ -9,6 +9,7 @@ OpenXR controller tests use a fake API to cover bindings, predicted timing, focu
 Hardware checks are separate from unit tests:
 
 ```powershell
+& G:\KFVR\build\x86\KFVRD3D9Probe.exe --consumer-exe G:\KFVR\build\x64\KFVRD3D9Probe.exe
 & G:\KFVR\build\x86\KFVRBridgeProbe.exe --consumer-exe G:\KFVR\build\x64\KFVRBridgeProbe.exe
 & G:\KFVR\build\x64\KFVRInputProbe.exe --producer-exe G:\KFVR\build\x86\KFVRInputProbe.exe
 & G:\KFVR\build\x64\KFVRIpcProbe.exe --producer-exe G:\KFVR\build\x86\KFVRIpcProbe.exe
@@ -32,3 +33,7 @@ Headset checks require an available HMD/runtime. No headset-visible KF stereo or
 Expanded native activity reports: `reports/native-trace-20260925-114948-065338` (KF-Offices lobby) and `reports/native-trace-20260925-115123-397460` (after readying the solo match). Both passed 180 frames and restoration of all nine hooks. Script events, nested world renders and skeletal evaluation are counted separately from the two instrumented animation-advance functions. `tools/audit_native.py` emits bounded CFG/call listings into ignored reports; indirect calls and branches beyond export bounds remain explicit unknowns.
 
 `KFVRInputProbe` verified actual x64/x86 controller and haptic transport, 64-bit predicted time/reference IDs, host-stall expiration, focus loss without an image, recenter, invalid input neutralization and host-close release. Synthetic packets are not a physical controller test.
+
+`KFVRD3D9Probe` verified 20 non-Ex D3D9-origin pairs with an actual x86 producer and x64 consumer, four RGBA/BGRA/sRGB formats, X8/A8 alpha handling, odd dimensions/row pitches, six 8x-MSAA cases, untouched render-target/viewport bindings, pair backpressure, discarded-generation recreation and a real D3D9 reset after releasing bridge resources. Per-resolution timings are in `reports/d3d9-transfer-timings.jsonl`; these include readback/upload/publication but exclude scene drawing and compositor latency. No in-game stereo is claimed.
+
+One bounded `KFVRXrHost --probe` attempt failed at xrCreateInstance with XR_ERROR_RUNTIME_FAILURE (-2). It created no instance/session and submitted no frames. Logs: `reports/openxr-probe.json` and `.stderr.txt`. This establishes runtime unavailability at that attempt, not a diagnosis of headset hardware.
