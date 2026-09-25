@@ -4,7 +4,7 @@ from observe_kf import Observer
 import pefile
 from native_profile import TARGETS, AUDITED_SHA256
 
-def trace(pid,game,root,target_trial=False,camera_trial=False):
+def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False):
  stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
  directory=root/'reports'/('native-trace-'+stamp);directory.mkdir(parents=True)
  observer=Observer(pid,game)
@@ -15,7 +15,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False):
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<14I',864,4,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial))
+  p=snapshot['properties'];config=struct.pack('<15I',884,5,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),int(stereo_trial))
   names=TARGETS
   evidence=[]
   for file,name in names:
@@ -34,7 +34,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False):
    path=game/'System'/file;pe=pefile.PE(str(path));base=observer.modules[file.lower()][0];pe.relocate_image(base);expected=pe.get_data(rva,16)
    if observer.read(base+rva,16)!=expected:raise ValueError('Native target interface already modified')
    config+=expected;target_evidence.append(dict(file=file,rva=rva,expected=expected.hex()))
-  for rva in [0x1a5ab0,0x1a2f30]:
+  for rva in [0x1a5ab0,0x1a2f30,0x1a9010]:
    if not camera_trial:config+=bytes(16);continue
    pe=pefile.PE(str(game/'System/Engine.dll'));base=observer.modules['engine.dll'][0];pe.relocate_image(base);expected=pe.get_data(rva,16)
    if observer.read(base+rva,16)!=expected:raise ValueError('Camera method already modified')
@@ -53,7 +53,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False):
   if report_path.exists():
    report=json.loads(report_path.read_text());summary.update(frames=len(report['frames']),hooks_disabled=report['hooks_disabled'],render_counts=sorted(set(f['renders'] for f in report['frames'])),simulation_advanced_inside_draw=any(f['ticks_before']!=f['ticks_after'] for f in report['frames']))
   if report_path.exists():
-   totals={};phases={0:'draw_outside_player',1:'player_outside_level',2:'level'}
+   totals={};phases={0:'draw_outside_player',1:'player_outside_level',2:'level',3:'private_eye'}
    for frame in report['frames']:
     for call in frame.get('scripts',[]):
      key=observer.name(call['owner_name_id'])+'.'+observer.name(call['name_id'])+'@'+phases[call['phase']]
@@ -72,9 +72,20 @@ def trace(pid,game,root,target_trial=False,camera_trial=False):
    for row in camera.get('cases',[]):
     camera_passed=camera_passed and all(row.get(k) is True for k in ['fields_match','canaries_intact','finite']) and all(row.get(k,1e10)<0.02 for k in ['camera_max_error','view_max_error','projection_inverse_max_error','view_projection_max_error'])
    summary['camera_trial_passed']=camera_passed
+  stereo_passed=True
+  if stereo_trial:
+   stereo_path=directory/'native-stereo.json';stereo=json.loads(stereo_path.read_text()) if stereo_path.exists() else {}
+   stereo_passed=all(stereo.get(k) is True for k in ['ready','state_restored','canaries_intact','cameras_preserved','distinct_surfaces']) and stereo.get('hresult')==0 and stereo.get('renders')==2
+   if stereo_passed:
+    left=(directory/'native-left.bmp').read_bytes()[54:];right=(directory/'native-right.bmp').read_bytes()[54:]
+    unique=[len(set(data[i:i+3] for i in range(0,len(data),4))) for data in [left,right]]
+    differing=sum(left[i:i+3]!=right[i:i+3] for i in range(0,len(left),4))
+    stereo_passed=len(left)==len(right)==512*384*4 and min(unique)>64 and differing>1024
+    summary.update(eye_unique_colors=unique,differing_eye_pixels=differing)
+   summary['stereo_trial_passed']=stereo_passed
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
-  if result.returncode or not restored or not target_passed or not camera_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
+  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
  finally:observer.close()
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],a.target_trial or a.camera_trial,a.camera_trial)
+ p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],a.target_trial or a.camera_trial or a.stereo_trial,a.camera_trial or a.stereo_trial,a.stereo_trial)
 

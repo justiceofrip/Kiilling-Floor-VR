@@ -11,7 +11,7 @@ namespace kfvr::native {
 namespace {
 using Constructor=void(__thiscall*)(void*,void*,void*,void*,math::Vec3,ue2::Rotator,float);
 using Destructor=void(__thiscall*)(void*);
-Constructor construct=nullptr;Destructor destroy=nullptr;
+Constructor construct=nullptr;Destructor destroy=nullptr;using Renderer=void(__thiscall*)(void*,void*);Renderer render=nullptr;
 struct CameraCase {math::Vec3 origin{};ue2::Rotator rotation{};float fov=0,cameraError=0,viewError=0,inverseError=0,productError=0;std::array<math::Matrix4,6> matrices{};bool finite=true,canary=true,fields=false;};
 struct Trial {std::atomic<bool> ready=false;bool attempted=false,originalUnchanged=false,prerequisites=false;std::array<CameraCase,5> cases{};} trial;
 bool Read(unsigned at,void* out,unsigned bytes){SIZE_T got=0;return at>=0x10000&&ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(at),out,bytes,&got)&&got==bytes;}
@@ -19,7 +19,7 @@ unsigned U32(unsigned at){unsigned v=0;Read(at,&v,4);return v;}
 template<class T>T Field(const void* at,unsigned offset){T result{};std::memcpy(&result,static_cast<const unsigned char*>(at)+offset,sizeof(result));return result;}
 float Error(const math::Matrix4& a,const math::Matrix4& b){float e=0;for(unsigned i=0;i<4;++i)for(unsigned j=0;j<4;++j)e=std::max(e,std::abs(a.values[i][j]-b.values[i][j]));return e;}
 }
-void SetCameraMethods(void* constructor,void* destructor){construct=reinterpret_cast<Constructor>(constructor);destroy=reinterpret_cast<Destructor>(destructor);}
+void SetCameraMethods(void* constructor,void* destructor,void* renderer){construct=reinterpret_cast<Constructor>(constructor);destroy=reinterpret_cast<Destructor>(destructor);render=reinterpret_cast<Renderer>(renderer);}
 void ProbeCameras(void* original,void* target){
  if(trial.attempted)return;trial.attempted=true;
  std::array<unsigned char,0x1e4> before{},after{};const auto address=reinterpret_cast<unsigned>(original);
@@ -49,6 +49,26 @@ void ProbeCameras(void* original,void* target){
   for(unsigned i=16+0x1e4;i<storage.size();++i)row.canary&=storage[i]==0xcd;
  }
  trial.originalUnchanged=Read(address,after.data(),unsigned(after.size()))&&before==after;trial.ready.store(true,std::memory_order_release);
+}
+bool RenderDiagnosticCamera(void* original,void* target,void* ri,float offset){
+ if(!render||!trial.ready.load(std::memory_order_acquire)||!trial.prerequisites||!trial.originalUnchanged)return false;
+ for(const auto& row:trial.cases)if(!row.canary||!row.fields||!row.finite||row.cameraError>=.02f||row.viewError>=.02f||row.inverseError>=.02f||row.productError>=.02f)return false;
+ std::array<unsigned char,0x1e4> before{},after{};const auto address=reinterpret_cast<unsigned>(original);if(!Read(address,before.data(),unsigned(before.size())))return false;
+ auto origin=Field<math::Vec3>(before.data(),0x194);const auto rotation=Field<ue2::Rotator>(before.data(),0x1d4);auto camera=ue2::CameraWorld(origin,rotation);if(!camera)return false;
+ origin.x+=offset*camera->values[0][0];origin.y+=offset*camera->values[0][1];origin.z+=offset*camera->values[0][2];
+ alignas(16) std::array<unsigned char,0x240> storage;storage.fill(0xcd);auto* scene=storage.data()+16;
+ construct(scene,reinterpret_cast<void*>(Field<unsigned>(before.data(),4)),target,reinterpret_cast<void*>(Field<unsigned>(before.data(),0x1c4)),origin,rotation,Field<float>(before.data(),0x1e0));
+ // The native constructor uses viewport dimensions for these differentials.
+ // Correct only our private node to the dimensions of its 512x384 target.
+ const auto inverse=Field<math::Matrix4>(scene,0x154);math::Vec3 dx{},dy{};
+ dx={2*inverse.values[0][0]/512,2*inverse.values[0][1]/512,2*inverse.values[0][2]/512};
+ dy={2*inverse.values[1][0]/384,2*inverse.values[1][1]/384,2*inverse.values[1][2]/384};
+ std::memcpy(scene+0x1a0,&dx,sizeof(dx));std::memcpy(scene+0x1ac,&dy,sizeof(dy));
+ render(scene,ri);destroy(scene);
+ bool intact=Read(address,after.data(),unsigned(after.size()))&&before==after;
+ for(unsigned i=0;i<16;++i)intact&=storage[i]==0xcd;
+ for(unsigned i=16+0x1e4;i<storage.size();++i)intact&=storage[i]==0xcd;
+ return intact;
 }
 void WriteCameraReport(const std::filesystem::path& folder){
  std::ofstream out(folder/L"native-camera-trial.json");if(!trial.ready.load(std::memory_order_acquire)){out<<"{\"ready\":false}\n";return;}

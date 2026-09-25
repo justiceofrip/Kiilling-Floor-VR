@@ -23,6 +23,11 @@ GetFrame getFrameOriginal=nullptr;ProcessEvent processEventOriginal=nullptr;
 thread_local unsigned playerDepth=0,levelDepth=0;
 void ProbeTarget(void*,void*);
 void ReadTarget();
+void ProbeStereo(void*,void*);
+void ReadStereo();
+void WriteStereo(const std::filesystem::path&);
+thread_local bool privateEye=false;
+std::atomic<bool> replayed=false;
 using AuxCtor=void(__thiscall*)(void*,int,int,int);
 using SimpleCall=void(__thiscall*)(void*);
 AuxCtor auxCtor=nullptr;SimpleCall auxDtor=nullptr;
@@ -56,12 +61,12 @@ void __fastcall RenderHook(void* self,void*,void* ri){
  ++playerDepth;renderOriginal(self,ri);--playerDepth;
 }
 
-void __fastcall LevelHook(void* self,void*,void* ri){if(current){++current->levelRenders;if(config.targetTrial&&playerDepth&&!levelDepth)ProbeTarget(self,ri);}++levelDepth;levelOriginal(self,ri);--levelDepth;}
+void __fastcall LevelHook(void* self,void*,void* ri){const bool root=current&&playerDepth&&!levelDepth&&!privateEye;if(current){++current->levelRenders;if(config.targetTrial&&root)ProbeTarget(self,ri);}++levelDepth;levelOriginal(self,ri);--levelDepth;if(config.stereoTrial&&root)ProbeStereo(self,ri);}
 void __fastcall ActorAnimationHook(void* self,void*,float dt){if(current)++current->actorAnimation;actorAnimationOriginal(self,dt);}
 int __fastcall SkeletalAnimationHook(void* self,void*,float dt){if(current)++current->skeletalAnimation;return skeletalAnimationOriginal(self,dt);}
 void __fastcall GetFrameHook(void* self,void*,void* actor,void* scene,void* vectors,int stride,int* countOut,unsigned long flags){if(current)++current->skeletalFrames;getFrameOriginal(self,actor,scene,vectors,stride,countOut,flags);}
 void __fastcall ProcessEventHook(void* self,void*,void* function,void* params,void* result){
- if(current){auto& row=*current;++row.scriptEvents;const auto at=reinterpret_cast<std::uint32_t>(function);const auto name=U32(at+0x24),owner=U32(U32(at+0x1c)+0x24);const unsigned phase=levelDepth?2:playerDepth?1:0;bool recorded=false;
+ if(current){auto& row=*current;++row.scriptEvents;const auto at=reinterpret_cast<std::uint32_t>(function);const auto name=U32(at+0x24),owner=U32(U32(at+0x1c)+0x24);const unsigned phase=privateEye?3:levelDepth?2:playerDepth?1:0;bool recorded=false;
   for(auto& entry:row.scripts){if(!entry.calls||(entry.name==name&&entry.ownerName==owner&&entry.phase==phase)){entry.name=name;entry.ownerName=owner;entry.phase=phase;++entry.calls;recorded=true;break;}}
   if(!recorded)++row.scriptOverflow;
  }processEventOriginal(self,function,params,result);
@@ -92,7 +97,7 @@ void CaptureColor(void* renderer){
  if(SUCCEEDED(hr)){try{capture.pixels.resize(std::size_t(desc.Width)*desc.Height*4);for(unsigned y=0;y<desc.Height;++y)std::memcpy(capture.pixels.data()+std::size_t(y)*desc.Width*4,static_cast<const char*>(locked.pBits)+std::size_t(y)*locked.Pitch,desc.Width*4);}catch(...){hr=E_OUTOFMEMORY;}staging->UnlockRect();}
  capture.result=hr;capture.ready.store(true,std::memory_order_release);
 }
-void __fastcall PresentHook(void* self,void*,void* viewport){if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){presents.fetch_add(1);if(LocalWorld()){CaptureColor(self);if(config.targetTrial)ReadTarget();}}presentOriginal(self,viewport);}
+void __fastcall PresentHook(void* self,void*,void* viewport){if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){presents.fetch_add(1);if(LocalWorld()){CaptureColor(self);if(config.targetTrial)ReadTarget();if(config.stereoTrial)ReadStereo();}}presentOriginal(self,viewport);}
 bool Executable(void* at,HMODULE owner){MEMORY_BASIC_INFORMATION m{};if(!VirtualQuery(at,&m,sizeof(m))||m.AllocationBase!=owner||m.State!=MEM_COMMIT||m.Protect&(PAGE_GUARD|PAGE_NOACCESS))return false;return (m.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))!=0;}
 struct TargetTrial {
  bool attempted=false,targetsRestored=false,depthRestored=false,viewportRestored=false,cacheRestored=false,stackRestored=false,canary=true,distinct=false;
@@ -144,10 +149,72 @@ void ReadTarget(){
  targetTrial.result=hr;targetTrial.surface.Reset();targetTrial.ready.store(true,std::memory_order_release);
 }
 
+struct StereoTrial {
+ bool attempted=false,restored=true,canaries=true,cameras=true,distinct=false;std::atomic<bool> ready=false;
+ HRESULT result=E_PENDING;unsigned renders=0,frames=0,scripts=0,animation=0,tickBefore=0,tickAfter=0;long long renderQpc=0;
+ std::array<Microsoft::WRL::ComPtr<IDirect3DSurface9>,2> surfaces;
+ std::array<std::vector<unsigned char>,2> pixels;
+} stereo;
+void ProbeStereo(void* scene,void* ri){
+ if(stereo.attempted)return;stereo.attempted=true;
+ using Microsoft::WRL::ComPtr;
+ if(FAILED(targetTrial.result)||!targetTrial.targetsRestored||!targetTrial.depthRestored||!targetTrial.viewportRestored||!targetTrial.cacheRestored||!targetTrial.stackRestored||!targetTrial.canary){stereo.result=E_UNEXPECTED;stereo.ready=true;return;}
+ const auto address=reinterpret_cast<unsigned>(ri),renderer=U32(address+4);auto* device=reinterpret_cast<IDirect3DDevice9*>(U32(renderer+0x495c));
+ const auto stack=U32(address+0x59870),cache=U32(address+0x5940c);std::array<unsigned char,0x594> before{},after{};
+ ComPtr<IDirect3DSurface9> original,depth;D3DVIEWPORT9 viewport{};
+ if(!Read(cache,before.data(),before.size())||FAILED(device->GetRenderTarget(0,&original))||FAILED(device->GetDepthStencilSurface(&depth))||FAILED(device->GetViewport(&viewport))){stereo.result=E_FAIL;stereo.ready=true;return;}
+ const auto push=reinterpret_cast<SimpleCall>(targetMethods[0]),pop=reinterpret_cast<SimpleCall>(targetMethods[1]);
+ const auto bind=reinterpret_cast<int(__thiscall*)(void*,void*)>(targetMethods[2]);
+ const auto setViewport=reinterpret_cast<void(__thiscall*)(void*,int,int,int,int)>(targetMethods[3]);
+ const auto clear=reinterpret_cast<void(__thiscall*)(void*,int,unsigned,int,float,int,unsigned)>(targetMethods[4]);
+ const unsigned oldFrames=current->skeletalFrames,oldScripts=current->scriptEvents,oldAnimation=current->actorAnimation+current->skeletalAnimation;
+ stereo.tickBefore=ticks.load();const auto start=Qpc();stereo.result=S_OK;
+ for(unsigned eye=0;eye<2&&SUCCEEDED(stereo.result);++eye){
+  alignas(16) std::array<unsigned char,64> aux;aux.fill(0xcd);auxCtor(aux.data(),512,384,5);push(ri);
+  if(!bind(ri,aux.data()))stereo.result=E_FAIL;
+  else {
+   setViewport(ri,0,0,512,384);clear(ri,1,0xff000000,1,1.f,1,0);
+   privateEye=true;replayed=true;stereo.cameras&=kfvr::native::RenderDiagnosticCamera(scene,aux.data(),ri,eye?1.6f:-1.6f);privateEye=false;++stereo.renders;
+   stereo.result=device->GetRenderTarget(0,&stereo.surfaces[eye]);
+   if(SUCCEEDED(stereo.result)){D3DSURFACE_DESC desc{};stereo.result=stereo.surfaces[eye]->GetDesc(&desc);if(desc.Width!=512||desc.Height!=384||desc.MultiSampleType!=D3DMULTISAMPLE_NONE||desc.Format!=D3DFMT_A8R8G8B8||stereo.surfaces[eye].Get()==original.Get())stereo.result=E_UNEXPECTED;}
+  }
+  pop(ri);auxDtor(aux.data());
+  for(unsigned i=28;i<aux.size();++i)stereo.canaries&=aux[i]==0xcd;
+  ComPtr<IDirect3DSurface9> restored,restoredDepth;D3DVIEWPORT9 restoredViewport{};
+  stereo.restored&=SUCCEEDED(device->GetRenderTarget(0,&restored))&&restored.Get()==original.Get()&&SUCCEEDED(device->GetDepthStencilSurface(&restoredDepth))&&restoredDepth.Get()==depth.Get()&&SUCCEEDED(device->GetViewport(&restoredViewport))&&std::memcmp(&viewport,&restoredViewport,sizeof(viewport))==0&&U32(address+0x59870)==stack&&U32(address+0x5940c)==cache&&Read(cache,after.data(),after.size())&&before==after;
+  if(!stereo.restored||!stereo.canaries||!stereo.cameras)stereo.result=E_UNEXPECTED;
+ }
+ stereo.renderQpc=Qpc()-start;stereo.tickAfter=ticks.load();stereo.frames=current->skeletalFrames-oldFrames;stereo.scripts=current->scriptEvents-oldScripts;stereo.animation=current->actorAnimation+current->skeletalAnimation-oldAnimation;
+ stereo.distinct=stereo.surfaces[0]&&stereo.surfaces[1]&&stereo.surfaces[0].Get()!=stereo.surfaces[1].Get();
+ if(FAILED(stereo.result)){for(auto& surface:stereo.surfaces)surface.Reset();stereo.ready.store(true,std::memory_order_release);}
+}
+void ReadStereo(){
+ if(!stereo.attempted||stereo.ready.load(std::memory_order_acquire))return;
+ using Microsoft::WRL::ComPtr;
+ HRESULT hr=S_OK;
+ for(unsigned eye=0;eye<2&&SUCCEEDED(hr);++eye){
+  ComPtr<IDirect3DDevice9> device;ComPtr<IDirect3DSurface9> staging;
+  if(!stereo.surfaces[eye]){hr=E_POINTER;break;}
+  hr=stereo.surfaces[eye]->GetDevice(&device);
+  if(SUCCEEDED(hr))hr=device->CreateOffscreenPlainSurface(512,384,D3DFMT_A8R8G8B8,D3DPOOL_SYSTEMMEM,&staging,nullptr);
+  if(SUCCEEDED(hr))hr=device->GetRenderTargetData(stereo.surfaces[eye].Get(),staging.Get());
+  D3DLOCKED_RECT lock{};if(SUCCEEDED(hr))hr=staging->LockRect(&lock,nullptr,D3DLOCK_READONLY);
+  if(SUCCEEDED(hr)){try{if(!lock.pBits||lock.Pitch<2048)hr=E_INVALIDARG;else{stereo.pixels[eye].resize(512*384*4);for(unsigned y=0;y<384;++y)std::memcpy(stereo.pixels[eye].data()+y*2048,static_cast<const char*>(lock.pBits)+std::size_t(y)*lock.Pitch,2048);}}catch(...){hr=E_OUTOFMEMORY;}staging->UnlockRect();}
+ }
+ stereo.result=hr;for(auto& surface:stereo.surfaces)surface.Reset();stereo.ready.store(true,std::memory_order_release);
+}
+void WriteStereo(const std::filesystem::path& folder){
+ std::ofstream out(folder/L"native-stereo.json");if(!stereo.ready.load(std::memory_order_acquire)){out<<"{\"ready\":false}\n";return;}
+ LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
+ out<<std::boolalpha<<"{\"ready\":true,\"hresult\":"<<stereo.result<<",\"renders\":"<<stereo.renders<<",\"state_restored\":"<<stereo.restored<<",\"canaries_intact\":"<<stereo.canaries<<",\"cameras_preserved\":"<<stereo.cameras<<",\"distinct_surfaces\":"<<stereo.distinct<<",\"engine_ticks_during_trial\":"<<stereo.tickAfter-stereo.tickBefore<<",\"skeletal_getframe_calls\":"<<stereo.frames<<",\"script_calls\":"<<stereo.scripts<<",\"selected_animation_calls\":"<<stereo.animation<<",\"render_and_target_ms\":"<<(double(stereo.renderQpc)*1000/frequency.QuadPart)<<",\"symmetric_diagnostic_fov\":true,\"world_scale_calibrated\":false,\"headset_presented\":false}\n";
+ if(FAILED(stereo.result))return;
+ for(unsigned eye=0;eye<2;++eye){if(stereo.pixels[eye].size()!=512*384*4)continue;BITMAPFILEHEADER header{};BITMAPINFOHEADER info{};header.bfType=0x4d42;header.bfOffBits=sizeof(header)+sizeof(info);header.bfSize=header.bfOffBits+DWORD(stereo.pixels[eye].size());info.biSize=sizeof(info);info.biWidth=512;info.biHeight=-384;info.biPlanes=1;info.biBitCount=32;info.biCompression=BI_RGB;std::ofstream image(folder/(eye?L"native-right.bmp":L"native-left.bmp"),std::ios::binary);image.write(reinterpret_cast<const char*>(&header),sizeof(header));image.write(reinterpret_cast<const char*>(&info),sizeof(info));image.write(reinterpret_cast<const char*>(stereo.pixels[eye].data()),stereo.pixels[eye].size());}
+}
+
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=4||config.targetTrial>1||config.cameraTrial>config.targetTrial||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=5||config.targetTrial>1||config.cameraTrial>config.targetTrial||config.stereoTrial>config.cameraTrial||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
@@ -160,9 +227,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
   }
  }
  if(config.cameraTrial){
-  const char* cameraNames[]={"??0FCameraSceneNode@@QAE@PAVUViewport@@PAVFRenderTarget@@PAVAActor@@VFVector@@VFRotator@@M@Z","??1FCameraSceneNode@@UAE@XZ"};void* methods[2]{};
-  for(unsigned i=0;i<2;++i){methods[i]=reinterpret_cast<void*>(GetProcAddress(engine,cameraNames[i]));std::array<unsigned char,16> bytes{};if(!methods[i]||!Executable(methods[i],engine)||!Read(reinterpret_cast<unsigned>(methods[i]),bytes.data(),16)||std::memcmp(bytes.data(),config.cameraPrologues[i],16))return 22;}
-  kfvr::native::SetCameraMethods(methods[0],methods[1]);
+  const char* cameraNames[]={"??0FCameraSceneNode@@QAE@PAVUViewport@@PAVFRenderTarget@@PAVAActor@@VFVector@@VFRotator@@M@Z","??1FCameraSceneNode@@UAE@XZ","?Render@FCameraSceneNode@@UAEXPAVFRenderInterface@@@Z"};void* methods[3]{};
+  for(unsigned i=0;i<3;++i){methods[i]=reinterpret_cast<void*>(GetProcAddress(engine,cameraNames[i]));std::array<unsigned char,16> bytes{};if(!methods[i]||!Executable(methods[i],engine)||!Read(reinterpret_cast<unsigned>(methods[i]),bytes.data(),16)||std::memcmp(bytes.data(),config.cameraPrologues[i],16))return 22;}
+  kfvr::native::SetCameraMethods(methods[0],methods[1],methods[2]);
  }
  if(MH_Initialize()!=MH_OK)return 14;
  void* detours[]={reinterpret_cast<void*>(&DrawHook),reinterpret_cast<void*>(&TickHook),reinterpret_cast<void*>(&RenderHook),reinterpret_cast<void*>(&PresentHook),reinterpret_cast<void*>(&LevelHook),reinterpret_cast<void*>(&ActorAnimationHook),reinterpret_cast<void*>(&SkeletalAnimationHook),reinterpret_cast<void*>(&GetFrameHook),reinterpret_cast<void*>(&ProcessEventHook)};
@@ -177,6 +244,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  Sleep(50);
  try{
 
+ if(config.stereoTrial)WriteStereo(std::filesystem::path(config.reportPath).parent_path());
  if(config.cameraTrial)kfvr::native::WriteCameraReport(std::filesystem::path(config.reportPath).parent_path());
  if(config.targetTrial){std::ofstream target(std::filesystem::path(config.reportPath).parent_path()/L"native-target.json");if(!targetTrial.ready.load(std::memory_order_acquire)){target<<"{\"ready\":false,\"render_replayed\":false,\"camera_written\":false}\n";}else target<<std::boolalpha<<"{\"attempted\":"<<targetTrial.attempted<<",\"ready\":"<<targetTrial.ready.load(std::memory_order_acquire)<<",\"hresult\":"<<targetTrial.result<<",\"width\":"<<targetTrial.width<<",\"height\":"<<targetTrial.height<<",\"format\":"<<targetTrial.format<<",\"samples\":"<<targetTrial.samples<<",\"distinct_surface\":"<<targetTrial.distinct<<",\"color_target_restored\":"<<targetTrial.targetsRestored<<",\"depth_target_restored\":"<<targetTrial.depthRestored<<",\"viewport_restored\":"<<targetTrial.viewportRestored<<",\"state_stack_restored\":"<<targetTrial.stackRestored<<",\"cached_state_restored\":"<<targetTrial.cacheRestored<<",\"constructor_canary_intact\":"<<targetTrial.canary<<",\"verified_pixels\":"<<targetTrial.pixelsVerified<<",\"render_replayed\":false,\"camera_written\":false}\n";}
  if(capture.ready.load(std::memory_order_acquire)){
@@ -184,7 +252,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
   if(SUCCEEDED(capture.result)&&!capture.pixels.empty()){BITMAPFILEHEADER file{};BITMAPINFOHEADER info{};file.bfType=0x4d42;file.bfOffBits=sizeof(file)+sizeof(info);file.bfSize=file.bfOffBits+DWORD(capture.pixels.size());info.biSize=sizeof(info);info.biWidth=LONG(capture.width);info.biHeight=-LONG(capture.height);info.biPlanes=1;info.biBitCount=32;info.biCompression=BI_RGB;std::ofstream image(folder/L"native-color.bmp",std::ios::binary);image.write(reinterpret_cast<const char*>(&file),sizeof(file));image.write(reinterpret_cast<const char*>(&info),sizeof(info));image.write(reinterpret_cast<const char*>(capture.pixels.data()),capture.pixels.size());}
  }
  if(records[0].ready.load(std::memory_order_acquire)){std::ofstream camera(std::filesystem::path(config.reportPath).parent_path()/L"native-camera.json");camera<<"{\"matrices\":[";bool first=true;for(float value:records[0].matrices){if(!first)camera<<',';first=false;camera.precision(9);camera<<value;}camera<<"]}\n";}
- std::ofstream out(std::filesystem::path(config.reportPath));if(!out)return 18;out<<"{\n\"status\":"<<status<<",\"hooks_disabled\":"<<(disabled?"true":"false")<<",\"tick_calls\":"<<ticks.load()<<",\"present_calls\":"<<presents.load()<<",\"camera_written\":false,\"render_replayed\":false,\"frames\":[";bool first=true;
+ std::ofstream out(std::filesystem::path(config.reportPath));if(!out)return 18;out<<"{\n\"status\":"<<status<<",\"hooks_disabled\":"<<(disabled?"true":"false")<<",\"tick_calls\":"<<ticks.load()<<",\"present_calls\":"<<presents.load()<<",\"camera_written\":false,\"render_replayed\":"<<(replayed.load()?"true":"false")<<",\"frames\":[";bool first=true;
   for(auto& row:records){if(!row.ready.load(std::memory_order_acquire))continue;if(!first)out<<',';first=false;out<<"\n{\"frame\":"<<row.frame<<",\"thread\":"<<row.thread<<",\"ticks_before\":"<<row.tickBefore<<",\"ticks_after\":"<<row.tickAfter<<",\"renders\":"<<row.renders<<",\"presents_before\":"<<row.presentBefore<<",\"presents_after\":"<<row.presentAfter<<",\"scene\":"<<row.scene<<",\"render_interface\":"<<row.renderInterface<<",\"origin\":["<<row.origin[0]<<','<<row.origin[1]<<','<<row.origin[2]<<"],\"rotation\":["<<row.rotation[0]<<','<<row.rotation[1]<<','<<row.rotation[2]<<"],\"fov\":"<<row.fov<<",\"scene_read\":"<<(row.sceneRead?"true":"false")<<",\"begin_qpc\":"<<row.begin<<",\"end_qpc\":"<<row.end<<",\"level_renders\":"<<row.levelRenders<<",\"actor_animation_calls_inside_draw\":"<<row.actorAnimation<<",\"skeletal_animation_calls_inside_draw\":"<<row.skeletalAnimation<<",\"skeletal_getframe_calls\":"<<row.skeletalFrames<<",\"script_calls\":"<<row.scriptEvents<<",\"script_overflow\":"<<row.scriptOverflow<<",\"scripts\":[";
    bool firstScript=true;for(const auto& script:row.scripts){if(!script.calls)continue;if(!firstScript)out<<',';firstScript=false;out<<"{\"name_id\":"<<script.name<<",\"owner_name_id\":"<<script.ownerName<<",\"phase\":"<<script.phase<<",\"calls\":"<<script.calls<<'}';}out<<"]}";
   }out<<"\n]}\n";
