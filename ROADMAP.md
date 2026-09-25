@@ -10,7 +10,7 @@
 - [x] Capture an actual native D3D9 frame, including MSAA resolve and compatibility-vtable handling.
 - [x] Match native UE2 camera math and construct asymmetric eye matrices.
 - [x] Implement/test conserved magazine/chamber and tube reload logic, melee gating and compact poses.
-- [x] Implement OpenXR actions and controller/haptic IPC; verify x64/x86 focus/expiry/recenter behavior. Hardware acceptance pending.
+- [x] Implement OpenXR actions and controller/haptic IPC; verify x64/x86 focus/expiry/recenter behavior. Physical poses/buttons/sticks/haptics passed in the synthetic headset diagnostic; KF bindings remain pending.
 - [x] Verify non-Ex D3D9 CPU pair transport, MSAA resolve, pixel formats and reset; high-resolution performance remains insufficient.
 - [x] Install the official SDK, compile a KFVR gameplay policy package and run real-engine tests/C++ parity checks.
 

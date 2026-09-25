@@ -1,5 +1,6 @@
 #include "kfvr/xr/OpenXrHost.h"
 #include "kfvr/xr/DiagnosticScene.h"
+#include "InputDiagnostic.h"
 #include "kfvr/ipc/RemoteFrameProvider.h"
 #include <Windows.h>
 #include <filesystem>
@@ -12,13 +13,15 @@ std::string Json(const std::string& input){std::string out="\"";const char* hex=
 int wmain(int argc,wchar_t** argv){
     try {
         wchar_t module[32768]{};const auto length=GetModuleFileNameW(nullptr,module,32768);if(!length||length>=32768)throw std::runtime_error("Cannot locate host executable");
-        kfvr::xr::DiagnosticScene diagnostic;kfvr::ipc::RemoteFrameProvider remote;bool testScene=false,ipcMode=false;kfvr::xr::HostOptions options;options.loaderPath=std::filesystem::path(module).parent_path()/L"runtime/openxr/win64/openxr_loader.dll";
+        kfvr::xr::DiagnosticScene diagnostic;kfvr::ipc::RemoteFrameProvider remote;kfvr::xr::InputDiagnostic inputDiagnostic;bool testScene=false,ipcMode=false,inputTest=false;kfvr::xr::HostOptions options;options.loaderPath=std::filesystem::path(module).parent_path()/L"runtime/openxr/win64/openxr_loader.dll";
         for(int i=1;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--probe")options.probeOnly=true;else if(arg==L"--session")options.probeOnly=false;else if(arg==L"--test-scene"){options.probeOnly=false;testScene=true;options.provider=&diagnostic;}
+            else if(arg==L"--input-test"){options.probeOnly=false;testScene=true;inputTest=true;options.provider=&diagnostic;options.inputConsumer=&inputDiagnostic;}
             else if(arg==L"--ipc"){options.probeOnly=false;ipcMode=true;options.provider=&remote;options.inputConsumer=&remote;}
             else if(arg==L"--frame-budget"&&i+1<argc){if(!remote.SetBudget(std::stoul(argv[++i])))throw std::runtime_error("Frame budget must be 1..50 ms");}
             else if(arg==L"--seconds"&&i+1<argc){options.seconds=std::stoul(argv[++i]);if(!options.seconds||options.seconds>300)throw std::runtime_error("Seconds must be 1..300");}
             else if(arg==L"--loader"&&i+1<argc)options.loaderPath=std::filesystem::absolute(argv[++i]);
-            else throw std::runtime_error("Usage: KFVRXrHost [--probe | --session | --test-scene | --ipc] [--seconds 15] [--loader path] [--frame-budget 8]");}
+            else throw std::runtime_error("Usage: KFVRXrHost [--probe | --session | --test-scene | --input-test | --ipc] [--seconds 15] [--loader path] [--frame-budget 8]");}
+        if(testScene&&options.probeOnly)throw std::runtime_error("A visible test cannot be combined with probe mode");
         if(ipcMode){if(testScene||options.probeOnly)throw std::runtime_error("IPC mode cannot be combined with probe/test-scene");
             if(!remote.Create())throw std::runtime_error("Cannot create frame channel");std::wcerr<<L"frame_channel="<<remote.Token()<<L'\n';}
         const auto report=kfvr::xr::RunOpenXrHost(options);
@@ -30,7 +33,8 @@ int wmain(int argc,wchar_t** argv){
             <<",\n  \"format\":"<<report.requirements.format<<",\n  \"waited_frames\":"<<report.waitedFrames<<",\n  \"ended_frames\":"<<report.endedFrames
             <<",\n  \"valid_tracking_frames\":"<<report.validTrackingFrames<<",\n  \"submitted_pairs\":"<<report.submittedPairs<<",\n  \"rejected_pairs\":"<<report.rejectedPairs
             <<",\n  \"suggested_controller_profiles\":"<<report.suggestedControllerProfiles<<",\n  \"valid_controller_samples\":"<<report.validControllerSamples
-            <<",\n  \"last_session_state\":"<<report.lastSessionState<<",\n  \"diagnostic_scene\":"<<testScene<<",\n  \"diagnostic_error\":"<<Json(diagnostic.Error())<<",\n  \"ipc_mode\":"<<ipcMode<<",\n  \"native_kf_connected\":false,\n  \"headset_visuals_verified\":false\n}\n";
+            <<",\n  \"last_session_state\":"<<report.lastSessionState<<",\n  \"diagnostic_scene\":"<<testScene<<",\n  \"diagnostic_error\":"<<Json(diagnostic.Error())<<",\n  \"ipc_mode\":"<<ipcMode<<",\n  \"native_kf_connected\":false,\n  \"headset_visuals_verified\":false,\n  \"controller_diagnostic\":"<<inputTest<<",\n  \"controller_test\":";
+        inputDiagnostic.WriteJson(std::cout);std::cout<<"\n}\n";
         return report.okay?0:2;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }
