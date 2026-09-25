@@ -4,7 +4,7 @@ from observe_kf import Observer
 import pefile
 from native_profile import TARGETS, AUDITED_SHA256
 
-def trace(pid,game,root):
+def trace(pid,game,root,target_trial=False):
  stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
  directory=root/'reports'/('native-trace-'+stamp);directory.mkdir(parents=True)
  observer=Observer(pid,game)
@@ -15,7 +15,7 @@ def trace(pid,game,root):
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<12I',712,2,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'])
+  p=snapshot['properties'];config=struct.pack('<13I',828,3,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial))
   names=TARGETS
   evidence=[]
   for file,name in names:
@@ -27,6 +27,14 @@ def trace(pid,game,root):
     body=pe.get_data(symbol.address,0x120)
     if bytes.fromhex('8b8e5c490000') not in body or bytes.fromhex('ff5244') not in body:raise ValueError('D3D9 device/Present relationship not verified')
    config+=expected;evidence.append(dict(file=file,sha256=hashlib.sha256(path.read_bytes()).hexdigest(),name=name,rva=symbol.address,expected=expected.hex(),address=base+symbol.address))
+  target_evidence=[]
+  extra=[('D3D9Drv.dll',rva) for rva in [0x18860,0x1b240,0x189d0,0x17150,0x19100]]+[('Engine.dll',0x1bbce0),('Engine.dll',0x1bbd50)]
+  for file,rva in extra:
+   if not target_trial:config+=bytes(16);continue
+   path=game/'System'/file;pe=pefile.PE(str(path));base=observer.modules[file.lower()][0];pe.relocate_image(base);expected=pe.get_data(rva,16)
+   if observer.read(base+rva,16)!=expected:raise ValueError('Native target interface already modified')
+   config+=expected;target_evidence.append(dict(file=file,rva=rva,expected=expected.hex()))
+  (directory/'target-evidence.json').write_text(json.dumps(target_evidence,indent=2))
   report_path=directory/'trace.json';encoded=(str(report_path)+'\0').encode('utf-16le')
   if len(encoded)>520:raise ValueError('Report path too long')
   config+=encoded.ljust(520,b'\0');request_path=directory/'request.bin';request_path.write_bytes(config)
@@ -46,9 +54,15 @@ def trace(pid,game,root):
      key=observer.name(call['owner_name_id'])+'.'+observer.name(call['name_id'])+'@'+phases[call['phase']]
      totals[key]=totals.get(key,0)+call['calls']
    (directory/'render-activity.json').write_text(json.dumps(dict(script_calls=totals,overflow=sum(f.get('script_overflow',0) for f in report['frames']),actor_animation_calls_inside_draw=sum(f.get('actor_animation_calls_inside_draw',0) for f in report['frames']),skeletal_animation_calls_inside_draw=sum(f.get('skeletal_animation_calls_inside_draw',0) for f in report['frames']),skeletal_getframe_calls=sum(f.get('skeletal_getframe_calls',0) for f in report['frames']),level_renders=sum(f.get('level_renders',0) for f in report['frames'])),indent=2))
+  target_passed=True
+  if target_trial:
+   target_path=directory/'native-target.json';trial=json.loads(target_path.read_text()) if target_path.exists() else {}
+   flags=['attempted','ready','distinct_surface','color_target_restored','depth_target_restored','viewport_restored','state_stack_restored','cached_state_restored','constructor_canary_intact']
+   target_passed=all(trial.get(k) is True for k in flags) and trial.get('hresult')==0 and trial.get('verified_pixels')==512*384
+   summary['target_trial_passed']=target_passed
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
-  if result.returncode or not restored:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
+  if result.returncode or not restored or not target_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
  finally:observer.close()
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1])
+ p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],a.target_trial)
 

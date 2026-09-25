@@ -20,6 +20,12 @@ using ProcessEvent=void(__thiscall*)(void*,void*,void*,void*);
 Render levelOriginal=nullptr;Tick actorAnimationOriginal=nullptr;UpdateAnimation skeletalAnimationOriginal=nullptr;
 GetFrame getFrameOriginal=nullptr;ProcessEvent processEventOriginal=nullptr;
 thread_local unsigned playerDepth=0,levelDepth=0;
+void ProbeTarget(void*);
+void ReadTarget();
+using AuxCtor=void(__thiscall*)(void*,int,int,int);
+using SimpleCall=void(__thiscall*)(void*);
+AuxCtor auxCtor=nullptr;SimpleCall auxDtor=nullptr;
+std::array<void*,5> targetMethods{};
 struct ScriptCount {unsigned name=0,ownerName=0,phase=0,calls=0;};
 Draw drawOriginal=nullptr;Tick tickOriginal=nullptr;Render renderOriginal=nullptr;Present presentOriginal=nullptr;
 std::array<void*,9> targets{};std::atomic<bool> sampling=false;std::atomic<unsigned> count=0,ticks=0,presents=0;
@@ -49,7 +55,7 @@ void __fastcall RenderHook(void* self,void*,void* ri){
  ++playerDepth;renderOriginal(self,ri);--playerDepth;
 }
 
-void __fastcall LevelHook(void* self,void*,void* ri){if(current)++current->levelRenders;++levelDepth;levelOriginal(self,ri);--levelDepth;}
+void __fastcall LevelHook(void* self,void*,void* ri){if(current){++current->levelRenders;if(config.targetTrial&&playerDepth&&!levelDepth)ProbeTarget(ri);}++levelDepth;levelOriginal(self,ri);--levelDepth;}
 void __fastcall ActorAnimationHook(void* self,void*,float dt){if(current)++current->actorAnimation;actorAnimationOriginal(self,dt);}
 int __fastcall SkeletalAnimationHook(void* self,void*,float dt){if(current)++current->skeletalAnimation;return skeletalAnimationOriginal(self,dt);}
 void __fastcall GetFrameHook(void* self,void*,void* actor,void* scene,void* vectors,int stride,int* countOut,unsigned long flags){if(current)++current->skeletalFrames;getFrameOriginal(self,actor,scene,vectors,stride,countOut,flags);}
@@ -85,15 +91,72 @@ void CaptureColor(void* renderer){
  if(SUCCEEDED(hr)){try{capture.pixels.resize(std::size_t(desc.Width)*desc.Height*4);for(unsigned y=0;y<desc.Height;++y)std::memcpy(capture.pixels.data()+std::size_t(y)*desc.Width*4,static_cast<const char*>(locked.pBits)+std::size_t(y)*locked.Pitch,desc.Width*4);}catch(...){hr=E_OUTOFMEMORY;}staging->UnlockRect();}
  capture.result=hr;capture.ready.store(true,std::memory_order_release);
 }
-void __fastcall PresentHook(void* self,void*,void* viewport){if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){presents.fetch_add(1);if(LocalWorld())CaptureColor(self);}presentOriginal(self,viewport);}
+void __fastcall PresentHook(void* self,void*,void* viewport){if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){presents.fetch_add(1);if(LocalWorld()){CaptureColor(self);if(config.targetTrial)ReadTarget();}}presentOriginal(self,viewport);}
 bool Executable(void* at,HMODULE owner){MEMORY_BASIC_INFORMATION m{};if(!VirtualQuery(at,&m,sizeof(m))||m.AllocationBase!=owner||m.State!=MEM_COMMIT||m.Protect&(PAGE_GUARD|PAGE_NOACCESS))return false;return (m.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))!=0;}
+struct TargetTrial {
+ bool attempted=false,targetsRestored=false,depthRestored=false,viewportRestored=false,cacheRestored=false,stackRestored=false,canary=true,distinct=false;
+ std::atomic<bool> ready=false;HRESULT result=E_PENDING;unsigned width=0,height=0,format=0,samples=0,pixelsVerified=0;
+ Microsoft::WRL::ComPtr<IDirect3DSurface9> surface;
+} targetTrial;
+void ProbeTarget(void* ri){
+ if(targetTrial.attempted)return;targetTrial.attempted=true;
+ using Microsoft::WRL::ComPtr;
+ const auto address=reinterpret_cast<std::uint32_t>(ri),table=U32(address),renderer=U32(address+4),deviceAddress=U32(renderer+0x495c);
+ for(unsigned slot=0;slot<5;++slot)if(U32(table+slot*4)!=reinterpret_cast<std::uint32_t>(targetMethods[slot])){targetTrial.result=E_NOINTERFACE;targetTrial.ready=true;return;}
+ const auto d3d=GetModuleHandleW(L"d3d9.dll");const auto deviceTable=U32(deviceAddress);
+ for(unsigned slot:{38u,40u,48u})if(!Executable(reinterpret_cast<void*>(U32(deviceTable+slot*4)),d3d)){targetTrial.result=E_NOINTERFACE;targetTrial.ready=true;return;}
+ const auto stack=U32(address+0x59870),cache=U32(address+0x5940c);std::array<unsigned char,0x594> before{},after{};
+ if(stack>240||!Read(cache,before.data(),before.size())){targetTrial.result=E_UNEXPECTED;targetTrial.ready=true;return;}
+ auto* device=reinterpret_cast<IDirect3DDevice9*>(deviceAddress);ComPtr<IDirect3DSurface9> previous,depth;D3DVIEWPORT9 viewport{};
+ if(FAILED(device->GetRenderTarget(0,&previous))||FAILED(device->GetDepthStencilSurface(&depth))||FAILED(device->GetViewport(&viewport))){targetTrial.result=E_FAIL;targetTrial.ready=true;return;}
+ alignas(16) std::array<unsigned char,64> aux;aux.fill(0xcd);auxCtor(aux.data(),512,384,5);
+ const auto push=reinterpret_cast<SimpleCall>(targetMethods[0]),pop=reinterpret_cast<SimpleCall>(targetMethods[1]);
+ const auto setTarget=reinterpret_cast<int(__thiscall*)(void*,void*)>(targetMethods[2]);
+ const auto setViewport=reinterpret_cast<void(__thiscall*)(void*,int,int,int,int)>(targetMethods[3]);
+ const auto clear=reinterpret_cast<void(__thiscall*)(void*,int,unsigned,int,float,int,unsigned)>(targetMethods[4]);
+ push(ri);
+ const int bound=setTarget(ri,aux.data());
+ if(bound){setViewport(ri,0,0,512,384);clear(ri,1,0xff3040c0,1,1.f,1,0);targetTrial.result=device->GetRenderTarget(0,&targetTrial.surface);
+  if(SUCCEEDED(targetTrial.result)){D3DSURFACE_DESC desc{};targetTrial.result=targetTrial.surface->GetDesc(&desc);targetTrial.width=desc.Width;targetTrial.height=desc.Height;targetTrial.format=unsigned(desc.Format);targetTrial.samples=unsigned(desc.MultiSampleType);targetTrial.distinct=targetTrial.surface.Get()!=previous.Get();}
+ }else targetTrial.result=E_FAIL;
+ pop(ri);
+ auxDtor(aux.data());
+ ComPtr<IDirect3DSurface9> restored,restoredDepth;D3DVIEWPORT9 restoredViewport{};
+ targetTrial.targetsRestored=SUCCEEDED(device->GetRenderTarget(0,&restored))&&restored.Get()==previous.Get();
+ targetTrial.depthRestored=SUCCEEDED(device->GetDepthStencilSurface(&restoredDepth))&&restoredDepth.Get()==depth.Get();
+ targetTrial.viewportRestored=SUCCEEDED(device->GetViewport(&restoredViewport))&&std::memcmp(&viewport,&restoredViewport,sizeof(viewport))==0;
+ targetTrial.stackRestored=U32(address+0x59870)==stack&&U32(address+0x5940c)==cache;
+ targetTrial.cacheRestored=Read(cache,after.data(),after.size())&&before==after;
+ for(unsigned i=28;i<aux.size();++i)targetTrial.canary&=aux[i]==0xcd;
+ if(FAILED(targetTrial.result)){targetTrial.surface.Reset();targetTrial.ready.store(true,std::memory_order_release);}
+}
+void ReadTarget(){
+ if(!targetTrial.attempted||targetTrial.ready.load(std::memory_order_acquire))return;
+ using Microsoft::WRL::ComPtr;
+ if(!targetTrial.surface||targetTrial.width!=512||targetTrial.height!=384||targetTrial.samples!=0||(targetTrial.format!=D3DFMT_A8R8G8B8&&targetTrial.format!=D3DFMT_X8R8G8B8)){targetTrial.result=E_INVALIDARG;targetTrial.surface.Reset();targetTrial.ready=true;return;}
+ ComPtr<IDirect3DDevice9> device;ComPtr<IDirect3DSurface9> staging;HRESULT hr=targetTrial.surface->GetDevice(&device);
+ if(SUCCEEDED(hr))hr=device->CreateOffscreenPlainSurface(512,384,D3DFORMAT(targetTrial.format),D3DPOOL_SYSTEMMEM,&staging,nullptr);
+ if(SUCCEEDED(hr))hr=device->GetRenderTargetData(targetTrial.surface.Get(),staging.Get());
+ D3DLOCKED_RECT lock{};if(SUCCEEDED(hr))hr=staging->LockRect(&lock,nullptr,D3DLOCK_READONLY);
+ if(SUCCEEDED(hr)){if(!lock.pBits||lock.Pitch<512*4)hr=E_INVALIDARG;else for(unsigned y=0;y<384;++y){const auto* row=reinterpret_cast<const unsigned*>(static_cast<const char*>(lock.pBits)+std::size_t(y)*lock.Pitch);for(unsigned x=0;x<512;++x)targetTrial.pixelsVerified+=(row[x]|0xff000000)==0xff3040c0;}staging->UnlockRect();}
+ targetTrial.result=hr;targetTrial.surface.Reset();targetTrial.ready.store(true,std::memory_order_release);
+}
+
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=2||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=3||config.targetTrial>1||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
+
+ if(config.targetTrial){
+  constexpr unsigned rvas[]={0x18860,0x1b240,0x189d0,0x17150,0x19100};
+  auxCtor=reinterpret_cast<AuxCtor>(GetProcAddress(engine,"??0FAuxRenderTarget@@QAE@HHW4ETextureFormat@@@Z"));auxDtor=reinterpret_cast<SimpleCall>(GetProcAddress(engine,"??1FAuxRenderTarget@@QAE@XZ"));
+  for(unsigned i=0;i<7;++i){void* method=i<5?reinterpret_cast<unsigned char*>(renderer)+rvas[i]:i==5?reinterpret_cast<void*>(auxCtor):reinterpret_cast<void*>(auxDtor);auto owner=i<5?renderer:engine;std::array<unsigned char,16> bytes{};
+   if(!method||!Executable(method,owner)||!Read(reinterpret_cast<std::uint32_t>(method),bytes.data(),16)||std::memcmp(bytes.data(),config.targetPrologues[i],16))return 21;if(i<5)targetMethods[i]=method;
+  }
+ }
  if(MH_Initialize()!=MH_OK)return 14;
  void* detours[]={reinterpret_cast<void*>(&DrawHook),reinterpret_cast<void*>(&TickHook),reinterpret_cast<void*>(&RenderHook),reinterpret_cast<void*>(&PresentHook),reinterpret_cast<void*>(&LevelHook),reinterpret_cast<void*>(&ActorAnimationHook),reinterpret_cast<void*>(&SkeletalAnimationHook),reinterpret_cast<void*>(&GetFrameHook),reinterpret_cast<void*>(&ProcessEventHook)};
  void** originals[]={reinterpret_cast<void**>(&drawOriginal),reinterpret_cast<void**>(&tickOriginal),reinterpret_cast<void**>(&renderOriginal),reinterpret_cast<void**>(&presentOriginal),reinterpret_cast<void**>(&levelOriginal),reinterpret_cast<void**>(&actorAnimationOriginal),reinterpret_cast<void**>(&skeletalAnimationOriginal),reinterpret_cast<void**>(&getFrameOriginal),reinterpret_cast<void**>(&processEventOriginal)};
@@ -106,6 +169,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  // Keep trampolines and this DLL resident: an original callback may be returning.
  Sleep(50);
  try{
+
+ if(config.targetTrial){std::ofstream target(std::filesystem::path(config.reportPath).parent_path()/L"native-target.json");if(!targetTrial.ready.load(std::memory_order_acquire)){target<<"{\"ready\":false,\"render_replayed\":false,\"camera_written\":false}\n";}else target<<std::boolalpha<<"{\"attempted\":"<<targetTrial.attempted<<",\"ready\":"<<targetTrial.ready.load(std::memory_order_acquire)<<",\"hresult\":"<<targetTrial.result<<",\"width\":"<<targetTrial.width<<",\"height\":"<<targetTrial.height<<",\"format\":"<<targetTrial.format<<",\"samples\":"<<targetTrial.samples<<",\"distinct_surface\":"<<targetTrial.distinct<<",\"color_target_restored\":"<<targetTrial.targetsRestored<<",\"depth_target_restored\":"<<targetTrial.depthRestored<<",\"viewport_restored\":"<<targetTrial.viewportRestored<<",\"state_stack_restored\":"<<targetTrial.stackRestored<<",\"cached_state_restored\":"<<targetTrial.cacheRestored<<",\"constructor_canary_intact\":"<<targetTrial.canary<<",\"verified_pixels\":"<<targetTrial.pixelsVerified<<",\"render_replayed\":false,\"camera_written\":false}\n";}
  if(capture.ready.load(std::memory_order_acquire)){
   const auto folder=std::filesystem::path(config.reportPath).parent_path();std::ofstream meta(folder/L"native-color.json");meta<<"{\"width\":"<<capture.width<<",\"height\":"<<capture.height<<",\"format\":"<<capture.format<<",\"samples\":"<<capture.samples<<",\"d3d9ex_known\":"<<(capture.exKnown?"true":"false")<<",\"d3d9ex\":"<<(capture.isEx?"true":"false")<<",\"hresult\":"<<capture.result<<"}\n";
   if(SUCCEEDED(capture.result)&&!capture.pixels.empty()){BITMAPFILEHEADER file{};BITMAPINFOHEADER info{};file.bfType=0x4d42;file.bfOffBits=sizeof(file)+sizeof(info);file.bfSize=file.bfOffBits+DWORD(capture.pixels.size());info.biSize=sizeof(info);info.biWidth=LONG(capture.width);info.biHeight=-LONG(capture.height);info.biPlanes=1;info.biBitCount=32;info.biCompression=BI_RGB;std::ofstream image(folder/L"native-color.bmp",std::ios::binary);image.write(reinterpret_cast<const char*>(&file),sizeof(file));image.write(reinterpret_cast<const char*>(&info),sizeof(info));image.write(reinterpret_cast<const char*>(capture.pixels.data()),capture.pixels.size());}
