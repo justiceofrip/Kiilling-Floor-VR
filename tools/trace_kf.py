@@ -23,20 +23,22 @@ def validate_eye_packet(camera,eye_data,pose_trial,asymmetric_trial):
  summary['camera_packet_valid']=matrices_valid
  return summary
 
-def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False,channel_token=None,input_trial=False):
+def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False,channel_token=None,input_trial=False,movement_trial=False):
+ if movement_trial and not channel_token:raise ValueError("Movement requires a bounded bridge session")
+ input_trial=input_trial or movement_trial
  stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
  directory=root/'reports'/('native-trace-'+stamp);directory.mkdir(parents=True)
  observer=Observer(pid,game)
  try:
   input_names=['aBaseX','aBaseY','aBaseZ','aMouseX','aMouseY','aForward','aTurn','aStrafe','aUp','aLookUp']
-  snapshot=observer.snapshot({'PlayerController':set(input_names)}) if input_trial else observer.snapshot();(directory/'before.json').write_text(json.dumps(snapshot,indent=2))
+  snapshot=observer.snapshot({'PlayerController':set(input_names),'Pawn':{'Controller'}}) if input_trial else observer.snapshot();(directory/'before.json').write_text(json.dumps(snapshot,indent=2))
   controllers=[r for r in snapshot['observations'] if r['class']=='KFPlayerController' and r['values'].get('PlayerController.Player')]
   if channel_token and stereo_trial:raise ValueError('Bridge and one-shot stereo trials are separate modes')
   if len(controllers)!=1:raise ValueError('Need exactly one local KF controller')
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<15I',1024,7,15000 if channel_token else 12000,240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
+  p=snapshot['properties'];config=struct.pack('<15I',1048,8,15000 if channel_token else 12000,240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
   names=TARGETS
   evidence=[]
   for file,name in names:
@@ -78,7 +80,15 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    if observer.read(base+rva,16)!=input_expected:raise ValueError('ReadInput entry is already modified')
    input_evidence.append(dict(address=base+rva,expected=input_expected.hex()))
   config+=struct.pack('<12I',int(input_trial),*input_offsets,tick_name)+input_expected
-  assert len(config)==1024
+  movement_offsets=[0]*5
+  if movement_trial:
+   for i,(name,typ,size) in enumerate([('Controller.Pawn','ObjectProperty',4),('Pawn.Health','IntProperty',4),('Pawn.Controller','ObjectProperty',4),('LevelInfo.Pauser','ObjectProperty',4),('Actor.Location','StructProperty',12)]):
+    prop=p[name]
+    if prop['type']!=typ or prop['size']!=size or not 44<=prop['offset']<=8192:raise ValueError('Invalid movement property: '+name)
+    movement_offsets[i]=prop['offset']
+   if not controller['values'].get('Controller.Pawn'):raise ValueError('Movement trial requires a possessed pawn')
+  config+=struct.pack('<6I',int(movement_trial),*movement_offsets)
+  assert len(config)==1048
   request_path=directory/'request.bin';request_path.write_bytes(config)
   source=root/'build/x86/KFVRNativeProbe.dll';dll=directory/'KFVRNativeProbe.dll';dll.write_bytes(source.read_bytes())
   launcher=root/'build/x86/KFVRNativeTrace.exe'
@@ -128,14 +138,20 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    input_path=directory/'native-input.json';input_report=json.loads(input_path.read_text()) if input_path.exists() else {};samples=input_report.get('samples',[])
    input_passed=len(samples)>=10 and all(s['finite'] for s in samples) and sum(s['before_tick_observed'] and s['after_tick_observed'] for s in samples)>=10 and len(set(s['thread'] for s in samples))==1
    summary.update(input_trial_passed=input_passed,input_samples=len(samples),input_tick_observations=sum(s['before_tick_observed'] and s['after_tick_observed'] for s in samples))
+  movement_passed=True
+  if movement_trial:
+   moves=input_report.get('movement',[])
+   movement_passed=bool(moves) and input_report.get('movement_writes',0)>0 and input_report.get('restore_failures')==0 and input_report.get('movement_writes',0)==input_report.get('movement_restores',-1) and all(row['restored'] and row['finite'] for row in moves)
+   summary.update(movement_trial_passed=movement_passed,movement_samples=len(moves),nonzero_movement_samples=sum(abs(row['forward'])+abs(row['strafe'])>.001 for row in moves))
   bridge_passed=True
   if channel_token:
    bridge_path=directory/'native-bridge.json';bridge=json.loads(bridge_path.read_text()) if bridge_path.exists() else {}
    bridge_passed=all(bridge.get(k) is True for k in ['closed','reset_hook_restored','resources_released']) and bridge.get('consumed_pairs',0)>0 and bridge.get('reason') in ['duration_finished','host_closed']
    summary.update(bridge_trial_passed=bridge_passed,bridge=bridge)
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
-  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed or not input_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
+  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed or not input_passed or not movement_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
+  return summary
  finally:observer.close()
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');p.add_argument('--asymmetric-trial',action='store_true');p.add_argument('--pose-trial',action='store_true');p.add_argument('--channel-token');p.add_argument('--input-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],bool(a.channel_token) or a.target_trial or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,bool(a.channel_token) or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.asymmetric_trial or a.pose_trial,a.pose_trial,a.channel_token,a.input_trial)
+ p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');p.add_argument('--asymmetric-trial',action='store_true');p.add_argument('--pose-trial',action='store_true');p.add_argument('--channel-token');p.add_argument('--input-trial',action='store_true');p.add_argument('--movement-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],bool(a.channel_token) or a.target_trial or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,bool(a.channel_token) or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.asymmetric_trial or a.pose_trial,a.pose_trial,a.channel_token,a.input_trial,a.movement_trial)
 

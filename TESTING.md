@@ -4,7 +4,7 @@ Build.ps1 runs CTest for each architecture. Current deterministic coverage inclu
 
 New ammo tests exercise tactical full-mag-plus-chamber behavior, empty reload/charging, racking a live round, fire cadence, remove/stow/discard/partial magazines, switching/death/drop cancellation, stale ownership, replay/high-latency rejection, correction validation, tube feeding, manual cycling and 100,000 randomized actions with conservation checks. Melee tests include 10,000 wrist-waggle samples, retraction, cooldown, invalid tracking, teleports and range limits. Pose tests include all truncated packet lengths, invalid quaternions, quantization overflow, sequence wrap and server-clock gates.
 
-OpenXR controller tests use a fake API to cover bindings, predicted timing, focus/tracking loss, invalid samples, haptic limits, runtime errors and cleanup after partial initialization. Latest CTest results: x86 17/17, x64 16/16.
+OpenXR controller tests use a fake API to cover bindings, predicted timing, focus/tracking loss, invalid samples, haptic limits, runtime errors and cleanup after partial initialization. Latest CTest results: x86 18/18, x64 17/17, including controller locomotion interruption and neutral-rearm coverage.
 
 Hardware checks are separate from unit tests:
 
@@ -57,3 +57,5 @@ Native-to-x64 acceptance: `tools/native_bridge_trial.py --pid <current> --game <
 User-confirmed native HMD flicker fix: native-headset-20260925-184412 produced 279 fresh pairs plus 172 retained projections; user reported flashing gone, but setup consumed the viewing window. --wait-first-pair fixes that timing with a separate bounded startup deadline. Full follow-up native-headset-20260925-184625 produced 445 fresh pairs plus 192 retained projections over a 15-second native run; zero rejected pairs and native/reset cleanup passed. Head-movement acceptance is recorded separately in reports/native-headset-acceptance-20260925.json.
 
 Read-only native input timing: `tools/trace_kf.py --pid <current> --game <KF> --input-trial` adds a bounded UViewport::ReadInput hook and measures axis values before/after reading and PlayerTick. Native-trace-20260925-190036-910911 passes 240 samples / 117 paired tick observations, finite values, ten-hook entry restoration and no input writes. --input-trial is an audit, not controller locomotion.
+
+Controller movement implementation checkpoint: both architecture builds pass, Python launchers compile, and KFVRInputProbe again verifies real x64/x86 controller transport/release with game_connected=false and headset_used=false. The opt-in native movement exercise and result checker are ready; no live gameplay movement is claimed. `reports/movement-validator-offline/verification.json` records synthetic checker acceptance/rejection cases, not engine results. See docs/INPUT_INTEGRATION.md for the next live commands and acceptance boundaries.

@@ -7,6 +7,8 @@ struct ActionSample {
     std::uint64_t owner=0,generation=0;
     std::int64_t timeNs=0,frameNs=0;
     bool focused=false,tracked=false,playing=false,bindingsVerified=false;
+    // Adapters may require neutral in the original, pre-deadzone control space.
+    bool neutralAllowed=true;
     float forward=0,strafe=0,turn=0;
     std::uint32_t held=0;
 };

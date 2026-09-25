@@ -1,7 +1,7 @@
 """Brief real KF stereo/head-tracking test using the accepted native bridge."""
 import argparse,datetime,json,pathlib,subprocess,time
 from trace_kf import trace
-p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--scale',type=int,default=40);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--scale',type=int,default=40);p.add_argument('--movement',action='store_true');a=p.parse_args()
 if not 25<=a.scale<=75:raise ValueError('Bounded native trial scale must be 25..75 percent')
 root=pathlib.Path(__file__).resolve().parents[1];folder=root/'reports'/('native-headset-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S'));folder.mkdir()
 with (folder/'host.json').open('w') as output,(folder/'host-errors.txt').open('w') as errors:
@@ -19,7 +19,7 @@ with (folder/'host.json').open('w') as output,(folder/'host-errors.txt').open('w
    if 'xr_session_state=5' in (folder/'host-errors.txt').read_text(errors='replace'):break
    time.sleep(.05)
   else:raise RuntimeError('XR did not gain headset focus; native injection skipped: '+str(folder))
-  trace(a.pid,a.game,root,target_trial=True,camera_trial=True,channel_token=token)
+  trace(a.pid,a.game,root,target_trial=True,camera_trial=True,channel_token=token,movement_trial=a.movement)
   host.wait(timeout=40)
   if host.returncode:raise RuntimeError('XR host failed: '+str(folder))
  finally:

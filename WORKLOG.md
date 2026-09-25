@@ -71,3 +71,14 @@ User confirmed the longer native test looked okay and head tracking worked, with
 Upright camera follow-up native-bridge-20260925-185220 / native-trace-20260925-185220-772217 passes twelve real pairs and full restoration with desktop pitch/roll excluded from the tracked body basis. Updated feasibility to 8.5/10 first playable subset and 6/10 full supported-content conversion; universal unknown-mod/server compatibility remains 4/10.
 
 Input audit increment: verified exact exported ReadInput and script-call paths, reflected native input axes, viewport/input/controller ownership and inherited fire-property ownership. Added a read-only native input timing option; native-trace-20260925-190036-910911 records 120 positive-delta and 120 sentinel (-1) calls, with 117 complete PlayerTick observations only on positive passes. All finite, no input values written, extra hook and all core hooks restored. This avoids accidentally applying controls twice or during KF's reset pass. x86 17/17 and x64 16/16 tests pass. Gameplay motion remains unimplemented; details in docs/INPUT_INTEGRATION.md.
+
+
+## Controller locomotion implementation, game temporarily closed
+
+After the user asked to resume, implemented the bounded left-stick native input adapter at the previously measured positive ReadInput -> PlayerTick boundary. The user then asked to close KF temporarily; confirmed they could and continued offline. No game or XR session was launched during this increment.
+
+Added focused controller mapping with a radial 0.2 deadzone and explicit raw-space neutral rearming, including low held values/diagonals that a remapped-space threshold could otherwise accept. Validates live pawn/controller/level links, health, standalone world, pause, controller tracking and unexpired mailbox samples. Temporarily owns only aBaseY/aStrafe for normal PlayerTick, restores both independently, and waits for paired event completion before removing hooks. C++/Python request ABI updated together to v8/1048 bytes. Input reports include demand, actual consumed axes, per-write restoration and inactive samples.
+
+Prepared --movement in the native receiver and headset wrappers. The headless exercise sends a bounded 7.5-second movement/focus/stale/recovery sequence; its checker requires real consumed nonzero axes, neutral interruption phases and restoration. Synthetic fixtures verify rejection of zero-only results, stuck focus-loss movement, missing phases and restore failures. Actual nonzero input scaling, pawn displacement, native cleanup with writes and physical headset movement remain unverified until KF is reopened. Turning and independent controller aim remain pending.
+
+Validation: x86 18/18 and x64 17/17 CTest suites pass; Python launchers compile; real KFVRInputProbe x64 host/x86 producer passes controller/haptic roundtrip, expiry, focus loss, recenter, invalid tracking and peer close. No game files or settings changed.

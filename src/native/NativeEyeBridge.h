@@ -9,6 +9,7 @@ using EyeRenderer=bool(*)(void*,void*,const runtime::PresentationRequirements&,c
 bool StartEyeBridge(const wchar_t* token);
 void EyeBridgeLevel(void* scene,void* ri,IDirect3DDevice9*,EyeRenderer) noexcept;
 void EyeBridgePresent(bool worldValid) noexcept;
+bool ReadEyeBridgeControls(xr::ControllerFrame&,std::uint64_t&) noexcept;
 void StopEyeBridge() noexcept;
 bool EyeBridgeClosed() noexcept;
 void WriteEyeBridgeReport(const std::filesystem::path&);

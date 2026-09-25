@@ -77,6 +77,11 @@ void Skip(){
 bool StartEyeBridge(const wchar_t* token){
  if(!s.channel.ConnectProducer(token))return false;s.reason="running";s.closed=false;return true;
 }
+bool ReadEyeBridgeControls(xr::ControllerFrame& controls,std::uint64_t& sequence) noexcept{
+ controls={};sequence=0;
+ if(s.closed.load(std::memory_order_acquire)||s.stop.load(std::memory_order_acquire)||s.thread!=GetCurrentThreadId())return false;
+ return s.channel.ReadInput(controls,sequence)==ipc::ChannelResult::Ok;
+}
 void StopEyeBridge() noexcept{s.stop.store(true,std::memory_order_release);}
 bool EyeBridgeClosed() noexcept{return s.closed.load(std::memory_order_acquire);}
 void EyeBridgeLevel(void* scene,void* ri,IDirect3DDevice9* device,EyeRenderer render) noexcept {try{

@@ -22,7 +22,7 @@ ActionOutput ActionPolicy::Update(const ActionSample& s,float snapDegrees) noexc
     generation_=s.generation;time_=s.timeNs;
     if(longGap){out.released=held_;held_=0;forward_=strafe_=0;armed_=false;turn_={};return out;}
     constexpr std::uint32_t mask=Fire|AlternateFire|Use|Reload|Sprint|Menu;
-    if(!armed_){if(!(s.held&mask)&&std::abs(s.turn)<.2f&&std::abs(s.forward)<.2f&&std::abs(s.strafe)<.2f){armed_=true;turn_.Update(true,0,s.timeNs,snapDegrees);}return out;}
+    if(!armed_){if(s.neutralAllowed&&!(s.held&mask)&&std::abs(s.turn)<.2f&&std::abs(s.forward)<.2f&&std::abs(s.strafe)<.2f){armed_=true;turn_.Update(true,0,s.timeNs,snapDegrees);}return out;}
     out.held=s.held&mask;out.pressed=out.held&~held_;out.released=held_&~out.held;held_=out.held;
     out.forward=std::clamp(s.forward,-1.f,1.f);out.strafe=std::clamp(s.strafe,-1.f,1.f);
     const auto length=std::hypot(out.forward,out.strafe);if(length>1){out.forward/=length;out.strafe/=length;}
