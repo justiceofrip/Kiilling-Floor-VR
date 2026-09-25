@@ -1,0 +1,526 @@
+{
+  "origin": "Local BC2VR portable modules derived from BF2142VR/BFVR; no native engine adapters copied",
+  "files": [
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\math\\ArmPoleVectorMath.h",
+      "source_sha256": "58ac2b8593899bfa87fb5464f4cfe4ca9ed969c53c3f8dac0985edf936ff4087",
+      "destination": "include/kfvr/math/ArmPoleVectorMath.h",
+      "destination_sha256": "23d8add13b23fd1ed0ec5eec0e40ee2a4e7092e8c6c7f38865332b869f96f0b7"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\math\\StereoCulling.h",
+      "source_sha256": "47ab626d2b3ded6f4728393fb9c46b5dc2fb1b0137aa7356200e974e0ed171bf",
+      "destination": "include/kfvr/math/StereoCulling.h",
+      "destination_sha256": "4323ff7716136db6bf939ac07cc91a354813352a07243f0e7488a28e356679ed"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\math\\StereoMath.h",
+      "source_sha256": "f9963bb184fca17adb05747116f855fd13bfeeeadf41e2db353aa760a15f7426",
+      "destination": "include/kfvr/math/StereoMath.h",
+      "destination_sha256": "daffb31620f5928806db7cce91d0b87f98ff0dc4f026879286aa0d278121bf7a"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\math\\UiPointerMath.h",
+      "source_sha256": "91311c3f33e7c827d28993e3131a877c04f1e5b07e32d4ca64acab230d6c5092",
+      "destination": "include/kfvr/math/UiPointerMath.h",
+      "destination_sha256": "d1e0ba4dd2163ad18227a7ad4652ce0771daba18c31633486dc0484042835fd9"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\math\\UiPointerSmoothing.h",
+      "source_sha256": "16ad754c2d48ed76a4e14810ecbf6a93fa6d4b07a79a310b6ea3b9275576aad7",
+      "destination": "include/kfvr/math/UiPointerSmoothing.h",
+      "destination_sha256": "1c52bb2d4210c76dd9f85104f868f96f6dd26aa4f90c3cc4607c3931458cb820"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\math\\WeaponPoseMath.h",
+      "source_sha256": "c6e137a1a87fe5b461360111ba19f3f9b85f7b3423a517ef3e63bdff376cb8ef",
+      "destination": "include/kfvr/math/WeaponPoseMath.h",
+      "destination_sha256": "0cf86a2287c50876bf133d99b3d97428512ea6602a665855a6f1806ebe657f1a"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\ActionPolicy.h",
+      "source_sha256": "8653e34c6ea69c511fbb9a75505698d8f8a07aedcc7534d0dea2a6c75ca8b498",
+      "destination": "include/kfvr/interaction/ActionPolicy.h",
+      "destination_sha256": "0408bf1228862188cffd4d40fa0ac6e76b5e8aa485358c433ae75e8920cd6424"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\AutoAdsPolicy.h",
+      "source_sha256": "24b35e6f22bfff0c31a275613e2c77f573f8b68d01248d8d139b5c2ff55ee07d",
+      "destination": "include/kfvr/interaction/AutoAdsPolicy.h",
+      "destination_sha256": "580784ae2f75f1f9d80e80971c05eb0442c3a8ec49ab5f21c9181e8c73040322"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\ComfortCamera.h",
+      "source_sha256": "4022189bb3102dda8081b9bf3ca38b0b29aec18205c3f74ad0bf6ff96f90fae6",
+      "destination": "include/kfvr/interaction/ComfortCamera.h",
+      "destination_sha256": "2c7cf9acb66013ad22aac5e303c57865825c6f2ecbee0639d2c3867208df2d0d"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\ComfortControls.h",
+      "source_sha256": "644b9a080b2364ba323f274788a4c604590a7cbcdd8f28cc7f7c17df6fee429f",
+      "destination": "include/kfvr/interaction/ComfortControls.h",
+      "destination_sha256": "946dcd81286a868b3028eb92a05f8c162cda07109550f9bb77295b22240d630b"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\MovementFrame.h",
+      "source_sha256": "753ff8ba9ea9c96c55d1dba6abb33370c4155621ad3b468e6174b5ac19909543",
+      "destination": "include/kfvr/interaction/MovementFrame.h",
+      "destination_sha256": "5635eea384ff1887ccd48c0c2ae822cd91e51cf65f6db697a6a0f0f6b6227de6"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\RecenterPolicy.h",
+      "source_sha256": "ccffc71c7605762fd02b70c0ec5d7b7d8fd3e31357c152c20ea4f7bd37a33b75",
+      "destination": "include/kfvr/interaction/RecenterPolicy.h",
+      "destination_sha256": "6f5c3589a5f5a3931842e755d9e6e093ad3807762d6d9fb9a385b0585aebbee0"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\RigPose.h",
+      "source_sha256": "e3ead7bc34fcb25e3d8ed242f5d7e9ded4b5648672b7386510a5aaa0a684e915",
+      "destination": "include/kfvr/interaction/RigPose.h",
+      "destination_sha256": "4b0c0b496c983552d6498cb35e3073b5878e74120355a1225d41720cdf777e6b"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\TrackingMath.h",
+      "source_sha256": "e17e88746385fe7de519129ae99eed9df7897b10c4368adafa6c997108dba145",
+      "destination": "include/kfvr/interaction/TrackingMath.h",
+      "destination_sha256": "ccc59900057f75badca2dbf9c39e0836d9df1fe995f472cc7777ca47b6b2c3a4"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\interaction\\WeaponGrip.h",
+      "source_sha256": "7b74caff4794add2321dfdcf11b9273dd299ff6ca97f7ec458ff75f3daf61c54",
+      "destination": "include/kfvr/interaction/WeaponGrip.h",
+      "destination_sha256": "88e27fd0b90080bcdedf4659824497ebdd053f76cd540283ed4781cfd21aa9a2"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\runtime\\FrameCoordinator.h",
+      "source_sha256": "a64404852d33de996d737f483b4487263674b53a03ba52b0bc85b5f8c2771977",
+      "destination": "include/kfvr/runtime/FrameCoordinator.h",
+      "destination_sha256": "c8598cc0c2fa6866a5608360cf8e63cad3050a885901bbaed889b07ffe91696c"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\runtime\\FrameProvider.h",
+      "source_sha256": "fb296f33b2c14cda73cbcaa7fc540850f4d928850330d4f677eb1af953888b19",
+      "destination": "include/kfvr/runtime/FrameProvider.h",
+      "destination_sha256": "ac4547efa34bbfbac99a122b29cf1d6d7c3a8e39726de1d2af8dbb260dc97706"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\runtime\\PresentationPolicy.h",
+      "source_sha256": "76468e5767f2629ee2c87f324c9a98b76e7116e506193d14136da05b94b0d290",
+      "destination": "include/kfvr/runtime/PresentationPolicy.h",
+      "destination_sha256": "33ed0147e0b5f2ae5c0f66c044221dd916de1bf7a35690b2fc034c8a54114453"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\graphics\\D3D11SharedPair.h",
+      "source_sha256": "e5f7a1db3860cd1d64d5440b494ef60754a8a7fdbc8285ce0f4c94898580e9d7",
+      "destination": "include/kfvr/graphics/D3D11SharedPair.h",
+      "destination_sha256": "e87e05422c065b2a182c1fa8b8be9bd67c9d87c9c9bae0f55f6a7e2aee4a716f"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\graphics\\SharedTextureProtocol.h",
+      "source_sha256": "c07533ff9843e76f877665d5effef886317d26484f77af5fa6cb3e3c28052319",
+      "destination": "include/kfvr/graphics/SharedTextureProtocol.h",
+      "destination_sha256": "6c4b80067b1617c7d0359f7f966e3b286a1002d343dbbf13f8f5ea4946c528be"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\ipc\\FrameChannel.h",
+      "source_sha256": "2090d13acf8ee4a2f4646cba493504800fdca4476afaf065269644cecff21412",
+      "destination": "include/kfvr/ipc/FrameChannel.h",
+      "destination_sha256": "fc1c60712f240d2a705163d239d36327ad14d1b8a8ead944ca3b851955fa7c91"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\ipc\\FrameProtocol.h",
+      "source_sha256": "5f5acfcfee50815a5c52a92aeaa31d663e6d22bfbc6e4b320adc7a3866362dd5",
+      "destination": "include/kfvr/ipc/FrameProtocol.h",
+      "destination_sha256": "a5a32a959605f6d90c8e0c8483e004632a76022e577d581b29c6b62ebd8f501a"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\ipc\\RemoteFrameProvider.h",
+      "source_sha256": "a52db7b80e98bfc8f08dbef2a48104bf2dc8701228a85d8e51be86a46eaa14ad",
+      "destination": "include/kfvr/ipc/RemoteFrameProvider.h",
+      "destination_sha256": "84d0a37ca046c4f8e5a808412daf2e4a80d498c2245f1fd907b5d87277534a57"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\xr\\DiagnosticScene.h",
+      "source_sha256": "0824992b30c880fbc34690a28c2f8430cd943d1f6569e4bd6fcf5aa2c2c5bd49",
+      "destination": "include/kfvr/xr/DiagnosticScene.h",
+      "destination_sha256": "d056950d4eba9f0f52feb6121a993dbb757d7930900e0893670b0cd085edebb0"
+    },
+    {
+      "source": "G:\\BC2VR\\include\\fvr\\xr\\OpenXrHost.h",
+      "source_sha256": "644b2617a0aad210b5623ecd32c3a86d82353f03228fde4c20c508c2f4f31562",
+      "destination": "include/kfvr/xr/OpenXrHost.h",
+      "destination_sha256": "219f76be5172d1df1d2469e936a04b7534f08ca3734093798cc238443b039b90"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\math\\ArmPoleVectorMath.cpp",
+      "source_sha256": "0cd27e70bb28b9dafacde678f86b2af9cc84a54ff7071b04171984f8542cd2df",
+      "destination": "src/math/ArmPoleVectorMath.cpp",
+      "destination_sha256": "2eecf980db5c1e4856c9dfa528525192976e315b489aeebe158b36a8bfce7478"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\math\\StereoCulling.cpp",
+      "source_sha256": "6764d322a03568ed6670df73728249507476158b504b3d9ce5f03cb4fcafefc3",
+      "destination": "src/math/StereoCulling.cpp",
+      "destination_sha256": "9fc809bfc05997edbc7770c2d50d2e076f122e55f9afdd2b8cdfc94f5a317e02"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\math\\StereoMath.cpp",
+      "source_sha256": "211c60a6d4d46d30aa7cca940f92d42b0082fb68c3b6352d65abf1dde29fb62a",
+      "destination": "src/math/StereoMath.cpp",
+      "destination_sha256": "9b8bab753ddec3d1477e4abd451df4571c21d3190d9b6ef88145721af6730631"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\math\\UiPointerMath.cpp",
+      "source_sha256": "eb3d0bafcbdaaf83ae2c64c6a88fc9fd608b6c37525a9f6eba42c6cad235b677",
+      "destination": "src/math/UiPointerMath.cpp",
+      "destination_sha256": "a3a7391904eb08d2b28e9a737deec892b91cf33b4e82fe7ac565684e40c95e40"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\math\\UiPointerSmoothing.cpp",
+      "source_sha256": "adc182c2bfa1b8945fadca3eade13665b45d7a461407abeb6cf2d2f69b478b7a",
+      "destination": "src/math/UiPointerSmoothing.cpp",
+      "destination_sha256": "c52c4e8c446d9ca3db468b8db6bdf949f3dcc7c6c6d2337b2fd51ac3896b942c"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\math\\WeaponPoseMath.cpp",
+      "source_sha256": "b9b1f225b31f274d848187e63d181660917f230441e43eb72fadc7091c79ed79",
+      "destination": "src/math/WeaponPoseMath.cpp",
+      "destination_sha256": "2588100317b14cffeb94c5a930a9d132708e51a6f11bf666c62e650dceb47189"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\interaction\\ActionPolicy.cpp",
+      "source_sha256": "835bdb2925514431657146b865b0a137e048003a5c6bb742f5dd23ceeb932f01",
+      "destination": "src/interaction/ActionPolicy.cpp",
+      "destination_sha256": "ad95b9df35244f3491359de889217e7ea81702b3ff583b3198dbdc9b1ca0624b"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\interaction\\ComfortCamera.cpp",
+      "source_sha256": "7976e962ba38381d2fdfdad2c2e53a6c1c9e94ca39b2e53989558d3c0e4d6336",
+      "destination": "src/interaction/ComfortCamera.cpp",
+      "destination_sha256": "48e29c450e1c234b07993f553cf654dd28342d45bff155382f14742544ccd17c"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\interaction\\ComfortControls.cpp",
+      "source_sha256": "410758814dc3d94891528e70e16548540ba50f87df5a52ad6f77a445253f1cbd",
+      "destination": "src/interaction/ComfortControls.cpp",
+      "destination_sha256": "f0235ce04b391ed16e820fb47a01aa1c5c29af56f30ae3d8152e4ceeb16261a5"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\interaction\\RigPose.cpp",
+      "source_sha256": "8efb6ea6164f0a753a1724fe75e0d85b9c42a564a4826f7ab507b7e4d2fe7fc1",
+      "destination": "src/interaction/RigPose.cpp",
+      "destination_sha256": "70121f34d2ea0a3d80268b37264c8e9e03200ff5aac8ae1ed5146dc12f173e25"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\interaction\\TrackingMath.cpp",
+      "source_sha256": "d60b2b39abe39fdd030c9335bea75c18041739e6c325b76dc94d6008c2453aa3",
+      "destination": "src/interaction/TrackingMath.cpp",
+      "destination_sha256": "e6e04c878f3241f69437ccf678f9e601fe13c3c4e167d2535ec95083feaacdaa"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\interaction\\WeaponGrip.cpp",
+      "source_sha256": "e6738f163780c0ea50f825140b6f732371340f49ff5450478ef88ea010c43177",
+      "destination": "src/interaction/WeaponGrip.cpp",
+      "destination_sha256": "d9c4073050fe78148c373c4b47e34fc29d7ef5f4ba8d840dc1dbe720be875a23"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\runtime\\FrameCoordinator.cpp",
+      "source_sha256": "fe54702ee1287469f77356e5a6a4724f9449cfa829c6f0c2305b5a7128ca67bc",
+      "destination": "src/runtime/FrameCoordinator.cpp",
+      "destination_sha256": "3eda351ab8b4294edc64db7c02dc71fe5b304c64d61b05f5ac50da5a84f4c8cc"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\graphics\\d3d11\\D3D11SharedPair.cpp",
+      "source_sha256": "371c2145e214bfff9eca43f1e701213a953a056740e96e68e28b4eb01f5a09d3",
+      "destination": "src/graphics/d3d11/D3D11SharedPair.cpp",
+      "destination_sha256": "6edb3d3ea8c2994ffd2e940b0ebf75ef8cf96dfc93b4bbb5d77fe48bb260032a"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\ipc\\FrameProtocol.cpp",
+      "source_sha256": "e91664946958d09c85525a42ed09bad22b7f9876af8555c3c9779d467c8ed822",
+      "destination": "src/ipc/FrameProtocol.cpp",
+      "destination_sha256": "6004cd8b738b48bd12746560e6d5da2c5b9801d6d8d632eeeed2b5985d063c02"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\ipc\\RemoteFrameProvider.cpp",
+      "source_sha256": "aa0bf97cd71dd75a7d7556adecea3918f8a564b73abdb26e2eab71884cd18e44",
+      "destination": "src/ipc/RemoteFrameProvider.cpp",
+      "destination_sha256": "7a47e16ca41c923852c4f04685e9e5f76a4ca9944974584b5ba199883266d862"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\xr\\DiagnosticScene.cpp",
+      "source_sha256": "6530042ae510dca73a7464f2d7444c329dc0ef8da63b12c5f9e29240ab3a1bc8",
+      "destination": "src/xr/DiagnosticScene.cpp",
+      "destination_sha256": "2d7130d85ca79b7fabcba1a70c0e34834a59cbbd4e77b43547a24367a1adec9b"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\xr\\OpenXrHost.cpp",
+      "source_sha256": "9a50e681ecdc7416c6968c710bfdb62ea474c33376ffa7e65bcb22a776f0693c",
+      "destination": "src/xr/OpenXrHost.cpp",
+      "destination_sha256": "ded17bcd9ced82ec860de6e71bcdb94a71f35cf2fb454ade7369777510706351"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\openxr-1.1.61\\include\\openxr\\openxr.h",
+      "source_sha256": "75ae85f7b1308d33572908342d1f3bf6d26a57769cc2092aa3163dfeaf1dcbed",
+      "destination": "third_party/openxr-1.1.61/include/openxr/openxr.h",
+      "destination_sha256": "75ae85f7b1308d33572908342d1f3bf6d26a57769cc2092aa3163dfeaf1dcbed"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\openxr-1.1.61\\include\\openxr\\openxr_platform.h",
+      "source_sha256": "150939f39aaf1159e9f59ab53b5d5863c08d5777efa13820b5cbcd3562eb068d",
+      "destination": "third_party/openxr-1.1.61/include/openxr/openxr_platform.h",
+      "destination_sha256": "150939f39aaf1159e9f59ab53b5d5863c08d5777efa13820b5cbcd3562eb068d"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\openxr-1.1.61\\include\\openxr\\openxr_platform_defines.h",
+      "source_sha256": "7dc30ad27f1082a71f84f5f5adf10762558fc9fe57fdc7628d796d22be3b0dbe",
+      "destination": "third_party/openxr-1.1.61/include/openxr/openxr_platform_defines.h",
+      "destination_sha256": "7dc30ad27f1082a71f84f5f5adf10762558fc9fe57fdc7628d796d22be3b0dbe"
+    },
+    {
+      "source": "G:\\BC2VR\\licenses\\BFVR-MIT.txt",
+      "source_sha256": "c1124ac3590e6c170a73ec33fe0daf79a87da700e95c042007ee2d85fefd2186",
+      "destination": "licenses/BFVR-MIT.txt",
+      "destination_sha256": "c1124ac3590e6c170a73ec33fe0daf79a87da700e95c042007ee2d85fefd2186"
+    },
+    {
+      "source": "G:\\BC2VR\\licenses\\MinHook-BSD.txt",
+      "source_sha256": "4f21f857550d7be854da6ea5f2da4e6775ca4e3fbb535e4f3d961c47d0bf3335",
+      "destination": "licenses/MinHook-BSD.txt",
+      "destination_sha256": "4f21f857550d7be854da6ea5f2da4e6775ca4e3fbb535e4f3d961c47d0bf3335"
+    },
+    {
+      "source": "G:\\BC2VR\\licenses\\OpenXR-Apache-2.0.txt",
+      "source_sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+      "destination": "licenses/OpenXR-Apache-2.0.txt",
+      "destination_sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\platform\\windows\\FrameChannel.cpp",
+      "source_sha256": "e1831e3a9f9a28448db77a7fe495c2baa11313f55da25ad684df7be57cc16e6e",
+      "destination": "src/platform/windows/FrameChannel.cpp",
+      "destination_sha256": "95c5d8b82897563460221c2e3f362f200620d190e30bc43190c5bc1f3678c1ba"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\platform\\windows\\D3D11BridgeProbe.cpp",
+      "source_sha256": "2860d4ba1cf36d4f2e2a0d5df4b765d03de167ebfa5cdf078c5556f5bb9366a2",
+      "destination": "src/platform/windows/D3D11BridgeProbe.cpp",
+      "destination_sha256": "fbea762397d568fb9ffea40ba5f12570bcbabe8f6e3b70fcfc3823651d515046"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\platform\\windows\\IpcBridgeProbe.cpp",
+      "source_sha256": "b0a815468f25fbd31487c298fd1f5846bbf9a79160a270f44dbdb0fc8fde6415",
+      "destination": "src/platform/windows/IpcBridgeProbe.cpp",
+      "destination_sha256": "eb6156c6006d4af389752e6cdb0f27bd7829a45c26598858c370350f7dd821ff"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\platform\\windows\\OpenXrHostMain.cpp",
+      "source_sha256": "91410056ca229b562e3c46aa412d3da62679ab6f3669eee2c0d65da1dde170f1",
+      "destination": "src/platform/windows/OpenXrHostMain.cpp",
+      "destination_sha256": "be7995c3bb52ba4b6a06275e99d082b63c1414cbdc856237e12bb1876a3f83cd"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\platform\\windows\\SceneProbe.cpp",
+      "source_sha256": "6efb4a2a0746789c8c3368e7dfa2e38861667c412bb206c0afbdf8cea6ccb382",
+      "destination": "src/platform/windows/SceneProbe.cpp",
+      "destination_sha256": "b43ddc730e872cb13cb01aeaff2c48c3fc6d9dcb85de709342cf8818fcbc9124"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\StereoCullingTests.cpp",
+      "source_sha256": "74c7e78531de5198d6e8f8460a0cdb41be38fe9cea21eaebdaabdfd288e31394",
+      "destination": "tests/StereoCullingTests.cpp",
+      "destination_sha256": "6723cda2ac785a32710e98a29cc0a2d794af752b97562bc4579c617700c25eea"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\FrameProtocolTests.cpp",
+      "source_sha256": "c8ad62ef6022236176881bab26f2efbae0d95570211a960757a07cd76c842f82",
+      "destination": "tests/FrameProtocolTests.cpp",
+      "destination_sha256": "2af3868a0208e7d21e1289a843f091b0d5b3ce70a84d0db523646c39a0465879"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\PresentationPolicyTests.cpp",
+      "source_sha256": "6b3429ef4cbf3b54a29abf16f608aec9015de782caaa0217e6e7eb072d5b76e7",
+      "destination": "tests/PresentationPolicyTests.cpp",
+      "destination_sha256": "3c5daf2e754c02fdfdbb6d2ed25fa67df55c3b69dbcedd309ea98da4c70e19fe"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\SharedTextureProtocolTests.cpp",
+      "source_sha256": "88c5142a147163631e1c1b3198eb41f920c513f66797cb3bfc45d72307991bb3",
+      "destination": "tests/SharedTextureProtocolTests.cpp",
+      "destination_sha256": "f9b7e7f15d65a9c69637ad6b7343b9925687a2fdf2cd59905a31c4f89199886e"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\CoreMathTests.cpp",
+      "source_sha256": "46e63501ebf1e74e7a9cdecb899121f7c6326aea372ffb2f4bf4b9237d6fbc6d",
+      "destination": "tests/CoreMathTests.cpp",
+      "destination_sha256": "adf95ad1096ca1cbc4ac1f902d9541b670443a1f7600ab697fcd6fbaec8619cb"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\FrameCoordinatorTests.cpp",
+      "source_sha256": "0cd5f32f355957d9420b76a641eb294084ff741c9457fa8c65283d3e87bafe7d",
+      "destination": "tests/FrameCoordinatorTests.cpp",
+      "destination_sha256": "b23223c4e2dbcdeebd25879285c633760a2bf9588e286cd5b09fdca11798540e"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\ActionPolicyTests.cpp",
+      "source_sha256": "5cfe9c0048a1681d087ff085dfa6553c14f5d9f2cd7a2b8eff458499942a9f6a",
+      "destination": "tests/ActionPolicyTests.cpp",
+      "destination_sha256": "04aca8e14b2c0d79e10071fbb752609d617c7e702e813dcc779fa196d8e6e7a8"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\RigPoseTests.cpp",
+      "source_sha256": "0f39e52fe78d339c208398c3a380cdca95b5a55f7af0d79e76ff23f3018fac0a",
+      "destination": "tests/RigPoseTests.cpp",
+      "destination_sha256": "4b91b10fc7c896c6cb8f6078741ddfb3fe92f0ed5aa5af26313ea4ea8ad2605a"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\UiPointerSmoothingTests.cpp",
+      "source_sha256": "0c8ce18e73859b958c6e440033c64228ec1b6d76cba0c67658653d7ad88d3c41",
+      "destination": "tests/UiPointerSmoothingTests.cpp",
+      "destination_sha256": "6fd040acc27607823e760880b9fc4d1ddcfa09ac023d704e71358674f7cb1ca1"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\ArmPoleVectorMathTests.cpp",
+      "source_sha256": "4b4fd3032a53e02f3e00c51b6ee12c9adbcc373e884c6b148c577f53d6faa527",
+      "destination": "tests/ArmPoleVectorMathTests.cpp",
+      "destination_sha256": "dabd925908872452d121859e59029c59dfa8beb5b7b8581f335b9aa00b83e3f6"
+    },
+    {
+      "source": "G:\\BC2VR\\LICENSE",
+      "source_sha256": "c1124ac3590e6c170a73ec33fe0daf79a87da700e95c042007ee2d85fefd2186",
+      "destination": "LICENSE",
+      "destination_sha256": "c1124ac3590e6c170a73ec33fe0daf79a87da700e95c042007ee2d85fefd2186"
+    },
+    {
+      "source": "G:\\BC2VR\\Build.ps1",
+      "source_sha256": "3beb66f694d6cfd16245a321ccc97825c5354bcff66f0b169a852bfa9a8e76e2",
+      "destination": "Build.ps1",
+      "destination_sha256": "03102f3333bba92943db57f6e52b90627f04766308a84c103ac7fb11f1805faf"
+    },
+    {
+      "source": "G:\\BC2VR\\runtime\\openxr\\win64\\openxr_loader.dll",
+      "source_sha256": "a69729a3348bc4dcb9be126a49d594074e477be7312f65180b0d082bf100fa5f",
+      "destination": "runtime/openxr/win64/openxr_loader.dll",
+      "destination_sha256": "a69729a3348bc4dcb9be126a49d594074e477be7312f65180b0d082bf100fa5f"
+    },
+    {
+      "source": "G:\\BC2VR\\tests\\Test.h",
+      "source_sha256": "98f60b29e72a63bee4e86d11f1c940390651f1b047d64430c5ceb8ea6c125d24",
+      "destination": "tests/Test.h",
+      "destination_sha256": "98f60b29e72a63bee4e86d11f1c940390651f1b047d64430c5ceb8ea6c125d24",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\src\\platform\\windows\\NativeTraceMain.cpp",
+      "source_sha256": "65183f5d3274c7001e25d59d54265e71442908f016837f45b4a8c3fa3df37aec",
+      "destination": "src/platform/windows/NativeTraceMain.cpp",
+      "destination_sha256": "3204db30f7339b99cf1dfb149458e105488f45d88fc5d8697e30d95314b0e051",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\AUTHORS.txt",
+      "source_sha256": "264e92bdf94bf3af4606e05ea725c761c4b362577a5423cf88241eb9c771e5d3",
+      "destination": "third_party/minhook-1.3.4/AUTHORS.txt",
+      "destination_sha256": "264e92bdf94bf3af4606e05ea725c761c4b362577a5423cf88241eb9c771e5d3",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\LICENSE.txt",
+      "source_sha256": "4f21f857550d7be854da6ea5f2da4e6775ca4e3fbb535e4f3d961c47d0bf3335",
+      "destination": "third_party/minhook-1.3.4/LICENSE.txt",
+      "destination_sha256": "4f21f857550d7be854da6ea5f2da4e6775ca4e3fbb535e4f3d961c47d0bf3335",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\include\\MinHook.h",
+      "source_sha256": "c3608e584bd9659aebdbb4c8c82585605989193623f240552d35c43311b3d31a",
+      "destination": "third_party/minhook-1.3.4/include/MinHook.h",
+      "destination_sha256": "c3608e584bd9659aebdbb4c8c82585605989193623f240552d35c43311b3d31a",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\buffer.c",
+      "source_sha256": "69045b390e0f18cf149ea0451ae750f389654eb8d2ed7f2f89c7ff04b7909519",
+      "destination": "third_party/minhook-1.3.4/src/buffer.c",
+      "destination_sha256": "69045b390e0f18cf149ea0451ae750f389654eb8d2ed7f2f89c7ff04b7909519",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\buffer.h",
+      "source_sha256": "175ec5496c020509cf4c7670322b51b5bcd5b63a345bfefc4a19b43675857fa7",
+      "destination": "third_party/minhook-1.3.4/src/buffer.h",
+      "destination_sha256": "175ec5496c020509cf4c7670322b51b5bcd5b63a345bfefc4a19b43675857fa7",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\hook.c",
+      "source_sha256": "4005d39875ca4b8a957aabba73bd053cba77e50a8b383d48e0cb44c13f26669b",
+      "destination": "third_party/minhook-1.3.4/src/hook.c",
+      "destination_sha256": "4005d39875ca4b8a957aabba73bd053cba77e50a8b383d48e0cb44c13f26669b",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\trampoline.c",
+      "source_sha256": "824ed887ec9da606960962af8973205d1f97cd03241e75517eba485280fb6377",
+      "destination": "third_party/minhook-1.3.4/src/trampoline.c",
+      "destination_sha256": "824ed887ec9da606960962af8973205d1f97cd03241e75517eba485280fb6377",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\trampoline.h",
+      "source_sha256": "23681f7768d5dbd23ea14b45ba64e488a337501f23122253c532b05dbed4b85f",
+      "destination": "third_party/minhook-1.3.4/src/trampoline.h",
+      "destination_sha256": "23681f7768d5dbd23ea14b45ba64e488a337501f23122253c532b05dbed4b85f",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\hde\\hde32.c",
+      "source_sha256": "2d4d7dd73d609028822aaf71ac05112b83fe6cc2ae2d6d71fa051b3fc6acfc43",
+      "destination": "third_party/minhook-1.3.4/src/hde/hde32.c",
+      "destination_sha256": "2d4d7dd73d609028822aaf71ac05112b83fe6cc2ae2d6d71fa051b3fc6acfc43",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\hde\\hde32.h",
+      "source_sha256": "754579fbcec5f64fa229646ceecb241c0b7f31c8a0bb12370e604c316c569315",
+      "destination": "third_party/minhook-1.3.4/src/hde/hde32.h",
+      "destination_sha256": "754579fbcec5f64fa229646ceecb241c0b7f31c8a0bb12370e604c316c569315",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\hde\\hde64.c",
+      "source_sha256": "06b588a5140e15f0a55e13ddadc7e3a4648f3223cefab2d5285b796a422bb9f5",
+      "destination": "third_party/minhook-1.3.4/src/hde/hde64.c",
+      "destination_sha256": "06b588a5140e15f0a55e13ddadc7e3a4648f3223cefab2d5285b796a422bb9f5",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\hde\\hde64.h",
+      "source_sha256": "fd5b39e2865e12b9525ebda8fd9e9658b341ead5932d1bcb412a189f81ca42ca",
+      "destination": "third_party/minhook-1.3.4/src/hde/hde64.h",
+      "destination_sha256": "fd5b39e2865e12b9525ebda8fd9e9658b341ead5932d1bcb412a189f81ca42ca",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\hde\\pstdint.h",
+      "source_sha256": "975488009779ea99c7e04b83a160397d5cd7195cb5bf6ad79180805f756c7d00",
+      "destination": "third_party/minhook-1.3.4/src/hde/pstdint.h",
+      "destination_sha256": "975488009779ea99c7e04b83a160397d5cd7195cb5bf6ad79180805f756c7d00",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\hde\\table32.h",
+      "source_sha256": "e56f8641bd9133c1b99a1e6555b19eebe7ed663e5ea8de4edbe74ba461161ab4",
+      "destination": "third_party/minhook-1.3.4/src/hde/table32.h",
+      "destination_sha256": "e56f8641bd9133c1b99a1e6555b19eebe7ed663e5ea8de4edbe74ba461161ab4",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    },
+    {
+      "source": "G:\\BC2VR\\third_party\\minhook-1.3.4\\src\\hde\\table64.h",
+      "source_sha256": "0b6c69ad498e67907e0c574ab06123aee4ec30c99fa181099ea929a8d820bfc1",
+      "destination": "third_party/minhook-1.3.4/src/hde/table64.h",
+      "destination_sha256": "0b6c69ad498e67907e0c574ab06123aee4ec30c99fa181099ea929a8d820bfc1",
+      "recorded_at": "first KFVR checkpoint; destination may already contain KF-specific adaptation"
+    }
+  ]
+}

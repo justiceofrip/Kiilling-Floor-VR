@@ -1,0 +1,7 @@
+/build/
+/reports/
+/local/
+/runtime/
+/config/local.json
+__pycache__/
+*.pyc
