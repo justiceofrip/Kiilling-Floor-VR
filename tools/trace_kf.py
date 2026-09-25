@@ -1,10 +1,29 @@
 """Opt-in bounded native trace; standalone KF only. No auto-start installation."""
-import argparse,ctypes,datetime,hashlib,json,pathlib,struct,subprocess
+import argparse,ctypes,datetime,hashlib,json,math,pathlib,struct,subprocess
 from observe_kf import Observer
 import pefile
 from native_profile import TARGETS, AUDITED_SHA256
 
-def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False):
+def validate_eye_packet(camera,eye_data,pose_trial,asymmetric_trial):
+ summary={}
+ native_body=camera['cases'][0]['matrices'][16:32]
+ matrices_valid=len(eye_data)==2 and all(len(e)==96 and all(isinstance(v,(float,int)) and math.isfinite(v) for v in e) for e in eye_data)
+ if matrices_valid:
+  centers=[e[28:31] for e in eye_data];separation=math.dist(*centers)
+  midpoint=[(a+b)/2 for a,b in zip(*centers)];shift=[midpoint[i]-native_body[12+i] for i in range(3)]
+  expected_shift=[sum(native_body[row*4+i]*amount for row,amount in enumerate([6,4,5])) for i in range(3)] if pose_trial else [0,0,0]
+  relative_trace=sum(eye_data[0][16+i*4+j]*native_body[i*4+j] for i in range(3) for j in range(3))
+  angle=math.acos(max(-1,min(1,(relative_trace-1)/2)))
+  matrices_valid=abs(separation-3.2)<.002 and max(abs(a-b) for a,b in zip(shift,expected_shift))<.002 and abs(angle-(.35 if pose_trial else 0))<.002
+  matrices_valid=matrices_valid and max(abs(eye_data[0][16+i*4+j]-eye_data[1][16+i*4+j]) for i in range(3) for j in range(3))<.00001
+  matrices_valid=matrices_valid and max(abs((centers[1][i]-centers[0][i])-3.2*eye_data[0][16+i]) for i in range(3))<.002
+  expected_offsets=[.05,-.05] if asymmetric_trial or pose_trial else [0,0]
+  matrices_valid=matrices_valid and all(abs(e[40]-x)<.00001 for e,x in zip(eye_data,expected_offsets))
+  summary.update(eye_separation_world_units=separation,head_shift_world_units=shift,head_angle_radians=angle)
+ summary['camera_packet_valid']=matrices_valid
+ return summary
+
+def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False):
  stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
  directory=root/'reports'/('native-trace-'+stamp);directory.mkdir(parents=True)
  observer=Observer(pid,game)
@@ -15,7 +34,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<15I',884,5,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),int(stereo_trial))
+  p=snapshot['properties'];config=struct.pack('<15I',884,5,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
   names=TARGETS
   evidence=[]
   for file,name in names:
@@ -51,7 +70,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   restored=all(observer.read(e['address'],16).hex()==e['expected'] for e in evidence)
   summary=dict(pid=pid,launcher_exit=result.returncode,entry_bytes_restored=restored,game_files_modified=False,report=str(report_path),module_resident_until_exit=True)
   if report_path.exists():
-   report=json.loads(report_path.read_text());summary.update(frames=len(report['frames']),hooks_disabled=report['hooks_disabled'],render_counts=sorted(set(f['renders'] for f in report['frames'])),simulation_advanced_inside_draw=any(f['ticks_before']!=f['ticks_after'] for f in report['frames']))
+   report=json.loads(report_path.read_text());summary.update(frames=len(report['frames']),hooks_disabled=report['hooks_disabled'],render_counts=sorted(set(f['renders'] for f in report['frames'])),engine_ticks_observed_inside_draw=any(f['ticks_before']!=f['ticks_after'] for f in report['frames']))
   if report_path.exists():
    totals={};phases={0:'draw_outside_player',1:'player_outside_level',2:'level',3:'private_eye'}
    for frame in report['frames']:
@@ -70,7 +89,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    camera_path=directory/'native-camera-trial.json';camera=json.loads(camera_path.read_text()) if camera_path.exists() else {}
    camera_passed=camera.get('ready') is True and camera.get('prerequisites') is True and camera.get('original_scene_unchanged') is True and len(camera.get('cases',[]))==5
    for row in camera.get('cases',[]):
-    camera_passed=camera_passed and all(row.get(k) is True for k in ['fields_match','canaries_intact','finite']) and all(row.get(k,1e10)<0.02 for k in ['camera_max_error','view_max_error','projection_inverse_max_error','view_projection_max_error'])
+    camera_passed=camera_passed and all(row.get(k) is True for k in ['fields_match','canaries_intact','finite']) and all(row.get(k,1e10)<0.02 for k in ['camera_max_error','view_max_error','projection_inverse_max_error','view_projection_max_error','derived_max_error'])
    summary['camera_trial_passed']=camera_passed
   stereo_passed=True
   if stereo_trial:
@@ -82,10 +101,13 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
     differing=sum(left[i:i+3]!=right[i:i+3] for i in range(0,len(left),4))
     stereo_passed=len(left)==len(right)==512*384*4 and min(unique)>64 and differing>1024
     summary.update(eye_unique_colors=unique,differing_eye_pixels=differing)
+   if stereo_passed:
+    eye_data=json.loads((directory/'native-eye-cameras.json').read_text())['eyes']
+    metrics=validate_eye_packet(camera,eye_data,pose_trial,asymmetric_trial);summary.update(metrics);stereo_passed=metrics['camera_packet_valid']
    summary['stereo_trial_passed']=stereo_passed
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
   if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
  finally:observer.close()
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],a.target_trial or a.camera_trial or a.stereo_trial,a.camera_trial or a.stereo_trial,a.stereo_trial)
+ p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');p.add_argument('--asymmetric-trial',action='store_true');p.add_argument('--pose-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],a.target_trial or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.asymmetric_trial or a.pose_trial,a.pose_trial)
 

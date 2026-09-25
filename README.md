@@ -9,7 +9,7 @@ Implemented and verified:
 - Read-only extraction of 2,381 embedded UnrealScript classes from the installed packages. Proprietary source stays in ignored `local/sdk`.
 - Read-only native object/property inspection, local player/viewport ownership and standalone-mode verification.
 - Bounded x86 native probes: 180 ticks, 180 player-view renders and 180 presents on one thread; no engine tick inside Draw; hooks disabled and original entry bytes verified afterward.
-- One native stereo world-render pair with fresh offset cameras/private targets, visually verified parallax and measured extra callbacks. Sustained rendering and headset delivery remain pending.
+- Native stereo world-render trials with fresh private cameras/targets, asymmetric frusta, synthetic head translation/rotation, visually verified parallax and measured extra callbacks. Sustained rendering and headset delivery remain pending.
 - Native D3D9 multisample-resolved image capture, verified visually. The game uses ordinary D3D9, not D3D9Ex.
 - UE2 camera conversion tested against a captured native matrix, plus asymmetric per-eye transforms and explicit world-scale input.
 - Prototype non-Ex D3D9-to-D3D11 CPU pair bridge with MSAA resolve and real x86-to-x64 pixel verification. High-resolution transfer cost still needs improvement.

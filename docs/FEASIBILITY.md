@@ -4,7 +4,7 @@ Provisional engineering judgement after the installed-game audit, not a measured
 
 | Target | Rating | Basis / remaining risk |
 | --- | ---: | --- |
-| Native stereo + head tracking + controller aiming, a small weapon subset | 7/10 | Exported scene/camera/render APIs, exact scripts, native trace and GPU transport are available. Render-side animation/culling and D3D9-to-XR integration remain substantial work. |
+| Native stereo + head tracking + controller aiming, a small weapon subset | 7/10 | Actual native stereo world images now work with asymmetric frusta and synthetic head poses; exact scripts and isolated GPU transport are available. Render-side animation/culling and D3D9-to-XR integration remain substantial work. |
 | Manual reloads and balanced physical melee | 7/10 | Game fire/reload/perk logic is script-visible; core state machines now conserve ammo and bound melee. Real interaction zones, server integration and every weapon mechanism still need work. |
 | VR + flat on a KFVR-enabled server | 7/10 | Existing UnrealScript replication/package mechanisms fit capability-based players. Requires a custom gameplay/client package and actual dedicated-server/flat-client tests. |
 | Full-body local and remote IK on all original player models | 5/10 | Native bone APIs exist, but skeleton/space/animation/LOD behavior and script performance are not yet validated. |

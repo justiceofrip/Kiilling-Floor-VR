@@ -17,7 +17,9 @@
 ## First playable vertical slice
 
 - [ ] Audit render-side animation/culling/temporal ownership and prove state restoration.
-- [ ] Render two actual KF eye views from one simulation step into independent surfaces.
+- [x] Render a bounded pair of actual KF world views into independent surfaces; verify original camera and RHI restoration.
+- [x] Drive private native cameras with complete asymmetric view data and a synthetic head pose.
+- [ ] Sustain eye rendering across animation, particles, mirrors/sky, map changes and device resets without repeated state updates.
 - [ ] Connect D3D9 eye surfaces to the verified D3D11/x64 presentation transport.
 - [ ] Submit an actual KF stereo pair to OpenXR and verify it in the headset.
 - [ ] Add controller samples and semantic actions to the native IPC/gameplay bridge.

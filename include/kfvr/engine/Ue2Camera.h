@@ -10,4 +10,13 @@ std::optional<Rotator> CameraRotation(const math::Matrix4&) noexcept;
 struct EyeMatrices {math::Matrix4 camera{},view{},projection{},viewProjection{};};
 std::optional<EyeMatrices> BuildEye(const math::Matrix4& bodyCamera,const math::Pose& referenceHead,
  const math::Pose& eye,const math::FovTangents&,float unitsPerMetre,float nearUnits,float farUnits) noexcept;
+// Complete derived camera data in the audited UE2 order. Construct a native
+// scene first; this payload only replaces its private camera/visibility data.
+struct SceneViewData {
+ std::array<math::Matrix4,6> matrices{}; // view, camera, projection, inverse projection, VP, inverse VP
+ math::Vec3 origin{},pixelDx{},pixelDy{};
+ float determinant=0;
+};
+std::optional<SceneViewData> MakeSceneView(const math::Matrix4& camera,
+ const math::Matrix4& projection,std::uint32_t width,std::uint32_t height) noexcept;
 }

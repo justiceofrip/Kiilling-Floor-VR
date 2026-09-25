@@ -154,6 +154,7 @@ struct StereoTrial {
  HRESULT result=E_PENDING;unsigned renders=0,frames=0,scripts=0,animation=0,tickBefore=0,tickAfter=0;long long renderQpc=0;
  std::array<Microsoft::WRL::ComPtr<IDirect3DSurface9>,2> surfaces;
  std::array<std::vector<unsigned char>,2> pixels;
+ std::array<kfvr::ue2::SceneViewData,2> camerasData;
 } stereo;
 void ProbeStereo(void* scene,void* ri){
  if(stereo.attempted)return;stereo.attempted=true;
@@ -174,7 +175,7 @@ void ProbeStereo(void* scene,void* ri){
   if(!bind(ri,aux.data()))stereo.result=E_FAIL;
   else {
    setViewport(ri,0,0,512,384);clear(ri,1,0xff000000,1,1.f,1,0);
-   privateEye=true;replayed=true;stereo.cameras&=kfvr::native::RenderDiagnosticCamera(scene,aux.data(),ri,eye?1.6f:-1.6f);privateEye=false;++stereo.renders;
+   privateEye=true;replayed=true;stereo.cameras&=kfvr::native::RenderDiagnosticCamera(scene,aux.data(),ri,eye?1.6f:-1.6f,config.stereoTrial,stereo.camerasData[eye]);privateEye=false;++stereo.renders;
    stereo.result=device->GetRenderTarget(0,&stereo.surfaces[eye]);
    if(SUCCEEDED(stereo.result)){D3DSURFACE_DESC desc{};stereo.result=stereo.surfaces[eye]->GetDesc(&desc);if(desc.Width!=512||desc.Height!=384||desc.MultiSampleType!=D3DMULTISAMPLE_NONE||desc.Format!=D3DFMT_A8R8G8B8||stereo.surfaces[eye].Get()==original.Get())stereo.result=E_UNEXPECTED;}
   }
@@ -206,15 +207,17 @@ void ReadStereo(){
 void WriteStereo(const std::filesystem::path& folder){
  std::ofstream out(folder/L"native-stereo.json");if(!stereo.ready.load(std::memory_order_acquire)){out<<"{\"ready\":false}\n";return;}
  LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
- out<<std::boolalpha<<"{\"ready\":true,\"hresult\":"<<stereo.result<<",\"renders\":"<<stereo.renders<<",\"state_restored\":"<<stereo.restored<<",\"canaries_intact\":"<<stereo.canaries<<",\"cameras_preserved\":"<<stereo.cameras<<",\"distinct_surfaces\":"<<stereo.distinct<<",\"engine_ticks_during_trial\":"<<stereo.tickAfter-stereo.tickBefore<<",\"skeletal_getframe_calls\":"<<stereo.frames<<",\"script_calls\":"<<stereo.scripts<<",\"selected_animation_calls\":"<<stereo.animation<<",\"render_and_target_ms\":"<<(double(stereo.renderQpc)*1000/frequency.QuadPart)<<",\"symmetric_diagnostic_fov\":true,\"world_scale_calibrated\":false,\"headset_presented\":false}\n";
+ out<<std::boolalpha<<"{\"ready\":true,\"hresult\":"<<stereo.result<<",\"renders\":"<<stereo.renders<<",\"state_restored\":"<<stereo.restored<<",\"canaries_intact\":"<<stereo.canaries<<",\"cameras_preserved\":"<<stereo.cameras<<",\"distinct_surfaces\":"<<stereo.distinct<<",\"engine_ticks_during_trial\":"<<stereo.tickAfter-stereo.tickBefore<<",\"skeletal_getframe_calls\":"<<stereo.frames<<",\"script_calls\":"<<stereo.scripts<<",\"selected_animation_calls\":"<<stereo.animation<<",\"render_and_target_ms\":"<<(double(stereo.renderQpc)*1000/frequency.QuadPart)<<",\"asymmetric_diagnostic_fov\":"<<(config.stereoTrial>=2)<<",\"synthetic_head_pose\":"<<(config.stereoTrial==3)<<",\"world_scale_calibrated\":false,\"headset_presented\":false}\n";
  if(FAILED(stereo.result))return;
+ std::ofstream cameraOut(folder/L"native-eye-cameras.json");cameraOut.precision(9);cameraOut<<"{\"eyes\":[";
+ for(unsigned eye=0;eye<2;++eye){if(eye)cameraOut<<',';cameraOut<<"[";bool first=true;for(const auto& matrix:stereo.camerasData[eye].matrices)for(const auto& row:matrix.values)for(float value:row){if(!first)cameraOut<<',';first=false;cameraOut<<value;}cameraOut<<"]";}cameraOut<<"]}\n";
  for(unsigned eye=0;eye<2;++eye){if(stereo.pixels[eye].size()!=512*384*4)continue;BITMAPFILEHEADER header{};BITMAPINFOHEADER info{};header.bfType=0x4d42;header.bfOffBits=sizeof(header)+sizeof(info);header.bfSize=header.bfOffBits+DWORD(stereo.pixels[eye].size());info.biSize=sizeof(info);info.biWidth=512;info.biHeight=-384;info.biPlanes=1;info.biBitCount=32;info.biCompression=BI_RGB;std::ofstream image(folder/(eye?L"native-right.bmp":L"native-left.bmp"),std::ios::binary);image.write(reinterpret_cast<const char*>(&header),sizeof(header));image.write(reinterpret_cast<const char*>(&info),sizeof(info));image.write(reinterpret_cast<const char*>(stereo.pixels[eye].data()),stereo.pixels[eye].size());}
 }
 
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=5||config.targetTrial>1||config.cameraTrial>config.targetTrial||config.stereoTrial>config.cameraTrial||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=5||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
