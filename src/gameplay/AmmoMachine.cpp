@@ -5,7 +5,7 @@
 namespace kfvr::gameplay {
 namespace { bool Newer(std::uint32_t a,std::uint32_t b){const auto d=a-b;return d && d<0x80000000u;} }
 AmmoMachine::AmmoMachine(AmmoConfig c,std::uint32_t loaded,std::uint32_t reserve,std::uint32_t epoch):config_(c),epoch_(epoch){
-    if(!epoch||!c.capacity||c.capacity>1000||c.maximumRounds>1000000||loaded>c.capacity||std::uint64_t(loaded)+reserve>c.maximumRounds||!c.fireMs||c.fireMs>60000||c.removeMs>60000||c.prepareMs>60000||c.insertMs>60000||c.chargeMs>60000||c.shellMs>60000)throw std::invalid_argument("Invalid ammo profile");
+    if((c.feed!=Feed::Detachable&&c.feed!=Feed::Tube)||(c.cycle!=Cycle::SelfLoading&&c.cycle!=Cycle::Manual)||!epoch||!c.capacity||c.capacity>1000||c.maximumRounds>1000000||loaded>c.capacity||std::uint64_t(loaded)+reserve>c.maximumRounds||!c.fireMs||c.fireMs>60000||c.removeMs>60000||c.prepareMs>60000||c.insertMs>60000||c.chargeMs>60000||c.shellMs>60000)throw std::invalid_argument("Invalid ammo profile");
     state_.chamber=loaded>0;state_.magazine=loaded?loaded-1:0;state_.reserve=reserve;state_.budget=std::uint64_t(loaded)+reserve;
 }
 std::uint64_t AmmoMachine::KFTotal()const{return std::uint64_t(state_.magazine)+state_.reserve+state_.handMagazine+unsigned(state_.chamber);}
@@ -59,7 +59,7 @@ AmmoResult AmmoMachine::Request(AmmoRequest r,std::uint64_t now){
     pending_=PendingAction{r.action,now+Duration(r.action)};Advance(now);return Pending()?AmmoResult::Accepted:AmmoResult::Completed;
 }
 void AmmoMachine::Suspend(){active_=false;pending_.reset();}
-bool AmmoMachine::Activate(std::uint32_t e){if(!e||e==epoch_)return false;epoch_=e;hasSequence_=false;active_=true;return true;}
+bool AmmoMachine::Activate(std::uint32_t e){if(!e||e==epoch_)return false;epoch_=e;hasSequence_=false;pending_.reset();active_=true;return true;}
 bool AmmoMachine::Correct(const AmmoState& s,std::uint32_t e,std::uint64_t now){
     if(e!=epoch_||now<clock_||s.revision<state_.revision||s.budget!=state_.budget||!Valid(s))return false;
     state_=s;pending_.reset();clock_=now;return true;

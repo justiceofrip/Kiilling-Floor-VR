@@ -10,7 +10,9 @@
 - [x] Capture an actual native D3D9 frame, including MSAA resolve and compatibility-vtable handling.
 - [x] Match native UE2 camera math and construct asymmetric eye matrices.
 - [x] Implement/test conserved magazine/chamber and tube reload logic, melee gating and compact poses.
-- [x] Implement OpenXR controller action/profile and haptic code; hardware acceptance pending.
+- [x] Implement OpenXR actions and controller/haptic IPC; verify x64/x86 focus/expiry/recenter behavior. Hardware acceptance pending.
+- [x] Verify non-Ex D3D9 CPU pair transport, MSAA resolve, pixel formats and reset; high-resolution performance remains insufficient.
+- [x] Install the official SDK, compile a KFVR gameplay policy package and run real-engine tests/C++ parity checks.
 
 ## First playable vertical slice
 
@@ -20,7 +22,6 @@
 - [ ] Submit an actual KF stereo pair to OpenXR and verify it in the headset.
 - [ ] Add controller samples and semantic actions to the native IPC/gameplay bridge.
 - [ ] Bind head/collision/locomotion and physical aim for one supported pistol.
-- [ ] Obtain/install the compatible KF SDK compiler in the development workflow; compile a separate KFVR package.
 - [ ] One authoritative magazine/chamber reload family integrated with KF ammo, perks and inventory.
 
 ## Gameplay expansion

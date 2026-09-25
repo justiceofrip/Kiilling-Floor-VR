@@ -17,6 +17,8 @@ add_library(KFVRCore STATIC
  src/runtime/FrameCoordinator.cpp src/ipc/FrameProtocol.cpp src/ipc/InputProtocol.cpp
  src/engine/Ue2Camera.cpp src/gameplay/AmmoMachine.cpp src/gameplay/MeleeGate.cpp src/gameplay/PoseWire.cpp)
 target_include_directories(KFVRCore PUBLIC include include/kfvr/interaction include/kfvr/math)
+add_executable(KFVRAmmoParity tools/AmmoParityMain.cpp)
+target_link_libraries(KFVRAmmoParity PRIVATE KFVRCore)
 if(BUILD_TESTING)
  foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine MeleeGate PoseWire Ue2Camera InputProtocol)
   add_executable(${name}Tests tests/${name}Tests.cpp)

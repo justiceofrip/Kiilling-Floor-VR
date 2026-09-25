@@ -19,6 +19,14 @@ py -3.12 G:\KFVR\tools\audit_weapons.py --pid GAME_PID --game 'F:\SteamLibrary\s
 
 Native inspection derives exported accessor layouts and rejects unsupported ones. Its external memory snapshot is not synchronized with garbage collection, so retry after a loading transition. Never use an old report as authority for native writes.
 
-The installed game currently lacks UCC.exe and official native SDK headers. Extracted TextBuffers do not replace the compiler or native headers. Script compilation and the packaged gameplay layer remain blocked on a compatible compiler. No speculative `.u` build or package is advertised as working.
+The official Killing Floor SDK (Steam app 1260) is now installed. It added UCC.exe and script sources without changing any of the 82 pre-existing System binaries/packages/configuration files checked before installation. Native C++ SDK headers are still absent.
+
+Build the authored UnrealScript package and run its engine tests in an isolated compiler copy:
+
+```powershell
+py -3.12 G:\KFVR\tools\build_scripts.py --game 'F:\SteamLibrary\steamapps\common\KillingFloor'
+```
+
+The driver copies SDK runtime inputs into ignored local/compiler, builds only authored KFVR source, executes the commandlet tests and checks its action-stream digests against the built x64 C++ reference. It produces build/unrealscript/KFVRGameplay.u. It does not install the package into the running game. The first package contains authoritative ammunition policies and tests; KF weapon/RPC bindings are not enabled yet. A build failure leaves its log in reports and returns nonzero.
 
 Do not install the diagnostic DLL as a D3D proxy. Native trace tooling copies its exact payload into a private report directory and loads it explicitly for one bounded experiment; it has no startup integration. Closing that game process removes the inert resident probe modules.
