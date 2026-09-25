@@ -1,0 +1,24 @@
+#include "kfvr/gameplay/AmmoMachine.h"
+#include <iostream>
+#include <random>
+#include <stdexcept>
+using namespace kfvr::gameplay;
+#define CHECK(x) do{if(!(x))throw std::runtime_error(#x);}while(false)
+struct Driver { AmmoMachine m;std::uint64_t now=0;std::uint32_t seq=0,epoch=1;
+ Driver(unsigned loaded,unsigned reserve,AmmoConfig c={}):m(c,loaded,reserve){}
+ AmmoResult Begin(AmmoAction a){return m.Request({epoch,++seq,a},now);}
+ void Do(AmmoAction a){auto r=Begin(a);CHECK(r==AmmoResult::Accepted||r==AmmoResult::Completed);now+=1000;m.Advance(now);CHECK(m.Valid(m.State()));}
+};
+int main(){try {
+ {Driver d(10,30);d.Do(AmmoAction::RemoveMagazine);CHECK(d.m.State().chamber);CHECK(d.m.State().handMagazine==9);d.Do(AmmoAction::StowMagazine);d.Do(AmmoAction::PrepareMagazine);d.Do(AmmoAction::InsertMagazine);CHECK(d.m.State().magazine==10&&d.m.State().chamber);CHECK(d.m.KFLoaded()==11&&d.m.KFTotal()==40);d.Do(AmmoAction::RemoveMagazine);CHECK(d.m.State().handMagazine==10&&d.m.State().chamber);d.Do(AmmoAction::StowMagazine);d.Do(AmmoAction::PrepareMagazine);d.Do(AmmoAction::InsertMagazine);CHECK(d.m.KFLoaded()==11&&d.m.KFTotal()==40);}
+ {Driver d(0,10);d.Do(AmmoAction::RemoveMagazine);d.Do(AmmoAction::StowMagazine);d.Do(AmmoAction::PrepareMagazine);d.Do(AmmoAction::InsertMagazine);CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Ineligible);d.Do(AmmoAction::Charge);CHECK(d.m.State().magazine==9&&d.m.State().chamber);d.Do(AmmoAction::Charge);CHECK(d.m.State().magazine==8&&d.m.State().discarded==1);d.Do(AmmoAction::Fire);CHECK(d.m.State().spent==1&&d.m.KFTotal()==8);}
+ {Driver d(2,0);CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Completed);CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Ineligible);d.now+=200;CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Completed);d.now+=200;CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Ineligible);CHECK(d.m.State().spent==2);}
+ {Driver d(1,10);CHECK(d.Begin(AmmoAction::RemoveMagazine)==AmmoResult::Accepted);d.m.Advance(149);CHECK(d.m.State().inserted);d.m.Advance(150);CHECK(!d.m.State().inserted&&d.m.State().chamber);d.now=150;d.Do(AmmoAction::Fire);CHECK(d.m.State().spent==1);}
+ for(int life=0;life<3;++life){Driver d(0,10);d.Do(AmmoAction::RemoveMagazine);d.Do(AmmoAction::StowMagazine);d.Do(AmmoAction::PrepareMagazine);auto before=d.m.State();CHECK(d.Begin(AmmoAction::InsertMagazine)==AmmoResult::Accepted);d.m.Suspend();d.now+=10000;d.m.Advance(d.now);CHECK(d.m.State().handMagazine==before.handMagazine&&!d.m.State().inserted);CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Inactive);CHECK(!d.m.Activate(1));CHECK(d.m.Activate(++d.epoch));CHECK(d.m.Request({1,999,AmmoAction::InsertMagazine},d.now)==AmmoResult::Stale);d.Do(AmmoAction::InsertMagazine);CHECK(d.m.KFTotal()==10);}
+ {Driver d(4,5);d.Do(AmmoAction::RemoveMagazine);d.Do(AmmoAction::DiscardMagazine);CHECK(d.m.State().discarded==3&&d.m.KFTotal()==6);d.Do(AmmoAction::PrepareMagazine);d.Do(AmmoAction::InsertMagazine);CHECK(d.m.State().magazine==5&&d.m.State().chamber);}
+ {Driver d(4,5);auto before=d.m.State();CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Completed);CHECK(d.m.Request({1,1,AmmoAction::Fire},2000)==AmmoResult::Stale);CHECK(!d.m.Correct(before,1,2000));auto corrected=d.m.State();corrected.revision+=5;CHECK(d.m.Correct(corrected,1,2000));corrected.reserve++;CHECK(!d.m.Correct(corrected,1,2001));CHECK(d.m.Request({1,2,AmmoAction::Fire},1999)==AmmoResult::BadClock);}
+ {AmmoConfig c;c.feed=Feed::Tube;c.cycle=Cycle::Manual;c.capacity=6;Driver d(2,4,c);d.Do(AmmoAction::Fire);CHECK(!d.m.State().chamber&&d.m.State().magazine==1);CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Ineligible);d.Do(AmmoAction::Charge);CHECK(d.m.State().chamber&&d.m.State().magazine==0);CHECK(d.Begin(AmmoAction::InsertShell)==AmmoResult::Accepted);CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Completed);d.now+=1000;d.m.Advance(d.now);CHECK(d.m.State().reserve==4&&d.m.State().magazine==0);d.Do(AmmoAction::InsertShell);CHECK(d.m.State().reserve==3&&d.m.State().magazine==1&&!d.m.State().chamber);CHECK(d.Begin(AmmoAction::RemoveMagazine)==AmmoResult::Ineligible);}
+ {AmmoConfig c;c.fireMs=1000;Driver d(3,0,c);CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Completed);d.m.Suspend();CHECK(d.m.Activate(++d.epoch));d.now=100;CHECK(d.Begin(AmmoAction::Fire)==AmmoResult::Ineligible);}
+ {std::mt19937 random(76421);Driver d(10,100);for(unsigned i=0;i<100000;++i){d.now+=random()%200;auto a=AmmoAction(random()%9);d.Begin(a);if(random()%30==0){d.m.Suspend();CHECK(d.m.Activate(++d.epoch));}CHECK(d.m.Valid(d.m.State()));CHECK(d.m.KFTotal()+d.m.State().spent+d.m.State().discarded==110);}}
+ std::cout<<"Ammo accounting, tactical/empty reload, rack ejection, interruption, three lifecycle cases, latency/replay, correction, tube/pump, cooldown and 100000 randomized actions passed\n";return 0;
+ }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

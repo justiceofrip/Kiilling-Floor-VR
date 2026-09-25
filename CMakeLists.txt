@@ -15,10 +15,10 @@ add_library(KFVRCore STATIC
  src/interaction/ComfortControls.cpp src/interaction/WeaponGrip.cpp
  src/interaction/ActionPolicy.cpp src/interaction/RigPose.cpp
  src/runtime/FrameCoordinator.cpp src/ipc/FrameProtocol.cpp
-)
+ src/gameplay/AmmoMachine.cpp src/gameplay/MeleeGate.cpp src/gameplay/PoseWire.cpp)
 target_include_directories(KFVRCore PUBLIC include include/kfvr/interaction include/kfvr/math)
 if(BUILD_TESTING)
- foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy RigPose UiPointerSmoothing ArmPoleVectorMath)
+ foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine MeleeGate PoseWire)
   add_executable(${name}Tests tests/${name}Tests.cpp)
   target_link_libraries(${name}Tests PRIVATE KFVRCore)
   add_test(NAME ${name} COMMAND ${name}Tests)
