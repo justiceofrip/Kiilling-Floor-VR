@@ -15,10 +15,10 @@ add_library(KFVRCore STATIC
  src/interaction/ComfortControls.cpp src/interaction/WeaponGrip.cpp
  src/interaction/ActionPolicy.cpp src/interaction/RigPose.cpp
  src/runtime/FrameCoordinator.cpp src/ipc/FrameProtocol.cpp
- src/gameplay/AmmoMachine.cpp src/gameplay/MeleeGate.cpp src/gameplay/PoseWire.cpp)
+ src/engine/Ue2Camera.cpp src/gameplay/AmmoMachine.cpp src/gameplay/MeleeGate.cpp src/gameplay/PoseWire.cpp)
 target_include_directories(KFVRCore PUBLIC include include/kfvr/interaction include/kfvr/math)
 if(BUILD_TESTING)
- foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine MeleeGate PoseWire)
+ foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine MeleeGate PoseWire Ue2Camera)
   add_executable(${name}Tests tests/${name}Tests.cpp)
   target_link_libraries(${name}Tests PRIVATE KFVRCore)
   add_test(NAME ${name} COMMAND ${name}Tests)
@@ -52,6 +52,23 @@ if(WIN32)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/runtime/openxr/win64/openxr_loader.dll" "$<TARGET_FILE_DIR:KFVRXrHost>/runtime/openxr/win64/openxr_loader.dll")
   endif()
  endif()
+endif()
+
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+ add_library(KFVRMinHook STATIC third_party/minhook-1.3.4/src/buffer.c third_party/minhook-1.3.4/src/hook.c third_party/minhook-1.3.4/src/trampoline.c third_party/minhook-1.3.4/src/hde/hde32.c)
+ target_include_directories(KFVRMinHook PUBLIC third_party/minhook-1.3.4/include)
+ add_library(KFVRNativeProbe SHARED src/native/NativeProbe.cpp src/native/NativeProbe.def)
+ target_link_libraries(KFVRNativeProbe PRIVATE KFVRMinHook d3d9)
+ target_compile_definitions(KFVRNativeProbe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+ add_executable(KFVRNativeTrace src/platform/windows/NativeTraceMain.cpp)
+ target_include_directories(KFVRNativeTrace PRIVATE src/native)
+ target_compile_definitions(KFVRNativeTrace PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+endif()
+
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4 AND BUILD_TESTING)
+ add_executable(NativeAbiTests tests/NativeAbiTests.cpp)
+ target_link_libraries(NativeAbiTests PRIVATE KFVRMinHook)
+ add_test(NAME NativeAbi COMMAND NativeAbiTests)
 endif()
 
 if(WIN32 AND BUILD_TESTING)
