@@ -1,5 +1,6 @@
 #pragma once
 #include "kfvr/ipc/FrameProtocol.h"
+#include "kfvr/ipc/InputProtocol.h"
 #include <memory>
 #include <string>
 namespace kfvr::ipc {
@@ -20,6 +21,12 @@ public:
     ChannelResult RequestPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,
         unsigned budgetMs,graphics::TextureDescriptor&,graphics::PairTicket&) noexcept;
     void Feedback(const graphics::PairTicket&,bool consumed) noexcept;
+    // Independent of eye-pair availability. All methods take the mutex with zero
+    // wait. Missing/stale samples clear output; live samples expire after 100 ms.
+    ChannelResult SendInput(const xr::ControllerFrame&) noexcept;
+    ChannelResult ReadInput(xr::ControllerFrame&,std::uint64_t& sequence) noexcept;
+    ChannelResult SendHaptics(std::uint64_t controlSequence,const std::array<xr::HapticPulse,2>&) noexcept;
+    std::array<xr::HapticPulse,2> ReceiveHaptics() noexcept;
     // Producer: call at the verified render boundary, on the graphics thread.
     ChannelResult TryTake(FrameRequest&) noexcept;
     ChannelResult Publish(const graphics::TextureDescriptor&,const graphics::PairTicket&) noexcept;

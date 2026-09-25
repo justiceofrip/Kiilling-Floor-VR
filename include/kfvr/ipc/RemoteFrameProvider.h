@@ -2,12 +2,15 @@
 #include "kfvr/ipc/FrameChannel.h"
 #include "kfvr/runtime/FrameProvider.h"
 namespace kfvr::ipc {
-class RemoteFrameProvider final:public runtime::IFrameProvider {
+class RemoteFrameProvider final:public runtime::IFrameProvider,public xr::IInputConsumer {
 public:
     bool Create()noexcept{return channel_.CreateHost();}
     const std::wstring& Token()const noexcept{return channel_.Token();}
     bool Connected()noexcept{return channel_.Connected();}
     void Close()noexcept{channel_.Close();}
+    std::array<xr::HapticPulse,2> Input(const xr::ControllerFrame& frame)noexcept override{
+        channel_.SendInput(frame);return channel_.ReceiveHaptics();
+    }
     // This is a CPU rendezvous budget, not an OpenXR predicted-time offset.
     bool SetBudget(unsigned ms)noexcept{if(!ms||ms>50)return false;budgetMs_=ms;return true;}
     bool TryGetPair(const runtime::PresentationRequirements& r,const runtime::TrackingFrame& t,
@@ -25,6 +28,8 @@ public:
     ~RemoteFrameProducer(){Close();}
     bool Connect(const std::wstring& token)noexcept{Close();return channel_.ConnectProducer(token);}
     bool Connected()noexcept{return channel_.Connected();}
+    ChannelResult ReadInput(xr::ControllerFrame& frame,std::uint64_t& sequence)noexcept{return channel_.ReadInput(frame,sequence);}
+    ChannelResult SendHaptics(std::uint64_t sequence,const std::array<xr::HapticPulse,2>& pulses)noexcept{return channel_.SendHaptics(sequence,pulses);}
     void Pump()noexcept;
     void Close()noexcept;
 private:

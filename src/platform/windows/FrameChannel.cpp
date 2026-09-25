@@ -13,14 +13,15 @@ struct Handle {
     void Set(HANDLE value){if(h)CloseHandle(h);h=value;}
 };
 struct alignas(8) Shared {
-    std::uint32_t magic=0x31434646,version=1,bytes=512,reserved0=0;
+    std::uint32_t magic=0x3243464b,version=2,bytes=784,reserved0=0;
     std::array<std::uint8_t,16> session{};
     std::uint32_t hostPid=0,producerPid=0;
     std::uint64_t hostStarted=0,producerStarted=0;
     FrameSlot slot{};
     std::array<std::uint64_t,5> reserved{};
+    ControlWire input{};HapticWire haptics{};
 };
-static_assert(sizeof(Shared)==512 && offsetof(Shared,slot)==56);
+static_assert(sizeof(Shared)==784 && offsetof(Shared,slot)==56);
 std::int64_t Now(){LARGE_INTEGER n{};return QueryPerformanceCounter(&n)?n.QuadPart:0;}
 std::uint64_t Started(HANDLE process){FILETIME created{},exited{},kernel{},user{};if(!GetProcessTimes(process,&created,&exited,&kernel,&user))return 0;return (std::uint64_t(created.dwHighDateTime)<<32)|created.dwLowDateTime;}
 bool TokenBytes(const std::wstring& token,std::array<std::uint8_t,16>& bytes){
@@ -31,7 +32,7 @@ std::wstring NewToken(){GUID guid{};if(FAILED(CoCreateGuid(&guid)))throw std::ru
 }
 struct FrameChannel::State {
     bool host=false,fault=false,pendingAck=false,ackConsumed=false;
-    std::uint64_t active=0,next=0;
+    std::uint64_t active=0,next=0,inputSequence=0,hapticSequence=0,lastHaptic=0;
     graphics::PairTicket delivered{};
     Handle mapping,mutex,response,peer;
     Shared* shared=nullptr;
@@ -39,7 +40,7 @@ struct FrameChannel::State {
     std::int64_t frequency=0;
     ~State(){if(shared)UnmapViewOfFile(shared);}
     bool Header()const {
-        if(shared->magic!=0x31434646||shared->version!=1||shared->bytes!=sizeof(Shared)||shared->session!=session||shared->reserved0||!shared->hostPid||!shared->hostStarted)return false;
+        if(shared->magic!=0x3243464b||shared->version!=2||shared->bytes!=sizeof(Shared)||shared->session!=session||shared->reserved0||!shared->hostPid||!shared->hostStarted)return false;
         for(auto v:shared->reserved)if(v)return false;
         return std::uint32_t(shared->slot.phase)<=std::uint32_t(Phase::Closed)&&!shared->slot.reserved&&shared->slot.consumed<=1;
     }
@@ -75,7 +76,7 @@ const std::wstring& FrameChannel::Token()const noexcept{return token_;}
 bool FrameChannel::CreateHost()noexcept {
     Close();try {
         auto s=std::make_unique<State>();s->host=true;const auto token=NewToken();if(!TokenBytes(token,s->session))return false;
-        const auto prefix=L"Local\\KFVR.Control.v1."+token;
+        const auto prefix=L"Local\\KFVR.Control.v2."+token;
         s->mutex.h=CreateMutexW(nullptr,FALSE,(prefix+L".mutex").c_str());if(!s->mutex.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
         s->response.h=CreateEventW(nullptr,FALSE,FALSE,(prefix+L".response").c_str());if(!s->response.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
         s->mapping.h=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Shared),(prefix+L".map").c_str());if(!s->mapping.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
@@ -87,7 +88,7 @@ bool FrameChannel::CreateHost()noexcept {
 }
 bool FrameChannel::ConnectProducer(const std::wstring& token)noexcept {
     Close();try {
-        auto s=std::make_unique<State>();if(!TokenBytes(token,s->session))return false;const auto prefix=L"Local\\KFVR.Control.v1."+token;
+        auto s=std::make_unique<State>();if(!TokenBytes(token,s->session))return false;const auto prefix=L"Local\\KFVR.Control.v2."+token;
         s->mutex.h=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,(prefix+L".mutex").c_str());if(!s->mutex.h)return false;
         s->response.h=OpenEventW(EVENT_MODIFY_STATE|SYNCHRONIZE,FALSE,(prefix+L".response").c_str());if(!s->response.h)return false;
         s->mapping.h=OpenFileMappingW(FILE_MAP_READ|FILE_MAP_WRITE,FALSE,(prefix+L".map").c_str());if(!s->mapping.h)return false;
@@ -159,4 +160,33 @@ Outcome FrameChannel::PollOutcome()noexcept {
     if(!s.Peer()){s.active=0;return Outcome::Discarded;}
     const auto outcome=Reap(s.shared->slot,s.active,Now());if(outcome!=Outcome::Pending)s.active=0;return outcome;
 }
+ChannelResult FrameChannel::SendInput(const xr::ControllerFrame& frame)noexcept{
+ if(!state_||!state_->host)return ChannelResult::Closed;auto& s=*state_;State::Lock lock(s);
+ if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
+ if(!s.Peer())return s.fault?ChannelResult::Closed:ChannelResult::Busy;
+ const auto now=Now(),lifetime=s.frequency/10;
+ if(now<=0||lifetime<=0||now>INT64_MAX-lifetime||s.inputSequence==UINT64_MAX)return ChannelResult::Invalid;
+ ControlWire wire{};const auto sequence=++s.inputSequence;const bool valid=EncodeControls(frame,sequence,now+lifetime,wire);
+ if(!valid&&!EncodeControls({},sequence,now+lifetime,wire))return ChannelResult::Invalid;
+ // A focus or reference-space transition cancels feedback from the old state.
+ if(!wire.flags||wire.spaceGeneration!=s.shared->input.spaceGeneration)s.shared->haptics={};
+ s.shared->input=wire;return valid?ChannelResult::Ok:ChannelResult::Invalid;
+}
+ChannelResult FrameChannel::ReadInput(xr::ControllerFrame& frame,std::uint64_t& sequence)noexcept{
+ frame={};sequence=0;if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;State::Lock lock(s);
+ if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;if(!s.Peer())return ChannelResult::Closed;
+ return DecodeControls(s.shared->input,Now(),frame,sequence)?ChannelResult::Ok:ChannelResult::Invalid;
+}
+ChannelResult FrameChannel::SendHaptics(std::uint64_t sequence,const std::array<xr::HapticPulse,2>& pulses)noexcept{
+ if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;State::Lock lock(s);
+ if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;if(!s.Peer())return ChannelResult::Closed;
+ if(sequence!=s.shared->input.sequence||s.hapticSequence==UINT64_MAX)return ChannelResult::Invalid;
+ HapticWire wire{};if(!EncodeHaptics(s.shared->input,s.hapticSequence+1,Now(),pulses,wire))return ChannelResult::Invalid;
+ ++s.hapticSequence;s.shared->haptics=wire;return ChannelResult::Ok;
+}
+std::array<xr::HapticPulse,2> FrameChannel::ReceiveHaptics()noexcept{
+ std::array<xr::HapticPulse,2> pulses{};if(!state_||!state_->host)return pulses;auto& s=*state_;State::Lock lock(s);
+ if(lock&&s.Peer())DecodeHaptics(s.shared->haptics,s.shared->input,Now(),s.lastHaptic,pulses);return pulses;
+}
+
 }

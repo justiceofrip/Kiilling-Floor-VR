@@ -14,7 +14,7 @@ int wmain(int argc,wchar_t** argv){
         wchar_t module[32768]{};const auto length=GetModuleFileNameW(nullptr,module,32768);if(!length||length>=32768)throw std::runtime_error("Cannot locate host executable");
         kfvr::xr::DiagnosticScene diagnostic;kfvr::ipc::RemoteFrameProvider remote;bool testScene=false,ipcMode=false;kfvr::xr::HostOptions options;options.loaderPath=std::filesystem::path(module).parent_path()/L"runtime/openxr/win64/openxr_loader.dll";
         for(int i=1;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--probe")options.probeOnly=true;else if(arg==L"--session")options.probeOnly=false;else if(arg==L"--test-scene"){options.probeOnly=false;testScene=true;options.provider=&diagnostic;}
-            else if(arg==L"--ipc"){options.probeOnly=false;ipcMode=true;options.provider=&remote;}
+            else if(arg==L"--ipc"){options.probeOnly=false;ipcMode=true;options.provider=&remote;options.inputConsumer=&remote;}
             else if(arg==L"--frame-budget"&&i+1<argc){if(!remote.SetBudget(std::stoul(argv[++i])))throw std::runtime_error("Frame budget must be 1..50 ms");}
             else if(arg==L"--seconds"&&i+1<argc){options.seconds=std::stoul(argv[++i]);if(!options.seconds||options.seconds>300)throw std::runtime_error("Seconds must be 1..300");}
             else if(arg==L"--loader"&&i+1<argc)options.loaderPath=std::filesystem::absolute(argv[++i]);

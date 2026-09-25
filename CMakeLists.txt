@@ -14,11 +14,11 @@ add_library(KFVRCore STATIC
  src/interaction/TrackingMath.cpp src/interaction/ComfortCamera.cpp
  src/interaction/ComfortControls.cpp src/interaction/WeaponGrip.cpp
  src/interaction/ActionPolicy.cpp src/interaction/RigPose.cpp
- src/runtime/FrameCoordinator.cpp src/ipc/FrameProtocol.cpp
+ src/runtime/FrameCoordinator.cpp src/ipc/FrameProtocol.cpp src/ipc/InputProtocol.cpp
  src/engine/Ue2Camera.cpp src/gameplay/AmmoMachine.cpp src/gameplay/MeleeGate.cpp src/gameplay/PoseWire.cpp)
 target_include_directories(KFVRCore PUBLIC include include/kfvr/interaction include/kfvr/math)
 if(BUILD_TESTING)
- foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine MeleeGate PoseWire Ue2Camera)
+ foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine MeleeGate PoseWire Ue2Camera InputProtocol)
   add_executable(${name}Tests tests/${name}Tests.cpp)
   target_link_libraries(${name}Tests PRIVATE KFVRCore)
   add_test(NAME ${name} COMMAND ${name}Tests)
@@ -36,6 +36,8 @@ if(WIN32)
  target_link_libraries(KFVRDiagnosticScene PUBLIC KFVRCore KFVRD3D11 d3dcompiler)
  add_executable(KFVRBridgeProbe src/platform/windows/D3D11BridgeProbe.cpp)
  target_link_libraries(KFVRBridgeProbe PRIVATE KFVRD3D11)
+ add_executable(KFVRInputProbe src/platform/windows/InputIpcProbe.cpp)
+ target_link_libraries(KFVRInputProbe PRIVATE KFVRFrameChannel)
  add_executable(KFVRIpcProbe src/platform/windows/IpcBridgeProbe.cpp)
  target_link_libraries(KFVRIpcProbe PRIVATE KFVRFrameChannel KFVRDiagnosticScene)
  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
