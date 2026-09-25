@@ -2,14 +2,14 @@
 
 Native VR mod development for the original Killing Floor. Source/builds live in `G:\KFVR`; the installed game is `F:\SteamLibrary\steamapps\common\KillingFloor`. This does not use the unrelated Unity workspace.
 
-**Development checkpoint: Killing Floor is not yet playable in VR.** A bounded experiment now renders and captures two actual native game views with verified camera/renderer restoration. The compiled OpenXR host, stereo transport, camera adapter and gameplay policies are foundations; they are not connected into a complete native stereo game loop.
+**Development checkpoint: Killing Floor is not yet playable in VR.** A bounded native bridge now sends actual stereo game views with HMD poses/FOVs to OpenXR. The headset now displays KF, and the user confirmed that retaining complete frames removed the initial flicker. Full-length visual/tracking acceptance remains pending. Controller gameplay, sustained operation and the complete mod remain unfinished.
 
 Implemented and verified:
 
 - Read-only extraction of 2,381 embedded UnrealScript classes from the installed packages. Proprietary source stays in ignored `local/sdk`.
 - Read-only native object/property inspection, local player/viewport ownership and standalone-mode verification.
 - Bounded x86 native probes: 180 ticks, 180 player-view renders and 180 presents on one thread; no engine tick inside Draw; hooks disabled and original entry bytes verified afterward.
-- Native stereo world-render trials with fresh private cameras/targets, asymmetric frusta, synthetic head translation/rotation, visually verified parallax and measured extra callbacks. Sustained rendering and headset delivery remain pending.
+- Native stereo world-render trials with fresh private cameras/targets, asymmetric frusta, synthetic head translation/rotation, visually verified parallax and measured extra callbacks. A 15-second tracked native headset trial submitted 440 pairs; flicker and sustained rendering acceptance remain open.
 - Native D3D9 multisample-resolved image capture, verified visually. The game uses ordinary D3D9, not D3D9Ex.
 - UE2 camera conversion tested against a captured native matrix, plus asymmetric per-eye transforms and explicit world-scale input.
 - Prototype non-Ex D3D9-to-D3D11 CPU pair bridge with MSAA resolve and real x86-to-x64 pixel verification. High-resolution transfer cost still needs improvement.

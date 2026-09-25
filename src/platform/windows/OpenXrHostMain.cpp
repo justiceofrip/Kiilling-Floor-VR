@@ -17,10 +17,12 @@ int wmain(int argc,wchar_t** argv){
         for(int i=1;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--probe")options.probeOnly=true;else if(arg==L"--session")options.probeOnly=false;else if(arg==L"--test-scene"){options.probeOnly=false;testScene=true;options.provider=&diagnostic;}
             else if(arg==L"--input-test"){options.probeOnly=false;testScene=true;inputTest=true;options.provider=&diagnostic;options.inputConsumer=&inputDiagnostic;}
             else if(arg==L"--ipc"){options.probeOnly=false;ipcMode=true;options.provider=&remote;options.inputConsumer=&remote;}
+            else if(arg==L"--wait-first-pair")options.waitForFirstPair=true;
             else if(arg==L"--frame-budget"&&i+1<argc){if(!remote.SetBudget(std::stoul(argv[++i])))throw std::runtime_error("Frame budget must be 1..50 ms");}
+            else if(arg==L"--render-scale"&&i+1<argc){options.renderScalePercent=std::stoul(argv[++i]);if(options.renderScalePercent<25||options.renderScalePercent>100)throw std::runtime_error("Render scale must be 25..100 percent");}
             else if(arg==L"--seconds"&&i+1<argc){options.seconds=std::stoul(argv[++i]);if(!options.seconds||options.seconds>300)throw std::runtime_error("Seconds must be 1..300");}
             else if(arg==L"--loader"&&i+1<argc)options.loaderPath=std::filesystem::absolute(argv[++i]);
-            else throw std::runtime_error("Usage: KFVRXrHost [--probe | --session | --test-scene | --input-test | --ipc] [--seconds 15] [--loader path] [--frame-budget 8]");}
+            else throw std::runtime_error("Usage: KFVRXrHost [--probe | --session | --test-scene | --input-test | --ipc] [--seconds 15] [--loader path] [--frame-budget 8] [--render-scale 100] [--wait-first-pair]");}
         if(testScene&&options.probeOnly)throw std::runtime_error("A visible test cannot be combined with probe mode");
         if(ipcMode){if(testScene||options.probeOnly)throw std::runtime_error("IPC mode cannot be combined with probe/test-scene");
             if(!remote.Create())throw std::runtime_error("Cannot create frame channel");std::wcerr<<L"frame_channel="<<remote.Token()<<L'\n';}
@@ -31,9 +33,9 @@ int wmain(int argc,wchar_t** argv){
             <<",\n  \"adapter_luid_low\":"<<report.requirements.adapterLow<<",\n  \"adapter_luid_high\":"<<report.requirements.adapterHigh
             <<",\n  \"minimum_feature_level\":"<<report.minimumFeatureLevel<<",\n  \"eye_width\":"<<report.requirements.width<<",\n  \"eye_height\":"<<report.requirements.height
             <<",\n  \"format\":"<<report.requirements.format<<",\n  \"waited_frames\":"<<report.waitedFrames<<",\n  \"ended_frames\":"<<report.endedFrames
-            <<",\n  \"valid_tracking_frames\":"<<report.validTrackingFrames<<",\n  \"submitted_pairs\":"<<report.submittedPairs<<",\n  \"rejected_pairs\":"<<report.rejectedPairs
-            <<",\n  \"suggested_controller_profiles\":"<<report.suggestedControllerProfiles<<",\n  \"valid_controller_samples\":"<<report.validControllerSamples
-            <<",\n  \"last_session_state\":"<<report.lastSessionState<<",\n  \"diagnostic_scene\":"<<testScene<<",\n  \"diagnostic_error\":"<<Json(diagnostic.Error())<<",\n  \"ipc_mode\":"<<ipcMode<<",\n  \"native_kf_connected\":false,\n  \"headset_visuals_verified\":false,\n  \"controller_diagnostic\":"<<inputTest<<",\n  \"controller_test\":";
+            <<",\n  \"valid_tracking_frames\":"<<report.validTrackingFrames<<",\n  \"submitted_pairs\":"<<report.submittedPairs<<",\n  \"rejected_pairs\":"<<report.rejectedPairs<<",\n  \"reprojected_frames\":"<<report.reprojectedFrames<<",\n  \"empty_frames\":"<<report.emptyFrames<<",\n  \"max_empty_between_fresh\":"<<report.maxEmptyBetweenFresh
+            <<",\n  \"suggested_controller_profiles\":"<<report.suggestedControllerProfiles<<",\n  \"valid_controller_samples\":"<<report.validControllerSamples<<",\n  \"focused_frames\":"<<report.focusedFrames
+            <<",\n  \"last_session_state\":"<<report.lastSessionState<<",\n  \"diagnostic_scene\":"<<testScene<<",\n  \"diagnostic_error\":"<<Json(diagnostic.Error())<<",\n  \"ipc_mode\":"<<ipcMode<<",\n  \"native_kf_identity_verified\":false,\n  \"headset_visuals_verified\":false,\n  \"controller_diagnostic\":"<<inputTest<<",\n  \"controller_test\":";
         inputDiagnostic.WriteJson(std::cout);std::cout<<"\n}\n";
         return report.okay?0:2;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

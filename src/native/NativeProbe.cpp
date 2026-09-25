@@ -5,6 +5,7 @@
 #include <vector>
 #include "NativeProbeConfig.h"
 #include "NativeCameraTrial.h"
+#include "NativeEyeBridge.h"
 #include <array>
 #include <atomic>
 #include <cstring>
@@ -26,7 +27,8 @@ void ReadTarget();
 void ProbeStereo(void*,void*);
 void ReadStereo();
 void WriteStereo(const std::filesystem::path&);
-thread_local bool privateEye=false;
+thread_local bool privateEye=false,nativeDrawValid=false;
+void BridgeLevel(void*,void*);
 std::atomic<bool> replayed=false;
 using AuxCtor=void(__thiscall*)(void*,int,int,int);
 using SimpleCall=void(__thiscall*)(void*);
@@ -43,12 +45,12 @@ std::uint32_t U32(std::uint32_t at){std::uint32_t value=0;Read(at,&value,4);retu
 bool LocalWorld(){unsigned char mode=255;return U32(config.controller+4)==config.controllerIndex&&U32(config.level+4)==config.levelIndex&&U32(config.controller+config.levelOffset)==config.level&&U32(config.controller+config.playerOffset)==config.viewport&&Read(config.level+config.netModeOffset,&mode,1)&&mode==0;}
 long long Qpc(){LARGE_INTEGER q;QueryPerformanceCounter(&q);return q.QuadPart;}
 void __fastcall DrawHook(void* self,void*,void* viewport,int blit,unsigned char* hit,int* size){
- Record* previous=current;Record* row=nullptr;
+ Record* previous=current;Record* row=nullptr;const bool previousValid=nativeDrawValid;nativeDrawValid=false;
  if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld()){
-  const auto index=count.fetch_add(1);if(index<config.maxFrames){row=&records[index];row->frame=index;row->thread=GetCurrentThreadId();row->tickBefore=ticks.load();row->presentBefore=presents.load();row->begin=Qpc();current=row;}
+  nativeDrawValid=true;const auto index=count.fetch_add(1);if(index<config.maxFrames){row=&records[index];row->frame=index;row->thread=GetCurrentThreadId();row->tickBefore=ticks.load();row->presentBefore=presents.load();row->begin=Qpc();current=row;}
  }
  drawOriginal(self,viewport,blit,hit,size);
- if(row){row->end=Qpc();row->tickAfter=ticks.load();row->presentAfter=presents.load();row->ready.store(true,std::memory_order_release);}current=previous;
+ if(row){row->end=Qpc();row->tickAfter=ticks.load();row->presentAfter=presents.load();row->ready.store(true,std::memory_order_release);}current=previous;nativeDrawValid=previousValid;
 }
 void __fastcall TickHook(void* self,void*,float dt){if(sampling.load(std::memory_order_relaxed))ticks.fetch_add(1);tickOriginal(self,dt);}
 void __fastcall RenderHook(void* self,void*,void* ri){
@@ -61,7 +63,7 @@ void __fastcall RenderHook(void* self,void*,void* ri){
  ++playerDepth;renderOriginal(self,ri);--playerDepth;
 }
 
-void __fastcall LevelHook(void* self,void*,void* ri){const bool root=current&&playerDepth&&!levelDepth&&!privateEye;if(current){++current->levelRenders;if(config.targetTrial&&root)ProbeTarget(self,ri);}++levelDepth;levelOriginal(self,ri);--levelDepth;if(config.stereoTrial&&root)ProbeStereo(self,ri);}
+void __fastcall LevelHook(void* self,void*,void* ri){const bool root=nativeDrawValid&&playerDepth&&!levelDepth&&!privateEye;if(current){++current->levelRenders;if(config.targetTrial&&root)ProbeTarget(self,ri);}++levelDepth;levelOriginal(self,ri);--levelDepth;if(config.stereoTrial&&root)ProbeStereo(self,ri);if(config.bridgeTrial&&root)BridgeLevel(self,ri);}
 void __fastcall ActorAnimationHook(void* self,void*,float dt){if(current)++current->actorAnimation;actorAnimationOriginal(self,dt);}
 int __fastcall SkeletalAnimationHook(void* self,void*,float dt){if(current)++current->skeletalAnimation;return skeletalAnimationOriginal(self,dt);}
 void __fastcall GetFrameHook(void* self,void*,void* actor,void* scene,void* vectors,int stride,int* countOut,unsigned long flags){if(current)++current->skeletalFrames;getFrameOriginal(self,actor,scene,vectors,stride,countOut,flags);}
@@ -97,7 +99,7 @@ void CaptureColor(void* renderer){
  if(SUCCEEDED(hr)){try{capture.pixels.resize(std::size_t(desc.Width)*desc.Height*4);for(unsigned y=0;y<desc.Height;++y)std::memcpy(capture.pixels.data()+std::size_t(y)*desc.Width*4,static_cast<const char*>(locked.pBits)+std::size_t(y)*locked.Pitch,desc.Width*4);}catch(...){hr=E_OUTOFMEMORY;}staging->UnlockRect();}
  capture.result=hr;capture.ready.store(true,std::memory_order_release);
 }
-void __fastcall PresentHook(void* self,void*,void* viewport){if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){presents.fetch_add(1);if(LocalWorld()){CaptureColor(self);if(config.targetTrial)ReadTarget();if(config.stereoTrial)ReadStereo();}}presentOriginal(self,viewport);}
+void __fastcall PresentHook(void* self,void*,void* viewport){if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){presents.fetch_add(1);if(LocalWorld()){CaptureColor(self);if(config.targetTrial)ReadTarget();if(config.stereoTrial)ReadStereo();}}if(config.bridgeTrial)kfvr::native::EyeBridgePresent(reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld());presentOriginal(self,viewport);if(config.bridgeTrial)kfvr::native::EyeBridgePresent(reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld());}
 bool Executable(void* at,HMODULE owner){MEMORY_BASIC_INFORMATION m{};if(!VirtualQuery(at,&m,sizeof(m))||m.AllocationBase!=owner||m.State!=MEM_COMMIT||m.Protect&(PAGE_GUARD|PAGE_NOACCESS))return false;return (m.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))!=0;}
 struct TargetTrial {
  bool attempted=false,targetsRestored=false,depthRestored=false,viewportRestored=false,cacheRestored=false,stackRestored=false,canary=true,distinct=false;
@@ -147,6 +149,43 @@ void ReadTarget(){
  D3DLOCKED_RECT lock{};if(SUCCEEDED(hr))hr=staging->LockRect(&lock,nullptr,D3DLOCK_READONLY);
  if(SUCCEEDED(hr)){if(!lock.pBits||lock.Pitch<512*4)hr=E_INVALIDARG;else for(unsigned y=0;y<384;++y){const auto* row=reinterpret_cast<const unsigned*>(static_cast<const char*>(lock.pBits)+std::size_t(y)*lock.Pitch);for(unsigned x=0;x<512;++x)targetTrial.pixelsVerified+=(row[x]|0xff000000)==0xff3040c0;}staging->UnlockRect();}
  targetTrial.result=hr;targetTrial.surface.Reset();targetTrial.ready.store(true,std::memory_order_release);
+}
+
+
+bool RenderBridgePair(void* scene,void* ri,const kfvr::runtime::PresentationRequirements& requirements,const kfvr::runtime::TrackingFrame& tracking,kfvr::native::NativeSurfaces& surfaces){
+ using Microsoft::WRL::ComPtr;
+ const auto address=reinterpret_cast<unsigned>(ri),renderer=U32(address+4);auto* device=reinterpret_cast<IDirect3DDevice9*>(U32(renderer+0x495c));
+ const auto stack=U32(address+0x59870),cache=U32(address+0x5940c);std::array<unsigned char,0x594> before{},after{};
+ ComPtr<IDirect3DSurface9> original,depth;D3DVIEWPORT9 viewport{};
+ if(stack>240||!Read(cache,before.data(),before.size())||FAILED(device->GetRenderTarget(0,&original))||FAILED(device->GetDepthStencilSurface(&depth))||FAILED(device->GetViewport(&viewport)))return false;
+ const auto push=reinterpret_cast<SimpleCall>(targetMethods[0]),pop=reinterpret_cast<SimpleCall>(targetMethods[1]);
+ const auto bind=reinterpret_cast<int(__thiscall*)(void*,void*)>(targetMethods[2]);
+ const auto setViewport=reinterpret_cast<void(__thiscall*)(void*,int,int,int,int)>(targetMethods[3]);
+ const auto clear=reinterpret_cast<void(__thiscall*)(void*,int,unsigned,int,float,int,unsigned)>(targetMethods[4]);
+ bool okay=true;
+ for(unsigned eye=0;eye<2&&okay;++eye){
+  alignas(16) std::array<unsigned char,64> aux;aux.fill(0xcd);auxCtor(aux.data(),int(requirements.width),int(requirements.height),5);push(ri);
+  if(!bind(ri,aux.data()))okay=false;
+  else {
+   setViewport(ri,0,0,int(requirements.width),int(requirements.height));clear(ri,1,0xff000000,1,1.f,1,0);
+   privateEye=true;replayed=true;okay=kfvr::native::RenderTrackedCamera(scene,aux.data(),ri,tracking,eye,requirements.width,requirements.height,config.unitsPerMetre);privateEye=false;
+   if(okay)okay=SUCCEEDED(device->GetRenderTarget(0,&surfaces[eye]));
+   if(okay){D3DSURFACE_DESC desc{};okay=SUCCEEDED(surfaces[eye]->GetDesc(&desc))&&desc.Width==requirements.width&&desc.Height==requirements.height&&desc.MultiSampleType==D3DMULTISAMPLE_NONE&&desc.Format==D3DFMT_A8R8G8B8&&surfaces[eye].Get()!=original.Get();}
+  }
+  pop(ri);auxDtor(aux.data());
+  for(unsigned i=28;i<aux.size();++i)okay&=aux[i]==0xcd;
+  ComPtr<IDirect3DSurface9> restored,restoredDepth;D3DVIEWPORT9 restoredViewport{};
+  okay&=SUCCEEDED(device->GetRenderTarget(0,&restored))&&restored.Get()==original.Get()&&SUCCEEDED(device->GetDepthStencilSurface(&restoredDepth))&&restoredDepth.Get()==depth.Get()&&SUCCEEDED(device->GetViewport(&restoredViewport))&&std::memcmp(&viewport,&restoredViewport,sizeof(viewport))==0&&U32(address+0x59870)==stack&&U32(address+0x5940c)==cache&&Read(cache,after.data(),after.size())&&before==after;
+ }
+ return okay&&surfaces[0]&&surfaces[1]&&surfaces[0].Get()!=surfaces[1].Get();
+}
+void BridgeLevel(void* scene,void* ri){
+ if(!targetTrial.ready.load(std::memory_order_acquire))return;
+ if(FAILED(targetTrial.result)||!targetTrial.targetsRestored||!targetTrial.depthRestored||!targetTrial.viewportRestored||!targetTrial.cacheRestored||!targetTrial.stackRestored||!targetTrial.canary){kfvr::native::StopEyeBridge();return;}
+ const auto address=reinterpret_cast<unsigned>(ri),table=U32(address);
+ for(unsigned slot=0;slot<5;++slot)if(U32(table+slot*4)!=reinterpret_cast<unsigned>(targetMethods[slot])){kfvr::native::StopEyeBridge();return;}
+ auto* device=reinterpret_cast<IDirect3DDevice9*>(U32(U32(address+4)+0x495c));
+ kfvr::native::EyeBridgeLevel(scene,ri,device,RenderBridgePair);
 }
 
 struct StereoTrial {
@@ -217,7 +256,7 @@ void WriteStereo(const std::filesystem::path& folder){
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=5||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=6||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
@@ -235,18 +274,21 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
   kfvr::native::SetCameraMethods(methods[0],methods[1],methods[2]);
  }
  if(MH_Initialize()!=MH_OK)return 14;
+ if(config.bridgeTrial&&!kfvr::native::StartEyeBridge(config.channelToken))return 23;
  void* detours[]={reinterpret_cast<void*>(&DrawHook),reinterpret_cast<void*>(&TickHook),reinterpret_cast<void*>(&RenderHook),reinterpret_cast<void*>(&PresentHook),reinterpret_cast<void*>(&LevelHook),reinterpret_cast<void*>(&ActorAnimationHook),reinterpret_cast<void*>(&SkeletalAnimationHook),reinterpret_cast<void*>(&GetFrameHook),reinterpret_cast<void*>(&ProcessEventHook)};
  void** originals[]={reinterpret_cast<void**>(&drawOriginal),reinterpret_cast<void**>(&tickOriginal),reinterpret_cast<void**>(&renderOriginal),reinterpret_cast<void**>(&presentOriginal),reinterpret_cast<void**>(&levelOriginal),reinterpret_cast<void**>(&actorAnimationOriginal),reinterpret_cast<void**>(&skeletalAnimationOriginal),reinterpret_cast<void**>(&getFrameOriginal),reinterpret_cast<void**>(&processEventOriginal)};
  unsigned installed=0;bool enabled=false;DWORD status=0;
  for(unsigned i=0;i<targets.size();++i){if(MH_CreateHook(targets[i],detours[i],originals[i])!=MH_OK){status=15;break;}++installed;if(MH_QueueEnableHook(targets[i])!=MH_OK){status=16;break;}}
  if(!status){if(MH_ApplyQueued()!=MH_OK)status=17;else enabled=true;}
- if(enabled){sampling.store(true,std::memory_order_release);const auto start=GetTickCount64();while(count.load()<config.maxFrames&&GetTickCount64()-start<config.durationMs&&LocalWorld())Sleep(10);}
+ if(enabled){sampling.store(true,std::memory_order_release);const auto start=GetTickCount64();while((config.bridgeTrial||count.load()<config.maxFrames)&&GetTickCount64()-start<config.durationMs&&LocalWorld()&&(!config.bridgeTrial||!kfvr::native::EyeBridgeClosed()))Sleep(10);}
+ if(config.bridgeTrial){kfvr::native::StopEyeBridge();const auto deadline=GetTickCount64()+5000;while(!kfvr::native::EyeBridgeClosed()&&GetTickCount64()<deadline)Sleep(10);}
  sampling.store(false,std::memory_order_release);
- bool disabled=true;for(unsigned i=0;i<installed;++i){const auto result=MH_DisableHook(targets[i]);disabled&=result==MH_OK||result==MH_ERROR_DISABLED;}
+ const bool mayDisable=!config.bridgeTrial||kfvr::native::EyeBridgeClosed();bool disabled=mayDisable;for(unsigned i=0;mayDisable&&i<installed;++i){const auto result=MH_DisableHook(targets[i]);disabled&=result==MH_OK||result==MH_ERROR_DISABLED;}
  // Keep trampolines and this DLL resident: an original callback may be returning.
  Sleep(50);
  try{
 
+ if(config.bridgeTrial)kfvr::native::WriteEyeBridgeReport(std::filesystem::path(config.reportPath).parent_path());
  if(config.stereoTrial)WriteStereo(std::filesystem::path(config.reportPath).parent_path());
  if(config.cameraTrial)kfvr::native::WriteCameraReport(std::filesystem::path(config.reportPath).parent_path());
  if(config.targetTrial){std::ofstream target(std::filesystem::path(config.reportPath).parent_path()/L"native-target.json");if(!targetTrial.ready.load(std::memory_order_acquire)){target<<"{\"ready\":false,\"render_replayed\":false,\"camera_written\":false}\n";}else target<<std::boolalpha<<"{\"attempted\":"<<targetTrial.attempted<<",\"ready\":"<<targetTrial.ready.load(std::memory_order_acquire)<<",\"hresult\":"<<targetTrial.result<<",\"width\":"<<targetTrial.width<<",\"height\":"<<targetTrial.height<<",\"format\":"<<targetTrial.format<<",\"samples\":"<<targetTrial.samples<<",\"distinct_surface\":"<<targetTrial.distinct<<",\"color_target_restored\":"<<targetTrial.targetsRestored<<",\"depth_target_restored\":"<<targetTrial.depthRestored<<",\"viewport_restored\":"<<targetTrial.viewportRestored<<",\"state_stack_restored\":"<<targetTrial.stackRestored<<",\"cached_state_restored\":"<<targetTrial.cacheRestored<<",\"constructor_canary_intact\":"<<targetTrial.canary<<",\"verified_pixels\":"<<targetTrial.pixelsVerified<<",\"render_replayed\":false,\"camera_written\":false}\n";}

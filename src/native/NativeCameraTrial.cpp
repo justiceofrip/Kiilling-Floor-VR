@@ -98,6 +98,25 @@ bool RenderDiagnosticCamera(void* original,void* target,void* ri,float offset,un
  for(unsigned i=16+0x1e4;i<storage.size();++i)intact&=storage[i]==0xcd;
  return intact;
 }
+bool RenderTrackedCamera(void* original,void* target,void* ri,const runtime::TrackingFrame& tracking,unsigned eye,unsigned width,unsigned height,float units){
+ if(eye>1||!tracking.headValid||!tracking.focused||!render||!trial.ready.load(std::memory_order_acquire)||!trial.prerequisites||!trial.originalUnchanged)return false;
+ for(const auto& row:trial.cases)if(!row.canary||!row.fields||!row.finite||row.derivedError>=.02f)return false;
+ std::array<unsigned char,0x1e4> before{},after{};const auto address=reinterpret_cast<unsigned>(original);if(!Read(address,before.data(),unsigned(before.size())))return false;
+ const auto viewport=Field<unsigned>(before.data(),4),actor=Field<unsigned>(before.data(),0x1c4),level=Field<unsigned>(before.data(),0x1bc),model=Field<unsigned>(before.data(),0x1c0);
+ if(!viewport||!actor||!level||!model||!U32(model+0xe0)||!U32(level+0x1154)||U32(U32(viewport+0x34)+0x9c)!=level)return false;
+ const auto nativeProjection=Field<math::Matrix4>(before.data(),0x94);
+ const float nearZ=-nativeProjection.values[3][2]/nativeProjection.values[2][2],farZ=-nativeProjection.values[3][2]/(nativeProjection.values[2][2]-1);
+ auto eyeMatrices=ue2::BuildEye(Field<math::Matrix4>(before.data(),0x54),tracking.referenceHead,tracking.eyes[eye],tracking.fov[eye],units,nearZ,farZ);
+ if(!eyeMatrices)return false;auto rotation=ue2::CameraRotation(eyeMatrices->camera);auto complete=ue2::MakeSceneView(eyeMatrices->camera,eyeMatrices->projection,width,height);if(!rotation||!complete)return false;
+ alignas(16) std::array<unsigned char,0x240> storage;storage.fill(0xcd);auto* scene=storage.data()+16;
+ // Native construction establishes the correct point/zone before all private
+ // camera matrices and visibility differentials receive the actual eye data.
+ construct(scene,reinterpret_cast<void*>(viewport),target,reinterpret_cast<void*>(actor),complete->origin,*rotation,Field<float>(before.data(),0x1e0));
+ std::memcpy(scene+0x14,&*complete,sizeof(*complete));render(scene,ri);destroy(scene);
+ bool intact=Read(address,after.data(),unsigned(after.size()))&&before==after;
+ for(unsigned i=0;i<16;++i)intact&=storage[i]==0xcd;for(unsigned i=16+0x1e4;i<storage.size();++i)intact&=storage[i]==0xcd;
+ return intact;
+}
 void WriteCameraReport(const std::filesystem::path& folder){
  std::ofstream out(folder/L"native-camera-trial.json");if(!trial.ready.load(std::memory_order_acquire)){out<<"{\"ready\":false}\n";return;}
  out<<std::boolalpha<<"{\"ready\":true,\"prerequisites\":"<<trial.prerequisites<<",\"original_scene_unchanged\":"<<trial.originalUnchanged<<",\"render_replayed\":false,\"world_scale_calibrated\":false,\"cases\":[";

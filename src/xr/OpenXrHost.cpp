@@ -1,3 +1,4 @@
+#include <iostream>
 #include "kfvr/xr/OpenXrHost.h"
 #include "kfvr/graphics/D3D11SharedPair.h"
 #include <Windows.h>
@@ -62,6 +63,9 @@ struct Host {
     ComPtr<ID3D11DeviceContext> context;
     graphics::D3D11PairConsumer consumer;
     graphics::TextureDescriptor openedDescriptor{};
+    runtime::RetainedProjection retained;
+    std::array<XrCompositionLayerProjectionView,2> retainedViews{};
+    std::uint64_t emptyRun=0;
     HostReport& report;
     bool running=false,exit=false,frameOpen=false,referenceValid=false;
     XrTime frameTime=0;
@@ -125,6 +129,8 @@ struct Host {
         auto& req=report.requirements;req.width=(std::max)(viewInfo[0].recommendedImageRectWidth,viewInfo[1].recommendedImageRectWidth);
         req.height=(std::max)(viewInfo[0].recommendedImageRectHeight,viewInfo[1].recommendedImageRectHeight);
         for(const auto& view:viewInfo)Require(req.width&&req.height&&req.width<=view.maxImageRectWidth&&req.height<=view.maxImageRectHeight,"Incompatible per-eye image sizes");
+        Require(options.renderScalePercent>=25&&options.renderScalePercent<=100,"Eye render scale must be 25..100 percent");
+        if(options.renderScalePercent!=100){req.width=(std::max)(64u,(req.width*options.renderScalePercent/100)&~3u);req.height=(std::max)(64u,(req.height*options.renderScalePercent/100)&~3u);}
         if(options.probeOnly)return;
         Require(req.width<=16384&&req.height<=16384,"Runtime eye dimensions exceed the D3D11 bridge limits");
         std::array<XrEnvironmentBlendMode,16> modes{};
@@ -168,7 +174,7 @@ struct Host {
             }
             if(event.type!=XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED)continue;
             const auto& change=reinterpret_cast<const XrEventDataSessionStateChanged&>(event);if(change.session!=session)continue;
-            sessionState=change.state;report.lastSessionState=std::int32_t(sessionState);
+            sessionState=change.state;report.lastSessionState=std::int32_t(sessionState);std::cerr<<"xr_session_state="<<int(sessionState)<<std::endl;
             if(sessionState==XR_SESSION_STATE_READY&&!running){XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};begin.primaryViewConfigurationType=XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
                 Check(api.BeginSession(session,&begin),"Begin OpenXR session");running=true;referenceValid=false;++spaceGeneration;}
             if(sessionState==XR_SESSION_STATE_STOPPING&&running){Check(api.EndSession(session),"End OpenXR session");running=false;}
@@ -180,12 +186,13 @@ struct Host {
         Check(api.WaitFrame(session,&wait,&frame),"Wait frame");++report.waitedFrames;frameTime=frame.predictedDisplayTime;
         XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};Check(api.BeginFrame(session,&begin),"Begin frame");frameOpen=true;
         for(auto at=spaceChanges.begin();at!=spaceChanges.end();)if(*at<=frameTime){++spaceGeneration;referenceValid=false;at=spaceChanges.erase(at);}else ++at;
+        if(sessionState==XR_SESSION_STATE_FOCUSED)++report.focusedFrames;
         const auto controls=actions.Sample(local,frameTime,spaceGeneration,sessionState==XR_SESSION_STATE_FOCUSED);
         for(const auto& hand:controls.hands)if(hand.gripValid)++report.validControllerSamples;
         actions.Feedback(controls,inputConsumer?inputConsumer->Input(controls):std::array<HapticPulse,2>{});
         std::array<XrCompositionLayerProjectionView,2> projectionViews{{{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW},{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}}};
         XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};layer.space=local;layer.viewCount=2;layer.views=projectionViews.data();
-        bool submit=false;
+        bool submit=false,fresh=false,trackingEligible=false;
         if(frame.shouldRender){
             std::array<XrView,2> views{{{XR_TYPE_VIEW},{XR_TYPE_VIEW}}};XrViewState viewState{XR_TYPE_VIEW_STATE};
             XrViewLocateInfo locate{XR_TYPE_VIEW_LOCATE_INFO};locate.viewConfigurationType=XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;locate.displayTime=frameTime;locate.space=local;uint32_t count=0;
@@ -201,7 +208,7 @@ struct Host {
                 for(unsigned eye=0;eye<2;++eye){tracking.eyes[eye]=Pose(views[eye].pose);const auto& fov=views[eye].fov;
                     tracking.fov[eye]={std::tan(fov.angleLeft),std::tan(fov.angleRight),std::tan(fov.angleUp),std::tan(fov.angleDown)};
                     valid&=bool(math::MakeRelativePose(tracking.referenceHead,tracking.eyes[eye]))&&bool(math::MakeLhProjectionFromFovTangents(tracking.fov[eye],.05f,100.f));}
-                tracking.headValid=valid;if(valid)++report.validTrackingFrames;
+                tracking.headValid=valid;trackingEligible=valid&&tracking.focused;if(valid)++report.validTrackingFrames;
                 graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};
                 if(valid&&tracking.focused&&provider&&provider->TryGetPair(report.requirements,tracking,descriptor,ticket)){
                     struct Feedback {IFrameProvider& provider;const graphics::PairTicket& ticket;bool consumed=false;~Feedback(){provider.PairConsumed(ticket,consumed);}} feedback{*provider,ticket};
@@ -210,6 +217,9 @@ struct Host {
                             if(consumer.Open(device.Get(),descriptor)==graphics::TransferResult::Ok)openedDescriptor=descriptor;else openedDescriptor={};
                         }
                         if(graphics::Valid(openedDescriptor)){
+                            // Any attempted swapchain update invalidates the previous pair.
+                            // A failed partial copy must never be reused as complete stereo.
+                            retained.Clear();
                             std::array<graphics::TextureSlice,2> destinations{};
                             for(unsigned eye=0;eye<2;++eye){uint32_t index=0;XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
                                 Check(api.AcquireSwapchainImage(swapchains[eye],&acquire,&index),"Acquire eye image");acquired[eye]=true;
@@ -224,18 +234,33 @@ struct Host {
                         }
                     }
                     if(!submit)++report.rejectedPairs;
+                    if(submit){fresh=true;retained.Remember(report.requirements,tracking,descriptor,ticket);retainedViews=projectionViews;}
+                }
+                if(!submit&&retained.CanPresent(report.requirements,tracking)){
+                    // xrEndFrame uses each swapchain's most recently released image.
+                    // Keep its actual render poses/FOVs, never substitute new poses.
+                    projectionViews=retainedViews;submit=true;
                 }
             }
         }
+        if(!trackingEligible)retained.Clear();
         const auto* base=reinterpret_cast<const XrCompositionLayerBaseHeader*>(&layer);
         XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};end.displayTime=frameTime;end.environmentBlendMode=XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
         if(submit){end.layerCount=1;end.layers=&base;}
-        const auto result=api.EndFrame(session,&end);frameOpen=false;Check(result,"End frame");++report.endedFrames;if(submit)++report.submittedPairs;
+        const auto result=api.EndFrame(session,&end);frameOpen=false;Check(result,"End frame");++report.endedFrames;
+        if(fresh){if(report.submittedPairs)report.maxEmptyBetweenFresh=(std::max)(report.maxEmptyBetweenFresh,emptyRun);++report.submittedPairs;}
+        else if(submit)++report.reprojectedFrames;
+        else ++report.emptyFrames;
+        if(submit)emptyRun=0;else ++emptyRun;
     }
     void Run(const HostOptions& options){
-        const auto start=std::chrono::steady_clock::now();bool requested=false;auto shutdown=start;
+        const auto start=std::chrono::steady_clock::now();bool requested=false,firstPair=false;auto shutdown=start,visibleStart=start;
         while(!exit){Events();if(exit)break;const auto now=std::chrono::steady_clock::now();
-            if(!requested&&now-start>=std::chrono::seconds(options.seconds)){
+            if(!firstPair&&report.submittedPairs){firstPair=true;visibleStart=now;}
+            const bool elapsed=options.waitForFirstPair?
+                (firstPair?now-visibleStart>=std::chrono::seconds(options.seconds):now-start>=std::chrono::seconds(45)):
+                now-start>=std::chrono::seconds(options.seconds);
+            if(!requested&&elapsed){
                 if(!running)break;Check(api.RequestExitSession(session),"Request session exit");requested=true;shutdown=now;
             }
             if(requested&&(!running||now-shutdown>=std::chrono::seconds(2)))break;

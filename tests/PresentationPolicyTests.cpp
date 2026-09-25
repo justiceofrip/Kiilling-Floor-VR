@@ -12,5 +12,15 @@ int main(){
     old=t;++old.spaceGeneration;CHECK(!runtime::PairMatchesFrame(r,tracking,d,old));old=t;++old.resourceEpoch;CHECK(!runtime::PairMatchesFrame(r,tracking,d,old));
     auto bad=d;++bad.adapterLow;CHECK(!runtime::PairMatchesFrame(r,tracking,bad,t));bad=d;++bad.width;CHECK(!runtime::PairMatchesFrame(r,tracking,bad,t));
     tracking.focused=false;CHECK(!runtime::PairMatchesFrame(r,tracking,d,t));tracking.focused=true;tracking.headValid=false;CHECK(!runtime::PairMatchesFrame(r,tracking,d,t));
+    tracking.headValid=true;runtime::RetainedProjection held;CHECK(held.Remember(r,tracking,d,t));
+    auto next=tracking;++next.generation;next.predictedNs+=11111111;next.head.position.x=1;
+    CHECK(!runtime::PairMatchesFrame(r,next,d,t));CHECK(held.CanPresent(r,next));
+    CHECK(held.RenderedTracking().head.position.x==tracking.head.position.x&&held.RenderedTracking().predictedNs==t.predictedNs);
+    auto stale=next;stale.predictedNs=tracking.predictedNs+100000001;CHECK(!held.CanPresent(r,stale));
+    stale=next;stale.predictedNs=tracking.predictedNs-1;CHECK(!held.CanPresent(r,stale));
+    stale=next;++stale.spaceGeneration;CHECK(!held.CanPresent(r,stale));
+    stale=next;stale.focused=false;CHECK(!held.CanPresent(r,stale));stale=next;stale.headValid=false;CHECK(!held.CanPresent(r,stale));
+    auto changed=r;++changed.width;CHECK(!held.CanPresent(changed,next));
+    held.Clear();CHECK(!held.CanPresent(r,next));CHECK(!held.Remember(r,next,d,t));CHECK(!held.CanPresent(r,next));
     return 0;
 }
