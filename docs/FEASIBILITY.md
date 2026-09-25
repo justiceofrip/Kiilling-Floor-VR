@@ -1,14 +1,17 @@
 # Feasibility assessment
 
-Provisional engineering judgement after the installed-game audit, not a measured probability:
+Provisional engineering judgement after native KF headset acceptance, not a measured probability or completion percentage:
 
 | Target | Rating | Basis / remaining risk |
 | --- | ---: | --- |
-| Native stereo + head tracking + controller aiming, a small weapon subset | 7/10 | Actual native stereo world images now work with asymmetric frusta and synthetic head poses; exact scripts and isolated GPU transport are available. Render-side animation/culling and D3D9-to-XR integration remain substantial work. |
+| Native stereo + head tracking + controller aiming, a small weapon subset | 8.5/10 | Actual KF stereo now reaches OpenXR with runtime eye transforms/frusta. User confirmed head tracking and flicker removal; physical controllers/haptics also passed separately. Player controls, weapon aiming, sustained cadence and lifecycle acceptance remain. |
 | Manual reloads and balanced physical melee | 7/10 | Game fire/reload/perk logic is script-visible; core state machines now conserve ammo and bound melee. Real interaction zones, server integration and every weapon mechanism still need work. |
 | VR + flat on a KFVR-enabled server | 7/10 | Existing UnrealScript replication/package mechanisms fit capability-based players. Requires a custom gameplay/client package and actual dedicated-server/flat-client tests. |
 | Full-body local and remote IK on all original player models | 5/10 | Native bone APIs exist, but skeleton/space/animation/LOD behavior and script performance are not yet validated. |
-| Entire brief across every weapon, map, mod and server with unchanged balance | 4/10 | Broad compatibility, unusual weapons, legacy networking, progression eligibility and 32-bit performance are the long tail. |
+| Full total-conversion vision on supported content and KFVR-enabled servers | 6/10 | The native headset path is demonstrated, substantially reducing architectural uncertainty. All weapon families, physical interactions, IK, VR UI, network authority and progression compatibility remain major integration work. |
+| Universal compatibility with arbitrary mods/unmodified servers and unchanged balance | 4/10 | Rendering success does not establish compatibility with unknown scripts, unsupported clients, progression rules or every content edge case. |
 | Full custom VR posture on clients receiving no new code/package at all | 1/10 | Vanilla code has no interpreter for the added tracking data or custom IK. A downloaded script package keeps the executable unchanged but is still the shared KFVR client package. |
 
 The original game is the right base. The architectural change from the prompt is to treat the x64 OpenXR presenter and legacy graphics transport as explicit components. Script-visible bone/camera functions are useful, but do not eliminate native stereo work. The current result is a tested development foundation, not a playable total conversion or a release estimate.
+
+2026-09-25 headset evidence: native-headset-20260925-184625 submitted 445 fresh actual KF pairs and 192 reprojected frames in a bounded native trial. User confirmed head tracking; an earlier retest confirmed that constant flicker was gone. Diagnostic eye resolution is 824x880, not final visual quality. Both eyes are separately rendered by KF during one native draw; completed pairs may be reprojected between updates. No claim of a complete playable conversion, shipping frame rate, physical weapon behavior or multiplayer acceptance follows from this milestone.

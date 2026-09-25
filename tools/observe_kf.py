@@ -70,7 +70,7 @@ class Observer:
   while ptr and ptr not in seen and len(parts)<32:
    seen.add(ptr);h=self.header(ptr);parts.append(self.name(unpack(h,36)));ptr=unpack(h,28)
   return '.'.join(reversed(parts))
- def snapshot(self):
+ def snapshot(self,extra_properties=None):
   skipped=0
   for index,ptr in enumerate(self.objects):
    if not ptr:continue
@@ -82,6 +82,8 @@ class Observer:
    except (ValueError,OSError,UnicodeError):skipped+=1
   classes={row['name']:int(row['address'],16) for row in self.rows if row['class']=='Class'}
   wanted={'LevelInfo':{'NetMode','TimeSeconds','Pauser','Game'},'Actor':{'Location','Rotation','Level','Owner'},'Controller':{'Pawn'},'PlayerController':{'Player','ViewTarget','FOVAngle','bBehindView'},'Pawn':{'Health','Weapon','PlayerReplicationInfo','CollisionRadius','CollisionHeight'},'Weapon':{'FireMode','Ammo'},'KFWeapon':{'MagAmmoRemaining','MagCapacity','ReloadRate'},'Ammunition':{'AmmoAmount','MaxAmmo'}}
+  if extra_properties:
+   for owner,names in extra_properties.items():wanted.setdefault(owner,set()).update(names)
   properties={}
   for row in self.rows:
    if row['outer'] in wanted and row['name'] in wanted[row['outer']] and row['class'].endswith('Property'):

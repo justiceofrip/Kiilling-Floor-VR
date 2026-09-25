@@ -2,7 +2,7 @@
 
 Native VR mod development for the original Killing Floor. Source/builds live in `G:\KFVR`; the installed game is `F:\SteamLibrary\steamapps\common\KillingFloor`. This does not use the unrelated Unity workspace.
 
-**Development checkpoint: Killing Floor is not yet playable in VR.** A bounded native bridge now sends actual stereo game views with HMD poses/FOVs to OpenXR. The headset now displays KF, and the user confirmed that retaining complete frames removed the initial flicker. Full-length visual/tracking acceptance remains pending. Controller gameplay, sustained operation and the complete mod remain unfinished.
+**Development checkpoint: Killing Floor is not yet playable in VR.** A bounded native bridge now sends actual stereo game views with HMD poses/FOVs to OpenXR. The headset now displays KF, and the user confirmed that retaining complete frames removed the initial flicker. The user also confirmed head tracking in the full-length test. The view still needs separation from desktop camera tilt, and resolution/cadence remain diagnostic. Controller gameplay, sustained operation and the complete mod remain unfinished.
 
 Implemented and verified:
 

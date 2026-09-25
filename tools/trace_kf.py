@@ -23,19 +23,20 @@ def validate_eye_packet(camera,eye_data,pose_trial,asymmetric_trial):
  summary['camera_packet_valid']=matrices_valid
  return summary
 
-def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False,channel_token=None):
+def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False,channel_token=None,input_trial=False):
  stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
  directory=root/'reports'/('native-trace-'+stamp);directory.mkdir(parents=True)
  observer=Observer(pid,game)
  try:
-  snapshot=observer.snapshot();(directory/'before.json').write_text(json.dumps(snapshot,indent=2))
+  input_names=['aBaseX','aBaseY','aBaseZ','aMouseX','aMouseY','aForward','aTurn','aStrafe','aUp','aLookUp']
+  snapshot=observer.snapshot({'PlayerController':set(input_names)}) if input_trial else observer.snapshot();(directory/'before.json').write_text(json.dumps(snapshot,indent=2))
   controllers=[r for r in snapshot['observations'] if r['class']=='KFPlayerController' and r['values'].get('PlayerController.Player')]
   if channel_token and stereo_trial:raise ValueError('Bridge and one-shot stereo trials are separate modes')
   if len(controllers)!=1:raise ValueError('Need exactly one local KF controller')
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<15I',960,6,15000 if channel_token else 12000,240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
+  p=snapshot['properties'];config=struct.pack('<15I',1024,7,15000 if channel_token else 12000,240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
   names=TARGETS
   evidence=[]
   for file,name in names:
@@ -65,14 +66,26 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   config+=encoded.ljust(520,b'\0')
   if channel_token and (len(channel_token)!=32 or any(c not in '0123456789abcdef' for c in channel_token)):raise ValueError('Invalid channel token')
   config+=struct.pack('<If',int(bool(channel_token)),50.0)+(str(channel_token or '')+'\0').encode('utf-16le').ljust(68,b'\0')
-  assert len(config)==960
+  input_offsets=[0]*10;tick_name=0;input_expected=bytes(16);input_evidence=[]
+  if input_trial:
+   for i,name in enumerate(input_names):
+    prop=p['PlayerController.'+name]
+    if prop['type']!='FloatProperty' or prop['size']!=4:raise ValueError('Invalid input property')
+    input_offsets[i]=prop['offset']
+   tick=next(row for row in observer.rows if row['class']=='Function' and row['name']=='PlayerTick' and row['outer']=='KFPlayerController')
+   tick_name=struct.unpack('<I',observer.read(int(tick['address'],16)+0x24,4))[0]
+   path=game/'System/Engine.dll';pe=pefile.PE(str(path));base=observer.modules['engine.dll'][0];pe.relocate_image(base);rva=0xee110;input_expected=pe.get_data(rva,16)
+   if observer.read(base+rva,16)!=input_expected:raise ValueError('ReadInput entry is already modified')
+   input_evidence.append(dict(address=base+rva,expected=input_expected.hex()))
+  config+=struct.pack('<12I',int(input_trial),*input_offsets,tick_name)+input_expected
+  assert len(config)==1024
   request_path=directory/'request.bin';request_path.write_bytes(config)
   source=root/'build/x86/KFVRNativeProbe.dll';dll=directory/'KFVRNativeProbe.dll';dll.write_bytes(source.read_bytes())
   launcher=root/'build/x86/KFVRNativeTrace.exe'
   (directory/'payload.json').write_text(json.dumps(dict(dll_sha256=hashlib.sha256(dll.read_bytes()).hexdigest(),launcher_sha256=hashlib.sha256(launcher.read_bytes()).hexdigest(),targets=evidence),indent=2))
   result=subprocess.run([str(launcher),'--game',str(game),'--dll',str(dll),'--request',str(request_path)],capture_output=True,text=True,timeout=30)
   (directory/'launcher.txt').write_text(result.stdout+result.stderr)
-  restored=all(observer.read(e['address'],16).hex()==e['expected'] for e in evidence)
+  restored=all(observer.read(e['address'],16).hex()==e['expected'] for e in evidence+input_evidence)
   summary=dict(pid=pid,launcher_exit=result.returncode,entry_bytes_restored=restored,game_files_modified=False,report=str(report_path),module_resident_until_exit=True)
   if report_path.exists():
    report=json.loads(report_path.read_text());summary.update(frames=len(report['frames']),hooks_disabled=report['hooks_disabled'],render_counts=sorted(set(f['renders'] for f in report['frames'])),engine_ticks_observed_inside_draw=any(f['ticks_before']!=f['ticks_after'] for f in report['frames']))
@@ -110,14 +123,19 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
     eye_data=json.loads((directory/'native-eye-cameras.json').read_text())['eyes']
     metrics=validate_eye_packet(camera,eye_data,pose_trial,asymmetric_trial);summary.update(metrics);stereo_passed=metrics['camera_packet_valid']
    summary['stereo_trial_passed']=stereo_passed
+  input_passed=True
+  if input_trial:
+   input_path=directory/'native-input.json';input_report=json.loads(input_path.read_text()) if input_path.exists() else {};samples=input_report.get('samples',[])
+   input_passed=len(samples)>=10 and all(s['finite'] for s in samples) and sum(s['before_tick_observed'] and s['after_tick_observed'] for s in samples)>=10 and len(set(s['thread'] for s in samples))==1
+   summary.update(input_trial_passed=input_passed,input_samples=len(samples),input_tick_observations=sum(s['before_tick_observed'] and s['after_tick_observed'] for s in samples))
   bridge_passed=True
   if channel_token:
    bridge_path=directory/'native-bridge.json';bridge=json.loads(bridge_path.read_text()) if bridge_path.exists() else {}
    bridge_passed=all(bridge.get(k) is True for k in ['closed','reset_hook_restored','resources_released']) and bridge.get('consumed_pairs',0)>0 and bridge.get('reason') in ['duration_finished','host_closed']
    summary.update(bridge_trial_passed=bridge_passed,bridge=bridge)
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
-  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
+  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed or not input_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
  finally:observer.close()
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');p.add_argument('--asymmetric-trial',action='store_true');p.add_argument('--pose-trial',action='store_true');p.add_argument('--channel-token');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],bool(a.channel_token) or a.target_trial or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,bool(a.channel_token) or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.asymmetric_trial or a.pose_trial,a.pose_trial,a.channel_token)
+ p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');p.add_argument('--asymmetric-trial',action='store_true');p.add_argument('--pose-trial',action='store_true');p.add_argument('--channel-token');p.add_argument('--input-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],bool(a.channel_token) or a.target_trial or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,bool(a.channel_token) or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.asymmetric_trial or a.pose_trial,a.pose_trial,a.channel_token,a.input_trial)
 

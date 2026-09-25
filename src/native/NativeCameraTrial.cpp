@@ -106,7 +106,12 @@ bool RenderTrackedCamera(void* original,void* target,void* ri,const runtime::Tra
  if(!viewport||!actor||!level||!model||!U32(model+0xe0)||!U32(level+0x1154)||U32(U32(viewport+0x34)+0x9c)!=level)return false;
  const auto nativeProjection=Field<math::Matrix4>(before.data(),0x94);
  const float nearZ=-nativeProjection.values[3][2]/nativeProjection.values[2][2],farZ=-nativeProjection.values[3][2]/(nativeProjection.values[2][2]-1);
- auto eyeMatrices=ue2::BuildEye(Field<math::Matrix4>(before.data(),0x54),tracking.referenceHead,tracking.eyes[eye],tracking.fov[eye],units,nearZ,farZ);
+ // The desktop camera provides body position and heading only. Mouse pitch,
+ // roll and pitch recoil must not tilt the headset's tracking space.
+ const auto bodyRotation=Field<ue2::Rotator>(before.data(),0x1d4);
+ auto bodyCamera=ue2::CameraWorld(Field<math::Vec3>(before.data(),0x194),{0,bodyRotation.yaw,0});
+ if(!bodyCamera)return false;
+ auto eyeMatrices=ue2::BuildEye(*bodyCamera,tracking.referenceHead,tracking.eyes[eye],tracking.fov[eye],units,nearZ,farZ);
  if(!eyeMatrices)return false;auto rotation=ue2::CameraRotation(eyeMatrices->camera);auto complete=ue2::MakeSceneView(eyeMatrices->camera,eyeMatrices->projection,width,height);if(!rotation||!complete)return false;
  alignas(16) std::array<unsigned char,0x240> storage;storage.fill(0xcd);auto* scene=storage.data()+16;
  // Native construction establishes the correct point/zone before all private

@@ -6,7 +6,8 @@ namespace kfvr::runtime {
 class IFrameProvider {
 public:
     virtual ~IFrameProvider()=default;
-    // Called on the frame thread. Use a bounded wait; false submits no layer.
+    // Called on the frame thread. Use a bounded wait; false supplies no fresh pair. The host may
+    // briefly reproject an already-complete pair with its original render poses.
     virtual bool TryGetPair(const PresentationRequirements&,const TrackingFrame&,
         graphics::TextureDescriptor&,graphics::PairTicket&) noexcept=0;
     // False means the pair was not consumed; reset/reclaim that texture stream.

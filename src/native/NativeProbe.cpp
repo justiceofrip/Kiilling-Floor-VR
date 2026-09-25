@@ -6,6 +6,7 @@
 #include "NativeProbeConfig.h"
 #include "NativeCameraTrial.h"
 #include "NativeEyeBridge.h"
+#include "NativeInputAudit.h"
 #include <array>
 #include <atomic>
 #include <cstring>
@@ -71,7 +72,7 @@ void __fastcall ProcessEventHook(void* self,void*,void* function,void* params,vo
  if(current){auto& row=*current;++row.scriptEvents;const auto at=reinterpret_cast<std::uint32_t>(function);const auto name=U32(at+0x24),owner=U32(U32(at+0x1c)+0x24);const unsigned phase=privateEye?3:levelDepth?2:playerDepth?1:0;bool recorded=false;
   for(auto& entry:row.scripts){if(!entry.calls||(entry.name==name&&entry.ownerName==owner&&entry.phase==phase)){entry.name=name;entry.ownerName=owner;entry.phase=phase;++entry.calls;recorded=true;break;}}
   if(!recorded)++row.scriptOverflow;
- }processEventOriginal(self,function,params,result);
+ }if(config.inputTrial)kfvr::native::InputAuditEvent(self,function,false);processEventOriginal(self,function,params,result);if(config.inputTrial)kfvr::native::InputAuditEvent(self,function,true);
 }
 
 struct ColorCapture {std::atomic<bool> ready=false;bool attempted=false,isEx=false,exKnown=false;unsigned width=0,height=0,format=0,samples=0;long result=0;std::vector<unsigned char> pixels;};
@@ -256,7 +257,7 @@ void WriteStereo(const std::filesystem::path& folder){
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=6||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=7||config.inputTrial>1||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
@@ -275,6 +276,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  }
  if(MH_Initialize()!=MH_OK)return 14;
  if(config.bridgeTrial&&!kfvr::native::StartEyeBridge(config.channelToken))return 23;
+ if(config.inputTrial){std::array<unsigned,10> fields{};std::copy(std::begin(config.inputOffsets),std::end(config.inputOffsets),fields.begin());if(!kfvr::native::StartInputAudit(config.viewport,config.controller,fields,config.playerTickName,config.inputPrologue,LocalWorld))return 24;}
  void* detours[]={reinterpret_cast<void*>(&DrawHook),reinterpret_cast<void*>(&TickHook),reinterpret_cast<void*>(&RenderHook),reinterpret_cast<void*>(&PresentHook),reinterpret_cast<void*>(&LevelHook),reinterpret_cast<void*>(&ActorAnimationHook),reinterpret_cast<void*>(&SkeletalAnimationHook),reinterpret_cast<void*>(&GetFrameHook),reinterpret_cast<void*>(&ProcessEventHook)};
  void** originals[]={reinterpret_cast<void**>(&drawOriginal),reinterpret_cast<void**>(&tickOriginal),reinterpret_cast<void**>(&renderOriginal),reinterpret_cast<void**>(&presentOriginal),reinterpret_cast<void**>(&levelOriginal),reinterpret_cast<void**>(&actorAnimationOriginal),reinterpret_cast<void**>(&skeletalAnimationOriginal),reinterpret_cast<void**>(&getFrameOriginal),reinterpret_cast<void**>(&processEventOriginal)};
  unsigned installed=0;bool enabled=false;DWORD status=0;
@@ -283,11 +285,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(enabled){sampling.store(true,std::memory_order_release);const auto start=GetTickCount64();while((config.bridgeTrial||count.load()<config.maxFrames)&&GetTickCount64()-start<config.durationMs&&LocalWorld()&&(!config.bridgeTrial||!kfvr::native::EyeBridgeClosed()))Sleep(10);}
  if(config.bridgeTrial){kfvr::native::StopEyeBridge();const auto deadline=GetTickCount64()+5000;while(!kfvr::native::EyeBridgeClosed()&&GetTickCount64()<deadline)Sleep(10);}
  sampling.store(false,std::memory_order_release);
- const bool mayDisable=!config.bridgeTrial||kfvr::native::EyeBridgeClosed();bool disabled=mayDisable;for(unsigned i=0;mayDisable&&i<installed;++i){const auto result=MH_DisableHook(targets[i]);disabled&=result==MH_OK||result==MH_ERROR_DISABLED;}
+ const bool mayDisable=!config.bridgeTrial||kfvr::native::EyeBridgeClosed();bool disabled=mayDisable;if(config.inputTrial)disabled&=kfvr::native::StopInputAudit();for(unsigned i=0;mayDisable&&i<installed;++i){const auto result=MH_DisableHook(targets[i]);disabled&=result==MH_OK||result==MH_ERROR_DISABLED;}
  // Keep trampolines and this DLL resident: an original callback may be returning.
  Sleep(50);
  try{
 
+ if(config.inputTrial)kfvr::native::WriteInputAudit(std::filesystem::path(config.reportPath).parent_path());
  if(config.bridgeTrial)kfvr::native::WriteEyeBridgeReport(std::filesystem::path(config.reportPath).parent_path());
  if(config.stereoTrial)WriteStereo(std::filesystem::path(config.reportPath).parent_path());
  if(config.cameraTrial)kfvr::native::WriteCameraReport(std::filesystem::path(config.reportPath).parent_path());
