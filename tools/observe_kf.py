@@ -18,6 +18,10 @@ class Observer:
  def __init__(self,pid,game):
   self.pid=pid;self.handle=K.OpenProcess(0x410,False,pid)
   if not self.handle:raise OSError(c.get_last_error(),'Read-only OpenProcess failed')
+  try:self._initialize(game)
+  except BaseException:
+   self.close();raise
+ def _initialize(self,game):
   buf=c.create_unicode_buffer(32768);length=w.DWORD(len(buf))
   if not K.QueryFullProcessImageNameW(self.handle,0,buf,c.byref(length)) or pathlib.Path(buf.value).resolve()!= (game/'System/KillingFloor.exe').resolve():raise ValueError('Process does not match selected installation')
   mods=(w.HMODULE*1024)();needed=w.DWORD()

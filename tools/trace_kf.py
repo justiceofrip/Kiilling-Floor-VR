@@ -2,6 +2,7 @@
 import argparse,ctypes,datetime,hashlib,json,pathlib,struct,subprocess
 from observe_kf import Observer
 import pefile
+from native_profile import TARGETS, AUDITED_SHA256
 
 def trace(pid,game,root):
  stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
@@ -14,11 +15,13 @@ def trace(pid,game,root):
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<12I',632,1,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'])
-  names=[('Engine.dll','?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z'),('Engine.dll','?Tick@UGameEngine@@UAEXM@Z'),('Engine.dll','?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z'),('D3D9Drv.dll','?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z')]
+  p=snapshot['properties'];config=struct.pack('<12I',712,2,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'])
+  names=TARGETS
   evidence=[]
   for file,name in names:
-   path=game/'System'/file;pe=pefile.PE(str(path));symbol=next(s for s in pe.DIRECTORY_ENTRY_EXPORT.symbols if s.name and s.name.decode()==name);base=observer.modules[file.lower()][0];pe.relocate_image(base);expected=pe.get_data(symbol.address,16)
+   path=game/'System'/file
+   if hashlib.sha256(path.read_bytes()).hexdigest()!=AUDITED_SHA256[file]:raise ValueError('Unaudited native binary: '+file)
+   pe=pefile.PE(str(path));symbol=next(s for s in pe.DIRECTORY_ENTRY_EXPORT.symbols if s.name and s.name.decode()==name);base=observer.modules[file.lower()][0];pe.relocate_image(base);expected=pe.get_data(symbol.address,16)
    if observer.read(base+symbol.address,16)!=expected:raise ValueError('Native target already modified: '+name)
    if file=='D3D9Drv.dll':
     body=pe.get_data(symbol.address,0x120)
@@ -36,6 +39,13 @@ def trace(pid,game,root):
   summary=dict(pid=pid,launcher_exit=result.returncode,entry_bytes_restored=restored,game_files_modified=False,report=str(report_path),module_resident_until_exit=True)
   if report_path.exists():
    report=json.loads(report_path.read_text());summary.update(frames=len(report['frames']),hooks_disabled=report['hooks_disabled'],render_counts=sorted(set(f['renders'] for f in report['frames'])),simulation_advanced_inside_draw=any(f['ticks_before']!=f['ticks_after'] for f in report['frames']))
+  if report_path.exists():
+   totals={};phases={0:'draw_outside_player',1:'player_outside_level',2:'level'}
+   for frame in report['frames']:
+    for call in frame.get('scripts',[]):
+     key=observer.name(call['owner_name_id'])+'.'+observer.name(call['name_id'])+'@'+phases[call['phase']]
+     totals[key]=totals.get(key,0)+call['calls']
+   (directory/'render-activity.json').write_text(json.dumps(dict(script_calls=totals,overflow=sum(f.get('script_overflow',0) for f in report['frames']),actor_animation_calls_inside_draw=sum(f.get('actor_animation_calls_inside_draw',0) for f in report['frames']),skeletal_animation_calls_inside_draw=sum(f.get('skeletal_animation_calls_inside_draw',0) for f in report['frames']),skeletal_getframe_calls=sum(f.get('skeletal_getframe_calls',0) for f in report['frames']),level_renders=sum(f.get('level_renders',0) for f in report['frames'])),indent=2))
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
   if result.returncode or not restored:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
  finally:observer.close()
