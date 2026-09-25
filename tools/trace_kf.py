@@ -4,7 +4,7 @@ from observe_kf import Observer
 import pefile
 from native_profile import TARGETS, AUDITED_SHA256
 
-def trace(pid,game,root,target_trial=False):
+def trace(pid,game,root,target_trial=False,camera_trial=False):
  stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
  directory=root/'reports'/('native-trace-'+stamp);directory.mkdir(parents=True)
  observer=Observer(pid,game)
@@ -15,7 +15,7 @@ def trace(pid,game,root,target_trial=False):
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<13I',828,3,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial))
+  p=snapshot['properties'];config=struct.pack('<14I',864,4,12000,180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial))
   names=TARGETS
   evidence=[]
   for file,name in names:
@@ -34,6 +34,11 @@ def trace(pid,game,root,target_trial=False):
    path=game/'System'/file;pe=pefile.PE(str(path));base=observer.modules[file.lower()][0];pe.relocate_image(base);expected=pe.get_data(rva,16)
    if observer.read(base+rva,16)!=expected:raise ValueError('Native target interface already modified')
    config+=expected;target_evidence.append(dict(file=file,rva=rva,expected=expected.hex()))
+  for rva in [0x1a5ab0,0x1a2f30]:
+   if not camera_trial:config+=bytes(16);continue
+   pe=pefile.PE(str(game/'System/Engine.dll'));base=observer.modules['engine.dll'][0];pe.relocate_image(base);expected=pe.get_data(rva,16)
+   if observer.read(base+rva,16)!=expected:raise ValueError('Camera method already modified')
+   config+=expected;target_evidence.append(dict(file='Engine.dll',rva=rva,expected=expected.hex()))
   (directory/'target-evidence.json').write_text(json.dumps(target_evidence,indent=2))
   report_path=directory/'trace.json';encoded=(str(report_path)+'\0').encode('utf-16le')
   if len(encoded)>520:raise ValueError('Report path too long')
@@ -60,9 +65,16 @@ def trace(pid,game,root,target_trial=False):
    flags=['attempted','ready','distinct_surface','color_target_restored','depth_target_restored','viewport_restored','state_stack_restored','cached_state_restored','constructor_canary_intact']
    target_passed=all(trial.get(k) is True for k in flags) and trial.get('hresult')==0 and trial.get('verified_pixels')==512*384
    summary['target_trial_passed']=target_passed
+  camera_passed=True
+  if camera_trial:
+   camera_path=directory/'native-camera-trial.json';camera=json.loads(camera_path.read_text()) if camera_path.exists() else {}
+   camera_passed=camera.get('ready') is True and camera.get('prerequisites') is True and camera.get('original_scene_unchanged') is True and len(camera.get('cases',[]))==5
+   for row in camera.get('cases',[]):
+    camera_passed=camera_passed and all(row.get(k) is True for k in ['fields_match','canaries_intact','finite']) and all(row.get(k,1e10)<0.02 for k in ['camera_max_error','view_max_error','projection_inverse_max_error','view_projection_max_error'])
+   summary['camera_trial_passed']=camera_passed
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
-  if result.returncode or not restored or not target_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
+  if result.returncode or not restored or not target_passed or not camera_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
  finally:observer.close()
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],a.target_trial)
+ p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],a.target_trial or a.camera_trial,a.camera_trial)
 

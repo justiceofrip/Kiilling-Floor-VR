@@ -4,6 +4,7 @@
 #include <wrl/client.h>
 #include <vector>
 #include "NativeProbeConfig.h"
+#include "NativeCameraTrial.h"
 #include <array>
 #include <atomic>
 #include <cstring>
@@ -20,7 +21,7 @@ using ProcessEvent=void(__thiscall*)(void*,void*,void*,void*);
 Render levelOriginal=nullptr;Tick actorAnimationOriginal=nullptr;UpdateAnimation skeletalAnimationOriginal=nullptr;
 GetFrame getFrameOriginal=nullptr;ProcessEvent processEventOriginal=nullptr;
 thread_local unsigned playerDepth=0,levelDepth=0;
-void ProbeTarget(void*);
+void ProbeTarget(void*,void*);
 void ReadTarget();
 using AuxCtor=void(__thiscall*)(void*,int,int,int);
 using SimpleCall=void(__thiscall*)(void*);
@@ -55,7 +56,7 @@ void __fastcall RenderHook(void* self,void*,void* ri){
  ++playerDepth;renderOriginal(self,ri);--playerDepth;
 }
 
-void __fastcall LevelHook(void* self,void*,void* ri){if(current){++current->levelRenders;if(config.targetTrial&&playerDepth&&!levelDepth)ProbeTarget(ri);}++levelDepth;levelOriginal(self,ri);--levelDepth;}
+void __fastcall LevelHook(void* self,void*,void* ri){if(current){++current->levelRenders;if(config.targetTrial&&playerDepth&&!levelDepth)ProbeTarget(self,ri);}++levelDepth;levelOriginal(self,ri);--levelDepth;}
 void __fastcall ActorAnimationHook(void* self,void*,float dt){if(current)++current->actorAnimation;actorAnimationOriginal(self,dt);}
 int __fastcall SkeletalAnimationHook(void* self,void*,float dt){if(current)++current->skeletalAnimation;return skeletalAnimationOriginal(self,dt);}
 void __fastcall GetFrameHook(void* self,void*,void* actor,void* scene,void* vectors,int stride,int* countOut,unsigned long flags){if(current)++current->skeletalFrames;getFrameOriginal(self,actor,scene,vectors,stride,countOut,flags);}
@@ -98,7 +99,7 @@ struct TargetTrial {
  std::atomic<bool> ready=false;HRESULT result=E_PENDING;unsigned width=0,height=0,format=0,samples=0,pixelsVerified=0;
  Microsoft::WRL::ComPtr<IDirect3DSurface9> surface;
 } targetTrial;
-void ProbeTarget(void* ri){
+void ProbeTarget(void* scene,void* ri){
  if(targetTrial.attempted)return;targetTrial.attempted=true;
  using Microsoft::WRL::ComPtr;
  const auto address=reinterpret_cast<std::uint32_t>(ri),table=U32(address),renderer=U32(address+4),deviceAddress=U32(renderer+0x495c);
@@ -114,6 +115,7 @@ void ProbeTarget(void* ri){
  const auto setTarget=reinterpret_cast<int(__thiscall*)(void*,void*)>(targetMethods[2]);
  const auto setViewport=reinterpret_cast<void(__thiscall*)(void*,int,int,int,int)>(targetMethods[3]);
  const auto clear=reinterpret_cast<void(__thiscall*)(void*,int,unsigned,int,float,int,unsigned)>(targetMethods[4]);
+ if(config.cameraTrial)kfvr::native::ProbeCameras(scene,aux.data());
  push(ri);
  const int bound=setTarget(ri,aux.data());
  if(bound){setViewport(ri,0,0,512,384);clear(ri,1,0xff3040c0,1,1.f,1,0);targetTrial.result=device->GetRenderTarget(0,&targetTrial.surface);
@@ -145,7 +147,7 @@ void ReadTarget(){
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=3||config.targetTrial>1||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=4||config.targetTrial>1||config.cameraTrial>config.targetTrial||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
@@ -156,6 +158,11 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
   for(unsigned i=0;i<7;++i){void* method=i<5?reinterpret_cast<unsigned char*>(renderer)+rvas[i]:i==5?reinterpret_cast<void*>(auxCtor):reinterpret_cast<void*>(auxDtor);auto owner=i<5?renderer:engine;std::array<unsigned char,16> bytes{};
    if(!method||!Executable(method,owner)||!Read(reinterpret_cast<std::uint32_t>(method),bytes.data(),16)||std::memcmp(bytes.data(),config.targetPrologues[i],16))return 21;if(i<5)targetMethods[i]=method;
   }
+ }
+ if(config.cameraTrial){
+  const char* cameraNames[]={"??0FCameraSceneNode@@QAE@PAVUViewport@@PAVFRenderTarget@@PAVAActor@@VFVector@@VFRotator@@M@Z","??1FCameraSceneNode@@UAE@XZ"};void* methods[2]{};
+  for(unsigned i=0;i<2;++i){methods[i]=reinterpret_cast<void*>(GetProcAddress(engine,cameraNames[i]));std::array<unsigned char,16> bytes{};if(!methods[i]||!Executable(methods[i],engine)||!Read(reinterpret_cast<unsigned>(methods[i]),bytes.data(),16)||std::memcmp(bytes.data(),config.cameraPrologues[i],16))return 22;}
+  kfvr::native::SetCameraMethods(methods[0],methods[1]);
  }
  if(MH_Initialize()!=MH_OK)return 14;
  void* detours[]={reinterpret_cast<void*>(&DrawHook),reinterpret_cast<void*>(&TickHook),reinterpret_cast<void*>(&RenderHook),reinterpret_cast<void*>(&PresentHook),reinterpret_cast<void*>(&LevelHook),reinterpret_cast<void*>(&ActorAnimationHook),reinterpret_cast<void*>(&SkeletalAnimationHook),reinterpret_cast<void*>(&GetFrameHook),reinterpret_cast<void*>(&ProcessEventHook)};
@@ -170,6 +177,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  Sleep(50);
  try{
 
+ if(config.cameraTrial)kfvr::native::WriteCameraReport(std::filesystem::path(config.reportPath).parent_path());
  if(config.targetTrial){std::ofstream target(std::filesystem::path(config.reportPath).parent_path()/L"native-target.json");if(!targetTrial.ready.load(std::memory_order_acquire)){target<<"{\"ready\":false,\"render_replayed\":false,\"camera_written\":false}\n";}else target<<std::boolalpha<<"{\"attempted\":"<<targetTrial.attempted<<",\"ready\":"<<targetTrial.ready.load(std::memory_order_acquire)<<",\"hresult\":"<<targetTrial.result<<",\"width\":"<<targetTrial.width<<",\"height\":"<<targetTrial.height<<",\"format\":"<<targetTrial.format<<",\"samples\":"<<targetTrial.samples<<",\"distinct_surface\":"<<targetTrial.distinct<<",\"color_target_restored\":"<<targetTrial.targetsRestored<<",\"depth_target_restored\":"<<targetTrial.depthRestored<<",\"viewport_restored\":"<<targetTrial.viewportRestored<<",\"state_stack_restored\":"<<targetTrial.stackRestored<<",\"cached_state_restored\":"<<targetTrial.cacheRestored<<",\"constructor_canary_intact\":"<<targetTrial.canary<<",\"verified_pixels\":"<<targetTrial.pixelsVerified<<",\"render_replayed\":false,\"camera_written\":false}\n";}
  if(capture.ready.load(std::memory_order_acquire)){
   const auto folder=std::filesystem::path(config.reportPath).parent_path();std::ofstream meta(folder/L"native-color.json");meta<<"{\"width\":"<<capture.width<<",\"height\":"<<capture.height<<",\"format\":"<<capture.format<<",\"samples\":"<<capture.samples<<",\"d3d9ex_known\":"<<(capture.exKnown?"true":"false")<<",\"d3d9ex\":"<<(capture.isEx?"true":"false")<<",\"hresult\":"<<capture.result<<"}\n";
