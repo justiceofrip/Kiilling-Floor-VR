@@ -29,6 +29,11 @@ int Produce(const std::wstring& token){
  Require(frame.spaceGeneration==Generation&&frame.predictedNs==Predicted,"Controller 64-bit identity truncated");Require(frame.hands[0].gripValid&&frame.hands[1].aimValid&&frame.hands[0].menu&&frame.hands[1].trigger==.7f&&frame.hands[1].gripPose.position.x==.25f,"Controller values changed in transport");
  Require(frame.hands[0].primary&&frame.hands[0].triggerTouchActive&&frame.hands[0].triggerTouched&&frame.hands[0].thumbTouchActive&&!frame.hands[0].thumbTouched&&frame.hands[1].thumbTouched,"Capacitive/face input changed in transport");
  Require(endpoint.SendHaptics(sequence,{xr::HapticPulse{.8f,25},xr::HapticPulse{2,500}})==ipc::ChannelResult::Ok,"Return haptics");SetEvent(ack.h);
+ Wait(go.h);Require(endpoint.ReadInput(frame,sequence)==ipc::ChannelResult::Ok,"Read pending-haptic sample");
+ Require(endpoint.SendHaptics(sequence,{xr::HapticPulse{.7f,25},{}})==ipc::ChannelResult::Ok,"Queue left haptic");
+ Require(endpoint.SendHaptics(sequence,{xr::HapticPulse{},xr::HapticPulse{.6f,30}})==ipc::ChannelResult::Ok,"Queue right haptic");SetEvent(ack.h);
+ Wait(go.h);Require(endpoint.ReadInput(frame,sequence)==ipc::ChannelResult::Ok,"Read next haptic sample");
+ Require(endpoint.SendHaptics(sequence,{xr::HapticPulse{},xr::HapticPulse{.4f,15}})==ipc::ChannelResult::Ok,"Queue independent right haptic");SetEvent(ack.h);
  Wait(go.h);const auto contentionStart=GetTickCount64();
  Require(endpoint.ReadInput(frame,sequence)==ipc::ChannelResult::Busy&&Neutral(frame)&&sequence==0,"Contended read did not fail neutral");
  Require(GetTickCount64()-contentionStart<100,"Input mutex wait was unbounded");SetEvent(ack.h);
@@ -46,7 +51,12 @@ int wmain(int argc,wchar_t** argv){try{
  Require(argc==3&&std::wstring(argv[1])==L"--producer-exe","Usage: KFVRInputProbe --producer-exe path");const auto exe=std::filesystem::absolute(argv[2]);DWORD type=0;Require(GetBinaryTypeW(exe.c_str(),&type),"Read input producer architecture");
  ipc::FrameChannel host;Require(host.CreateHost(),"Create input host");Handle go{CreateEventW(nullptr,FALSE,FALSE,Name(host.Token(),L".go").c_str())},ack{CreateEventW(nullptr,FALSE,FALSE,Name(host.Token(),L".ack").c_str())};Require(go.h&&ack.h,"Create input-test events");Child child(exe,host.Token());Wait(ack.h);Require(host.Connected(),"Input producer handshake");
  auto frame=Sample();Send(host,frame);SetEvent(go.h);Wait(ack.h);auto feedback=host.ReceiveHaptics();Require(feedback[0].amplitude==.8f&&feedback[0].milliseconds==25&&feedback[1].amplitude==1&&feedback[1].milliseconds==250,"Cross-process haptics lost or out of bounds");Require(host.ReceiveHaptics()[0].milliseconds==0,"Haptic pulse replayed");
- Handle contested{OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,(L"Local\\KFVR.Control.v2."+host.Token()+L".mutex").c_str())};
+ Send(host,frame);SetEvent(go.h);Wait(ack.h);feedback=host.ReceiveHaptics();
+ Require(feedback[0].amplitude==.7f&&feedback[0].milliseconds==25&&feedback[1].amplitude==.6f&&feedback[1].milliseconds==30,"Pending hands overwrote each other");
+ Require(host.ReceiveHaptics()[0].milliseconds==0,"Merged haptic replayed");
+ Send(host,frame);SetEvent(go.h);Wait(ack.h);feedback=host.ReceiveHaptics();
+ Require(feedback[0].milliseconds==0&&feedback[1].amplitude==.4f&&feedback[1].milliseconds==15,"Consumed left haptic was replayed by right event");
+ Handle contested{OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,(L"Local\\KFVR.Control.v3."+host.Token()+L".mutex").c_str())};
  Require(contested.h&&WaitForSingleObject(contested.h,100)==WAIT_OBJECT_0,"Hold input mutex for contention test");
  SetEvent(go.h);Wait(ack.h);Require(ReleaseMutex(contested.h),"Release contended input mutex");
  SetEvent(go.h);Wait(ack.h);
@@ -54,5 +64,5 @@ int wmain(int argc,wchar_t** argv){try{
  frame.focused=true;++frame.spaceGeneration;Send(host,frame);SetEvent(go.h);Wait(ack.h);Require(host.ReceiveHaptics()[0].milliseconds==0,"Old feedback survived recenter");
  frame.hands[0].gripPose.position.x=std::numeric_limits<float>::quiet_NaN();Send(host,frame,ipc::ChannelResult::Invalid);SetEvent(go.h);Wait(ack.h);
  host.Close();SetEvent(go.h);Wait(ack.h);child.Wait();
- std::cout<<"{\"state\":\"verified\",\"host_bits\":"<<sizeof(void*)*8<<",\"producer_bits\":"<<(type==SCS_32BIT_BINARY?32:64)<<",\"controller_roundtrip\":true,\"capacitive_roundtrip\":true,\"haptic_roundtrip\":true,\"input_expiration\":true,\"input_contention_bounded\":true,\"focus_loss_without_eye_frame\":true,\"recenter\":true,\"invalid_pose_release\":true,\"host_close_release\":true,\"game_connected\":false,\"headset_used\":false}\n";return 0;
+ std::cout<<"{\"state\":\"verified\",\"host_bits\":"<<sizeof(void*)*8<<",\"producer_bits\":"<<(type==SCS_32BIT_BINARY?32:64)<<",\"controller_roundtrip\":true,\"capacitive_roundtrip\":true,\"haptic_roundtrip\":true,\"pending_hands_preserved\":true,\"consumed_feedback_not_replayed\":true,\"input_expiration\":true,\"input_contention_bounded\":true,\"focus_loss_without_eye_frame\":true,\"recenter\":true,\"invalid_pose_release\":true,\"host_close_release\":true,\"game_connected\":false,\"headset_used\":false}\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

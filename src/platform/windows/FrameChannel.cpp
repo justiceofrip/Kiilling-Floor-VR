@@ -13,7 +13,7 @@ struct Handle {
     void Set(HANDLE value){if(h)CloseHandle(h);h=value;}
 };
 struct alignas(8) Shared {
-    std::uint32_t magic=0x3243464b,version=2,bytes=784,reserved0=0;
+    std::uint32_t magic=0x3243464b,version=3,bytes=784,reserved0=0;
     std::array<std::uint8_t,16> session{};
     std::uint32_t hostPid=0,producerPid=0;
     std::uint64_t hostStarted=0,producerStarted=0;
@@ -40,7 +40,7 @@ struct FrameChannel::State {
     std::int64_t frequency=0;
     ~State(){if(shared)UnmapViewOfFile(shared);}
     bool Header()const {
-        if(shared->magic!=0x3243464b||shared->version!=2||shared->bytes!=sizeof(Shared)||shared->session!=session||shared->reserved0||!shared->hostPid||!shared->hostStarted)return false;
+        if(shared->magic!=0x3243464b||shared->version!=3||shared->bytes!=sizeof(Shared)||shared->session!=session||shared->reserved0||!shared->hostPid||!shared->hostStarted)return false;
         for(auto v:shared->reserved)if(v)return false;
         return std::uint32_t(shared->slot.phase)<=std::uint32_t(Phase::Closed)&&!shared->slot.reserved&&shared->slot.consumed<=1;
     }
@@ -76,7 +76,7 @@ const std::wstring& FrameChannel::Token()const noexcept{return token_;}
 bool FrameChannel::CreateHost()noexcept {
     Close();try {
         auto s=std::make_unique<State>();s->host=true;const auto token=NewToken();if(!TokenBytes(token,s->session))return false;
-        const auto prefix=L"Local\\KFVR.Control.v2."+token;
+        const auto prefix=L"Local\\KFVR.Control.v3."+token;
         s->mutex.h=CreateMutexW(nullptr,FALSE,(prefix+L".mutex").c_str());if(!s->mutex.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
         s->response.h=CreateEventW(nullptr,FALSE,FALSE,(prefix+L".response").c_str());if(!s->response.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
         s->mapping.h=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Shared),(prefix+L".map").c_str());if(!s->mapping.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
@@ -88,7 +88,7 @@ bool FrameChannel::CreateHost()noexcept {
 }
 bool FrameChannel::ConnectProducer(const std::wstring& token)noexcept {
     Close();try {
-        auto s=std::make_unique<State>();if(!TokenBytes(token,s->session))return false;const auto prefix=L"Local\\KFVR.Control.v2."+token;
+        auto s=std::make_unique<State>();if(!TokenBytes(token,s->session))return false;const auto prefix=L"Local\\KFVR.Control.v3."+token;
         s->mutex.h=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,(prefix+L".mutex").c_str());if(!s->mutex.h)return false;
         s->response.h=OpenEventW(EVENT_MODIFY_STATE|SYNCHRONIZE,FALSE,(prefix+L".response").c_str());if(!s->response.h)return false;
         s->mapping.h=OpenFileMappingW(FILE_MAP_READ|FILE_MAP_WRITE,FALSE,(prefix+L".map").c_str());if(!s->mapping.h)return false;
@@ -182,15 +182,16 @@ ChannelResult FrameChannel::ReadInput(xr::ControllerFrame& frame,std::uint64_t& 
  return DecodeControls(s.shared->input,Now(),frame,sequence)?ChannelResult::Ok:ChannelResult::Invalid;
 }
 ChannelResult FrameChannel::SendHaptics(std::uint64_t sequence,const std::array<xr::HapticPulse,2>& pulses)noexcept{
- if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;State::Lock lock(s);
+ if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;State::Lock lock(s,1);
  if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;if(!s.Peer())return ChannelResult::Closed;
  if(sequence!=s.shared->input.sequence||s.hapticSequence==UINT64_MAX)return ChannelResult::Invalid;
  HapticWire wire{};if(!EncodeHaptics(s.shared->input,s.hapticSequence+1,Now(),pulses,wire))return ChannelResult::Invalid;
+ CoalesceHaptics(s.shared->input,Now(),s.shared->haptics,wire);
  ++s.hapticSequence;s.shared->haptics=wire;return ChannelResult::Ok;
 }
 std::array<xr::HapticPulse,2> FrameChannel::ReceiveHaptics()noexcept{
  std::array<xr::HapticPulse,2> pulses{};if(!state_||!state_->host)return pulses;auto& s=*state_;State::Lock lock(s);
- if(lock&&s.Peer())DecodeHaptics(s.shared->haptics,s.shared->input,Now(),s.lastHaptic,pulses);return pulses;
+ if(lock&&s.Peer()&&DecodeHaptics(s.shared->haptics,s.shared->input,Now(),s.lastHaptic,pulses))s.shared->haptics={};return pulses;
 }
 
 }

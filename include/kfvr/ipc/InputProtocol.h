@@ -28,4 +28,6 @@ bool EncodeControls(const xr::ControllerFrame&,std::uint64_t sequence,std::int64
 bool DecodeControls(const ControlWire&,std::int64_t now,xr::ControllerFrame&,std::uint64_t& sequence) noexcept;
 bool EncodeHaptics(const ControlWire&,std::uint64_t sequence,std::int64_t now,const std::array<xr::HapticPulse,2>&,HapticWire&) noexcept;
 bool DecodeHaptics(const HapticWire&,const ControlWire&,std::int64_t now,std::uint64_t& lastSequence,std::array<xr::HapticPulse,2>&) noexcept;
+// Merge unread feedback without extending either event's lifetime.
+bool CoalesceHaptics(const ControlWire&,std::int64_t now,const HapticWire& pending,HapticWire& fresh) noexcept;
 }

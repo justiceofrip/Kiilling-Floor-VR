@@ -41,4 +41,16 @@ bool DecodeHaptics(const HapticWire& wire,const ControlWire& input,std::int64_t 
  for(unsigned hand=0;hand<2;++hand)if(frame.hands[hand].gripValid)out[hand]={wire.hands[hand].amplitude,wire.hands[hand].milliseconds};
  last=wire.sequence;return true;
 }
+bool CoalesceHaptics(const ControlWire& input,std::int64_t now,const HapticWire& pending,HapticWire& fresh)noexcept{
+ std::uint64_t last=0;std::array<xr::HapticPulse,2> old{};
+ if(pending.sequence>=fresh.sequence||!DecodeHaptics(pending,input,now,last,old))return false;
+ bool carried=false;
+ for(unsigned hand=0;hand<2;++hand)if(old[hand].milliseconds){
+  fresh.hands[hand].amplitude=std::max(fresh.hands[hand].amplitude,old[hand].amplitude);
+  fresh.hands[hand].milliseconds=std::max(fresh.hands[hand].milliseconds,old[hand].milliseconds);carried=true;
+ }
+ if(carried)fresh.expiresQpc=std::min(fresh.expiresQpc,pending.expiresQpc);
+ return carried;
+}
+
 }

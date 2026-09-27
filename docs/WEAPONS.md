@@ -87,7 +87,7 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.GoldenM79GrenadeLauncher | BreakActionLauncher | 1 | 0.009999999776482582 | Pending interaction/asset validation |
 | KFMod.CamoM32GrenadeLauncher | CylinderLauncher | 6 | 1.6339999437332153 | Pending interaction/asset validation |
 | KFMod.Axe | Melee | 0 | 0.0 | Pending interaction/asset validation |
-| KFMod.knife | Melee | 0 | 0.0 | Pending interaction/asset validation |
+| KFMod.knife | Melee | 0 | 0.0 | Live tracked blade/swing/contact fixture passed; wearer and zed/perk calibration pending |
 | KFMod.Machete | Melee | 0 | 0.0 | Pending interaction/asset validation |
 | KFMod.StunNade | Throwable | ? | ? | Pending interaction/asset validation |
 | KFMod.Claws | Melee | ? | ? | Pending interaction/asset validation |

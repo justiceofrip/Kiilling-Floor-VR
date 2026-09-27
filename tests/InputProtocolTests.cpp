@@ -21,5 +21,13 @@ int main(){
  auto recentered=wire;++recentered.spaceGeneration;CHECK(!ipc::DecodeHaptics(feedback,recentered,500,last,pulses));auto earlier=wire;--earlier.sequence;CHECK(!ipc::DecodeHaptics(feedback,earlier,500,last,pulses));
  auto later=wire;++later.sequence;CHECK(ipc::DecodeHaptics(feedback,later,500,last,pulses));last=0;feedback.hands[0].milliseconds=251;CHECK(!ipc::DecodeHaptics(feedback,wire,500,last,pulses));
  CHECK(!ipc::EncodeHaptics(wire,2,1000,{},feedback));CHECK(ipc::EncodeHaptics(neutral,2,500,{xr::HapticPulse{1,30},xr::HapticPulse{1,30}},feedback)&&feedback.hands[0].amplitude==0&&feedback.hands[1].amplitude==1);
+ // Separate pending hands survive coalescing; consumed/expired data cannot replay.
+ ipc::HapticWire pending,fresh;CHECK(ipc::EncodeHaptics(wire,3,500,{xr::HapticPulse{.4f,20},{}},pending));
+ auto newer=wire;newer.sequence++;newer.expiresQpc+=100;
+ CHECK(ipc::EncodeHaptics(newer,4,501,{xr::HapticPulse{},xr::HapticPulse{.8f,40}},fresh));
+ CHECK(ipc::CoalesceHaptics(newer,501,pending,fresh));CHECK(fresh.hands[0].milliseconds==20&&fresh.hands[1].milliseconds==40&&fresh.expiresQpc==pending.expiresQpc);
+ auto preserved=fresh;CHECK(!ipc::CoalesceHaptics(newer,wire.expiresQpc,pending,fresh));CHECK(fresh.expiresQpc==preserved.expiresQpc);
+ CHECK(!ipc::CoalesceHaptics(recentered,501,pending,fresh));
+ CHECK(!ipc::CoalesceHaptics(newer,501,{},fresh));
  std::puts("Controller wire: 64-bit identity, focus/tracking loss, stale release, recenter and one-shot feedback verified");return 0;
 }

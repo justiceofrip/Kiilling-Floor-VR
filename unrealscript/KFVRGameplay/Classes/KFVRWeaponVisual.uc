@@ -2,6 +2,8 @@
 // the independent stereo world views. Asset coordinates are measured at runtime.
 class KFVRWeaponVisual extends Actor;
 var Weapon SourceWeapon;
+var vector BladeAxis;
+var name TipBone;
 var vector PalmLocal, TipLocal, MagazineLocal, SlideLocal;
 var float ModelUnitsPerMetre, BoneTranslationScale;
 var vector MagazineX,MagazineY,MagazineZ,SupportLocal;
@@ -19,8 +21,18 @@ simulated function bool Initialize(Weapon Source)
     SetDrawScale(1.0); SetDrawScale3D(vect(1,1,1));
     if (!HasAnim('Idle')) return false;
     PlayAnim('Idle',0.0,0.0); SetAnimFrame(0.0); StopAnimating(); BoneRefresh();
-    Palm=GetBoneCoords('Hands_RArmPalm'); Tip=GetBoneCoords('tip');
+    TipBone='tip';
+    if (KFVRTrackedKnife(Source)!=None) TipBone='knife';
+    Palm=GetBoneCoords('Hands_RArmPalm'); Tip=GetBoneCoords(TipBone);
     PalmLocal=Palm.Origin; TipLocal=Tip.Origin;
+    if (KFVRTrackedKnife(Source)!=None)
+    {
+        BladeAxis=Normal(Tip.ZAxis);
+        // Authored provisional 20 cm blade contact endpoint from the real knife bone.
+        // The shipped knife has no independent tip bone; visual/wearer tuning remains.
+        TipLocal+=BladeAxis*60.0;
+        Log("KFVR_KNIFE_CAL bone=" $ Tip.Origin $ " x=" $ Tip.XAxis $ " y=" $ Tip.YAxis $ " z=" $ Tip.ZAxis);
+    }
     Part=GetBoneCoords('Hands_LArmPalm'); SupportLocal=Part.Origin;
     MagazineBone=class'KFVRWeaponProfile'.static.MagazineBone(KFWeapon(Source));
     ActionBone=class'KFVRWeaponProfile'.static.ActionBone(KFWeapon(Source));

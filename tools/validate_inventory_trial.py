@@ -10,9 +10,14 @@ def validate(folder):
   times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
   return [r for r in rows if times and min(times)+150<=r['uptime_ms']<=max(times)]
  checks={};rigs=objects('KFVRWeaponRig');start,end=rigs[0],rigs[-1]
+ single_addresses={o['address'] for row in rows for o in row['objects'] if o['type']=='KFVRTrackedSingle'}
+ preface=objects('KFVRWeaponRig',phase(0))
+ if not preface:raise ValueError('Inventory trial is missing its initial draw observation')
+ preface_draw=preface[0]['SwitchCount']-start['SwitchCount']
+ checks['preface_selects_pistol']=preface[0]['Gun'] in single_addresses and not preface[0]['bHolstered']
  checks['one_stock_use_request']=end['UseCount']-start['UseCount']==1
- checks['three_owned_weapons']=start['InventoryCount']==end['InventoryCount']==3
- checks['three_holster_switches']=end['SwitchCount']-start['SwitchCount']==3 and end['ActiveIndex']==start['ActiveIndex']
+ checks['four_owned_weapons']=start['InventoryCount']==end['InventoryCount']==4
+ checks['three_holster_switches']=end['SwitchCount']-start['SwitchCount']==3+preface_draw and end['Gun'] in {o['address'] for r in rows for o in r['objects'] if o['type']=='KFVRTrackedSingle'}
  checks['three_reload_requests']=end['ReloadCount']-start['ReloadCount']==3
  totalshots=0
  for typ,minimum,maximum,wait,final_loaded in [('KFVRTrackedSingle',3,3,4,13),('KFVRTrackedDeagle',1,1,11,8),('KFVRTrackedBullpup',3,15,18,40)]:
@@ -25,12 +30,12 @@ def validate(folder):
  lost=objects('KFVRWeaponRig',phase(23));held=objects('KFVRWeaponRig',phase(24))
  checks['focus_loss_stops']=lost and all(not r['bTracking'] and not r['bFiring'] for r in lost)
  checks['held_trigger_cannot_rearm']=held and all(not r['bTriggerArmed'] and not r['bFiring'] and r['TraceCount']==end['TraceCount']-1 for r in held)
- checks['feedback_per_shot_and_draw']=json.loads((folder/'receiver.json').read_text())['haptic_events']==totalshots+4
+ checks['feedback_per_shot_and_draw']=json.loads((folder/'receiver.json').read_text())['haptic_pulses']==totalshots+4+preface_draw
  support=objects('KFVRWeaponRig',phase(16))
  checks['support_hand_grabbed']=end['SupportGrabs']-start['SupportGrabs']==1
  checks['two_hand_aim_alignment']=bool(support) and all(r['bSupportHeld'] and r['SupportDirectionDot']>.999 for r in support)
  checks['support_hand_released']=end['SupportReleases']-start['SupportReleases']==1 and not end['bSupportHeld']
- checks['three_calibrated_models']=len({o['address'] for row in rows for o in row['objects'] if o['type']=='KFVRWeaponVisual' and o['values']['bCalibrated']})==3
+ checks['four_calibrated_models']=len({o['address'] for row in rows for o in row['objects'] if o['type']=='KFVRWeaponVisual' and o['values']['bCalibrated']})==4
  hands=objects('KFVRHandVisual');posed=[h for h in hands if h['PoseFrames']>0]
  checks['both_palms_tracked']={h['bLeftHand'] for h in posed}=={True,False} and max(h['PalmError'] for h in posed)<.05
  checks['clean_input_release']=not end['bTracking'] and not end['bFiring']

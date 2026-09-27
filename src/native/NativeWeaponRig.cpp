@@ -24,7 +24,7 @@ static_assert(sizeof(Packet)==124&&offsetof(Packet,headPosition)==88&&offsetof(P
 std::atomic<bool> stopped=false;std::atomic<unsigned> users=0;
 struct Use {Use(){users.fetch_add(1);}~Use(){users.fetch_sub(1);}};
 NativeProbeConfig config{};runtime::TrackingFrame tracking{};math::Vec3 origin{},pawnOrigin{};
-unsigned feedbackSerial=0,haptics=0;
+unsigned feedbackSerial=0,leftFeedbackSerial=0,rightFeedbackSerial=0,haptics=0;
 DWORD thread=0;bool anchor=false;unsigned updates=0,valid=0,invalid=0,failed=0;int serial=0;
 struct Row {Packet packet;};std::array<Row,1000> rows{};unsigned count=0;
 bool Read(unsigned at,void* p,unsigned bytes){SIZE_T n=0;return at>=0x10000&&ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(at),p,bytes,&n)&&n==bytes;}
@@ -36,7 +36,7 @@ std::optional<ue2::Rotator> Rotation(const math::Matrix4& m){
  auto units=[](double x){return int(std::lround(x*65536/(2*std::numbers::pi)));};return ue2::Rotator{units(pitch),units(yaw),units(roll)};
 }
 }
-void ConfigureWeaponRig(const NativeProbeConfig& c){config=c;if(c.weaponTrial)feedbackSerial=U32(c.rig+c.rigFeedbackOffset);}
+void ConfigureWeaponRig(const NativeProbeConfig& c){config=c;if(c.weaponTrial){feedbackSerial=U32(c.rig+c.rigFeedbackOffset);leftFeedbackSerial=U32(c.rig+c.rigFeedbackOffset+20);rightFeedbackSerial=U32(c.rig+c.rigFeedbackOffset+24);}}
 void CaptureWeaponAnchor(void* scene,const runtime::TrackingFrame& frame){
  if(!config.weaponTrial)return;const auto at=reinterpret_cast<unsigned>(scene),pawn=U32(config.controller+config.pawnOffset);
  if(!pawn||!Read(at+0x194,&origin,12)||!Read(pawn+config.locationOffset,&pawnOrigin,12)){anchor=false;return;}
@@ -64,12 +64,13 @@ void UpdateWeaponRig(void* actor,void* function,bool active)noexcept {
    }
   }
  }
- struct Feedback{unsigned serial;float left,right;int leftMs,rightMs;};static_assert(sizeof(Feedback)==20);
+ struct Feedback{unsigned serial;float left,right;int leftMs,rightMs;unsigned leftSerial,rightSerial;};static_assert(sizeof(Feedback)==28);
  Feedback feedback{};
  if(Read(config.rig+config.rigFeedbackOffset,&feedback,sizeof(feedback))&&feedback.serial!=feedbackSerial){
-  feedbackSerial=feedback.serial;
+  const bool leftChanged=feedback.leftSerial!=leftFeedbackSerial,rightChanged=feedback.rightSerial!=rightFeedbackSerial;
+  feedbackSerial=feedback.serial;leftFeedbackSerial=feedback.leftSerial;rightFeedbackSerial=feedback.rightSerial;
   if(playing&&controls.focused&&sequence&&(packet.flags&3)&&std::isfinite(feedback.left)&&std::isfinite(feedback.right)&&feedback.left>=0&&feedback.left<=1&&feedback.right>=0&&feedback.right<=1&&feedback.leftMs>=0&&feedback.leftMs<=100&&feedback.rightMs>=0&&feedback.rightMs<=100){
-   if(SendEyeBridgeHaptics(sequence,{xr::HapticPulse{feedback.left,unsigned(feedback.leftMs)},xr::HapticPulse{feedback.right,unsigned(feedback.rightMs)}}))++haptics;
+   if(SendEyeBridgeHaptics(sequence,{leftChanged?xr::HapticPulse{feedback.left,unsigned(feedback.leftMs)}:xr::HapticPulse{},rightChanged?xr::HapticPulse{feedback.right,unsigned(feedback.rightMs)}:xr::HapticPulse{}}))++haptics;
   }
  }
  SIZE_T wrote=0;const bool ok=WriteProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(config.rig+config.rigTrackingOffset),&packet,sizeof(packet),&wrote)&&wrote==sizeof(packet);

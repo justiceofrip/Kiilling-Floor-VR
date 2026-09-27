@@ -40,7 +40,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<15I',1112,11,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
+  p=snapshot['properties'];config=struct.pack('<15I',1112,12,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
   images={}
   def installed_image(file):
    if file not in images:
@@ -130,8 +130,8 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
     if row['class']!=expected or struct.unpack_from('<II',data,56)!=(1,size) or struct.unpack_from('<I',data,76)[0]!=at:raise ValueError('Tracked weapon member mismatch: '+name)
    feedback=next(row for row in observer.rows if row['class']=='StructProperty' and row['name']=='Feedback' and row['outer']=='KFVRWeaponRig')
    data=observer.read(int(feedback['address'],16),80);feedback_offset=struct.unpack_from('<I',data,76)[0]
-   if struct.unpack_from('<II',data,56)!=(1,20) or not 44<=feedback_offset<=8192:raise ValueError('Invalid weapon feedback packet')
-   for name,at,typ in [('Serial',0,'IntProperty'),('LeftAmplitude',4,'FloatProperty'),('RightAmplitude',8,'FloatProperty'),('LeftMs',12,'IntProperty'),('RightMs',16,'IntProperty')]:
+   if struct.unpack_from('<II',data,56)!=(1,28) or not 44<=feedback_offset<=8192:raise ValueError('Invalid weapon feedback packet')
+   for name,at,typ in [('Serial',0,'IntProperty'),('LeftAmplitude',4,'FloatProperty'),('RightAmplitude',8,'FloatProperty'),('LeftMs',12,'IntProperty'),('RightMs',16,'IntProperty'),('LeftSerial',20,'IntProperty'),('RightSerial',24,'IntProperty')]:
     row=next(row for row in observer.rows if row['name']==name and observer.path(int(row['address'],16)).endswith('KFVRWeaponRig.FeedbackPacket.'+name))
     data=observer.read(int(row['address'],16),80)
     if row['class']!=typ or struct.unpack_from('<II',data,56)!=(1,4) or struct.unpack_from('<I',data,76)[0]!=at:raise ValueError('Weapon feedback member mismatch')
@@ -149,6 +149,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   (directory/'payload.json').write_text(json.dumps(dict(dll_sha256=hashlib.sha256(dll.read_bytes()).hexdigest(),launcher_sha256=hashlib.sha256(launcher.read_bytes()).hexdigest(),targets=evidence),indent=2))
   result=subprocess.run([str(launcher),'--game',str(game),'--dll',str(dll),'--request',str(request_path)],capture_output=True,text=True,timeout=duration_ms/1000+20)
   (directory/'launcher.txt').write_text(result.stdout+result.stderr)
+  if result.returncode:raise RuntimeError('Native launcher failed ('+str(result.returncode)+'): '+(result.stdout+result.stderr).strip()+'; evidence: '+str(directory))
   restored=all(observer.read(e['address'],16).hex()==e['expected'] for e in evidence+input_evidence)
   summary=dict(pid=pid,launcher_exit=result.returncode,entry_bytes_restored=restored,native_trace_modified_game_files=False,development_package_required=weapon_trial,report=str(report_path),module_resident_until_exit=True)
   if report_path.exists():

@@ -1,6 +1,6 @@
 # Tracked weapon and hand development
 
-This increment enables the **9mm, Deagle and Bullpup** in an explicitly loaded standalone mutator. Both controllers drive separate KF hand/forearm actors with six-degree-of-freedom poses. Oculus Touch capacitance supplies index/thumb contact, with trigger/grip analog values and fallback on profiles without capacitance. This is controller-driven hand animation, not optical bare-hand tracking.
+This increment enables the **9mm, Deagle, Bullpup and knife** in an explicitly loaded standalone mutator. Both controllers drive separate KF hand/forearm actors with six-degree-of-freedom poses. Oculus Touch capacitance supplies index/thumb contact, with trigger/grip analog values and fallback on profiles without capacitance. This is controller-driven hand animation, not optical bare-hand tracking.
 
 ## Run
 
@@ -15,7 +15,8 @@ Close an existing KF process before staging a changed package:
 The normal launcher retains runtime-recommended eye resolution, left-stick locomotion, right-stick snap turns and the bounded 120-second session. Weapon mode requires the installed package to match this build. No wearer test was performed during unattended development.
 
 - Move/rotate the right controller to aim the pistol independently of the head and desktop camera. Right trigger fires. The pistol starts in hand.
-- Hip/shoulder slots follow body heading: 9mm at the right waist, Deagle at the left waist, Bullpup over the right shoulder. Squeeze the right grip near a slot to draw that owned weapon. Release it near the active slot to stow. Stowed weapons cannot fire. Left X cycles supported inventory weapons.
+- Hip/shoulder slots follow body heading: 9mm at the right waist, Deagle at the left waist, Bullpup over the right shoulder, knife over the left shoulder. Squeeze the right grip near a slot to draw that owned weapon. Release it near the active slot to stow. Stowed weapons cannot fire. Left X cycles supported inventory weapons.
+- The knife uses physical swings after a short settle outside its holster. At least 20 cm of travel and 1.2 m/s are required; retract before another strike. Walking/snap turns do not count. Its blade endpoint is a provisional 20 cm offset from the installed knife bone and still needs wearer calibration. No trigger attack is generated while the physical knife is active.
 - Right A calls KF's normal Use interaction once per press; a real door/trader interaction and VR menu navigation are still unverified.
 - Right B performs the stock timed reload. Its ammunition/perk timing remains the normal KF path. The idle world proxy does not yet display those timed reload animations.
 - With the Bullpup, squeeze the left grip near the foregrip to support the rifle. Both hand positions then determine its aim, with dominant-hand roll retained. Release the left grip to return to one-hand aiming.
@@ -30,13 +31,13 @@ The normal launcher retains runtime-recommended eye resolution, left-stick locom
 
 ## Implementation
 
-Native request ABI v11 validates the installed gameplay package, current private player, rig ownership, every member of the 124-byte tracking structure and 20-byte feedback structure. The publisher writes only its own tracking field at the existing game-thread rig Tick. No additional simulation tick is invoked. Body yaw, the camera reference and current pawn displacement align both hands with the native stereo world.
+Native request ABI v12 validates the installed gameplay package, current private player, rig ownership, every member of the 124-byte tracking structure and 28-byte feedback structure. The publisher writes only its own tracking field at the existing game-thread rig Tick. No additional simulation tick is invoked. Body yaw, the camera reference and current pawn displacement align both hands with the native stereo world.
 
 Separate world presentation actors are necessary because the stereo cameras do not run KF's ordinary first-person overlay. The installed weapon meshes are linked at runtime; the 9mm supplies the separate hands; the gun and opposing hand branches are hidden on the appropriate instances. The authored palm offset is measured, rotated and subtracted so the actual palm bone follows the controller. The first-person mesh's provisional scale is 300 asset units/metre, separate from the explicit world scale; hand ergonomics and visual polish still need wearer review.
 
 The derived Single, Deagle and Bullpup weapons/fire modes retain normal native WeaponFire ticking, cadence, perk-modified spread/damage and ammunition consumption. Only the shot origin/direction and VR recoil presentation are replaced. The native AWeapon tick normally releases fire when desktop bFire is zero; the derived ClientStopFire defers that release only while a fresh, armed VR trigger demands fire. Focus loss/holstering invokes the normal StopFire. No persistent writes to desktop fire input are used.
 
-Shots and holster/draw transitions increment a reflected feedback serial. The native bridge sends bounded, one-shot haptic pulses tied to fresh controller input; a newly launched bridge does not replay old events. A stopped or unfocused bridge drops feedback.
+Shots and holster/draw transitions increment separate reflected left/right feedback serials. The native bridge sends bounded, one-shot haptic pulses tied to fresh controller input; a newly launched bridge does not replay old events. A stopped or unfocused bridge drops feedback. Shared-channel v3 coalesces unread hand pulses without extending their original expiry, clears consumed feedback, and never replays a previously consumed opposite-hand pulse.
 
 
 Physical pistol reload authority is game-thread `KFVRMagazineState`, connected through `KFVRManualReload` and the stock `ConsumeAmmo` callback. It retains up to 64 magazine identities, separate loose reserve and chamber state. Stock shots remain responsible for rate, damage and native consumption; the ledger mirrors each successful shot once, then publishes the mechanically loaded count. Pickups adjust the owned budget without silently chambering a round. The standalone script adapter is separate from the portable single/dual C++ prototype and makes no multiplayer authority claim.
@@ -47,7 +48,9 @@ Each inventory weapon retains its own physical ledger across switching. Magazine
 
 `tools/native_bridge_trial.py --pid <current> --game <KF> --weapon` runs synthetic controls against actual KF native rendering. `weapon-validation.json` checks three intended shots/three rounds, normal weapon ticking, aim changes with controller rotation, stow/draw, focus loss, held-trigger rearming, palm placement, finger input changes, feedback and presentation cleanup. Receiver images are genuine native eye renders; this is not a headset comfort/visual acceptance test.
 
-`--inventory` exercises three weapon slots, timed reloads and rifle support; `--reload` and `--deagle-reload` exercise the physical pistol stages, stock shot counts, conservation and magazine bone attachment. Their validators distinguish actual script behavior from packet delivery.
+`--melee` exercises physical knife contacts against an explicit private collision fixture; launch with `Start-KFVRDev.ps1 -Unattended -MeleeTest`. This validates contact dispatch, not live zed/perk outcomes.
+
+`--inventory` exercises the firearm slots alongside the knife, timed reloads and rifle support; `--reload` and `--deagle-reload` exercise the physical pistol stages, stock shot counts, conservation and magazine bone attachment. Their validators distinguish actual script behavior from packet delivery.
 
 `Start-KFVRDev.ps1 -Unattended` additionally auto-readies, provides the three diagnostic weapons, enables god mode, delays zed spawning, and marks the local Steam-stat actor as using cheats. These are explicit test-mode behavior, never multiplayer behavior. The mutator refuses non-standalone worlds. Do not treat this development replacement as a finished pickup/trader/drop/dual-wielding adapter.
 

@@ -19,6 +19,7 @@ struct FeedbackPacket
     var int Serial;
     var float LeftAmplitude, RightAmplitude;
     var int LeftMs, RightMs;
+    var int LeftSerial, RightSerial;
 };
 var TrackingPacket Tracking;
 var FeedbackPacket Feedback;
@@ -28,6 +29,7 @@ var Pawn BoundPawn;
 var KFWeapon InventoryWeapons[8];
 var KFVRWeaponVisual InventoryVisuals[8];
 var int InventorySlots[8];
+var byte InventoryVisualFailed[8];
 var int InventoryCount, ActiveIndex, SwitchCount, ReloadCount;
 var bool bReloadArmed, bReloadPrevious, bCycleArmed, bCyclePrevious;
 var KFVRWeaponVisual Visual;
@@ -36,6 +38,8 @@ var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
 var bool bManualArmed,bManualPrevious,bUseArmed,bUsePrevious;
 var int UseCount;
+var bool bMeleeTest;
+var KFVRMeleeTarget MeleeTarget;
 var bool bSupportHeld,bSupportArmed,bSupportPrevious;
 var int SupportGrabs,SupportReleases,SupportFrames;
 var vector SupportPosition;
@@ -48,15 +52,13 @@ var bool bTracking, bTriggerArmed, bFiring, bHolstered, bGripPrevious, bGripArme
 
 function PulseRight(float Strength, int DurationMs)
 {
-    Feedback.LeftAmplitude=0.0; Feedback.LeftMs=0;
     Feedback.RightAmplitude=FClamp(Strength,0.0,1.0); Feedback.RightMs=Clamp(DurationMs,0,100);
-    Feedback.Serial++;
+    Feedback.RightSerial++; Feedback.Serial++;
 }
 function PulseLeft(float Strength, int DurationMs)
 {
-    Feedback.RightAmplitude=0.0; Feedback.RightMs=0;
     Feedback.LeftAmplitude=FClamp(Strength,0.0,1.0); Feedback.LeftMs=Clamp(DurationMs,0,100);
-    Feedback.Serial++;
+    Feedback.LeftSerial++; Feedback.Serial++;
 }
 function ToggleManualReload()
 {
@@ -87,7 +89,7 @@ function PruneInventory()
         for (J=I;J<InventoryCount-1;J++)
         {
             InventoryWeapons[J]=InventoryWeapons[J+1]; InventoryVisuals[J]=InventoryVisuals[J+1];
-            InventorySlots[J]=InventorySlots[J+1]; InventoryManuals[J]=InventoryManuals[J+1];
+            InventorySlots[J]=InventorySlots[J+1]; InventoryVisualFailed[J]=InventoryVisualFailed[J+1]; InventoryManuals[J]=InventoryManuals[J+1];
         }
         InventoryCount--; InventoryWeapons[InventoryCount]=None; InventoryVisuals[InventoryCount]=None; InventoryManuals[InventoryCount]=None;
     }
@@ -109,7 +111,7 @@ function RegisterWeapon(KFWeapon W, int Slot)
         {
             if (InventoryVisuals[I]!=None) InventoryVisuals[I].Destroy();
             if (InventoryManuals[I]!=None) InventoryManuals[I].Destroy();
-            InventoryManuals[I]=None; InventoryVisuals[I]=None; InventoryWeapons[I]=None;
+            InventoryManuals[I]=None; InventoryVisuals[I]=None; InventoryWeapons[I]=None; InventoryVisualFailed[I]=0;
         }
         if (ManualReload!=None) { ManualReload.Destroy(); ManualReload=None; }
         if (LeftHand!=None) { LeftHand.Destroy(); LeftHand=None; }
@@ -121,7 +123,7 @@ function RegisterWeapon(KFWeapon W, int Slot)
     if (KFVRTrackedSingle(W)!=None) HandSource=W;
     for (I=0;I<InventoryCount;I++) if (InventoryWeapons[I]==W) return;
     if (InventoryCount>=8) return;
-    InventoryWeapons[InventoryCount]=W; InventorySlots[InventoryCount]=Slot;
+    InventoryWeapons[InventoryCount]=W; InventorySlots[InventoryCount]=Slot; InventoryVisualFailed[InventoryCount]=0;
     InventoryCount++;
     if (Gun==None) { Gun=W; ActiveIndex=InventoryCount-1; }
 }
@@ -132,14 +134,16 @@ function vector DockPosition(int Slot)
     local vector X,Y,Z;
     GetAxes(Tracking.BodyRotation,X,Y,Z);
     if (Slot==1) return Tracking.HeadPosition+(-Y*0.22-Z*0.62-X*0.05)*Tracking.UnitsPerMetre;
+    if (Slot==3) return Tracking.HeadPosition+(-Y*0.22-Z*0.15-X*0.18)*Tracking.UnitsPerMetre;
     if (Slot==2) return Tracking.HeadPosition+(Y*0.22-Z*0.15-X*0.18)*Tracking.UnitsPerMetre;
     return Tracking.HeadPosition+(Y*0.22-Z*0.62-X*0.05)*Tracking.UnitsPerMetre;
 }
 function SelectInventoryWeapon(int Index)
 {
     local KFWeapon Previous;
-    if (Index<0 || Index>=InventoryCount || InventoryWeapons[Index]==None || PC.Pawn==None || InventoryWeapons[Index].Owner!=PC.Pawn) return;
+    if (Index<0 || Index>=InventoryCount || InventoryVisualFailed[Index]!=0 || InventoryWeapons[Index]==None || PC.Pawn==None || InventoryWeapons[Index].Owner!=PC.Pawn) return;
     Previous=Gun;
+    if (KFVRTrackedKnife(Previous)!=None) KFVRTrackedKnife(Previous).ResetMotion();
     if (ManualReload!=None && Previous==ManualReload.Gun) ManualReload.StoreForSwitch();
     if (Previous!=None) { Previous.StopFire(0); Previous.StopFire(1); }
     bFiring=False; bTriggerArmed=False; Recoil=0.0; bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False;
@@ -158,11 +162,11 @@ function UpdateInventoryVisuals()
             if (InventoryVisuals[I]!=None) InventoryVisuals[I].bHidden=True;
             continue;
         }
-        if (InventoryVisuals[I]==None)
+        if (InventoryVisuals[I]==None && InventoryVisualFailed[I]==0)
         {
             InventoryVisuals[I]=Spawn(class'KFVRWeaponVisual',self);
             if (InventoryVisuals[I]!=None && !InventoryVisuals[I].Initialize(InventoryWeapons[I]))
-            { InventoryVisuals[I].Destroy(); InventoryVisuals[I]=None; }
+            { InventoryVisuals[I].Destroy(); InventoryVisuals[I]=None; InventoryVisualFailed[I]=1; }
         }
         if (InventoryVisuals[I]==None) continue;
         if (I!=ActiveIndex || bHolstered)
@@ -215,6 +219,7 @@ function ReleaseInput()
     bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False;
     bManualArmed=False; bManualPrevious=False; bUseArmed=False; bUsePrevious=False;
     if (ManualReload!=None) ManualReload.Suspend();
+    if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
     bReloadArmed=False; bReloadPrevious=False; bCycleArmed=False; bCyclePrevious=False;
     for (I=0;I<InventoryCount;I++) if (InventoryVisuals[I]!=None) InventoryVisuals[I].bHidden=True;
     bTracking=False; bTriggerArmed=False; bGripArmed=False; bGripPrevious=False;
@@ -245,12 +250,17 @@ function Tick(float Delta)
     for (I=0;I<InventoryCount;I++)
         if (PC.Pawn.Weapon==InventoryWeapons[I] && Gun!=InventoryWeapons[I])
         {
+            if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
             if (ManualReload!=None) ManualReload.StoreForSwitch();
             Gun=InventoryWeapons[I]; ActiveIndex=I; ManualReload=InventoryManuals[I]; bFiring=False; bTriggerArmed=False; bHolstered=False;
         }
     if (PC.Pawn.Weapon!=Gun) bHolstered=True;
     UpdateInventoryVisuals();
-    if (Visual==None) { ReleaseInput(); return; }
+    if (Visual==None)
+    {
+        for (I=0;I<InventoryCount;I++) if (InventoryVisuals[I]!=None) { SelectInventoryWeapon(I); break; }
+        if (Visual==None) { ReleaseInput(); return; }
+    }
     if (LeftHand==None)
     {
         LeftHand=Spawn(class'KFVRHandVisual',self);
@@ -274,7 +284,9 @@ function Tick(float Delta)
     if ((Tracking.Flags & 2)==0)
     {
         Visual.bHidden=True; bTriggerArmed=False; bGripArmed=False; bGripPrevious=False;
-        if (bFiring) Gun.StopFire(0); bFiring=False; return;
+        if (bFiring) Gun.StopFire(0); bFiring=False;
+        if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
+        return;
     }
     GetAxes(Tracking.BodyRotation,X,Y,Z);
     HolsterLocation=DockPosition(InventorySlots[ActiveIndex]);
@@ -296,7 +308,15 @@ function Tick(float Delta)
     ReloadDown=(Tracking.Flags & 32)!=0; CycleDown=(Tracking.Flags & 4)!=0;
     ManualDown=(Tracking.Flags & 16)!=0;
     if (!ManualDown) bManualArmed=True;
-    if (bManualArmed && ManualDown && !bManualPrevious) ToggleManualReload();
+    if (bManualArmed && ManualDown && !bManualPrevious)
+    {
+        if (bMeleeTest && KFVRTrackedKnife(Gun)!=None && !bHolstered)
+        {
+            if (MeleeTarget!=None) MeleeTarget.Destroy();
+            MeleeTarget=Spawn(class'KFVRMeleeTarget',self,,MuzzleLocation+X*0.3*Tracking.UnitsPerMetre);
+        }
+        else ToggleManualReload();
+    }
     bManualPrevious=ManualDown;
     if (!ReloadDown) bReloadArmed=True;
     if (!CycleDown) bCycleArmed=True;
@@ -322,11 +342,18 @@ function Tick(float Delta)
     }
     Visual.PoseAt(Position,GunRotation,Tracking.UnitsPerMetre);
     if (ManualReload!=None) ManualReload.Update(Delta);
-    Visual.BoneRefresh(); Muzzle=Visual.GetBoneCoords('tip');
+    Visual.BoneRefresh(); Muzzle=Visual.GetBoneCoords(Visual.TipBone);
     MuzzleLocation=Muzzle.Origin; AimRotation=GunRotation;
+    if (KFVRTrackedKnife(Gun)!=None) MuzzleLocation=Visual.Location+((Visual.TipLocal*Visual.DrawScale)>>GunRotation);
     // A missing tip must not silently turn an invalid origin into a shot.
     if (VSize(MuzzleLocation-Position)>1.4*Tracking.UnitsPerMetre) { ReleaseInput(); return; }
     AppliedFrames++; Recoil=FMax(0.0,Recoil-Delta*0.25);
+    if (KFVRTrackedKnife(Gun)!=None)
+    {
+        MuzzleLocation=Visual.Location+((Visual.TipLocal*Visual.DrawScale)>>GunRotation);
+        KFVRTrackedKnife(Gun).UpdatePhysical(MuzzleLocation);
+        if (bFiring) Gun.StopFire(0); bFiring=False; return;
+    }
     if (Tracking.RightTrigger<0.15) bTriggerArmed=True;
     if (bTriggerArmed && !bHolstered && Tracking.RightTrigger>0.75)
     {
@@ -338,6 +365,7 @@ function Destroyed()
 {
     local int I;
     ReleaseInput();
+    if (MeleeTarget!=None) MeleeTarget.Destroy();
     for (I=0;I<InventoryCount;I++)
     { if (InventoryVisuals[I]!=None) InventoryVisuals[I].Destroy(); if (InventoryManuals[I]!=None) InventoryManuals[I].Destroy(); }
     if (LeftHand!=None) LeftHand.Destroy();

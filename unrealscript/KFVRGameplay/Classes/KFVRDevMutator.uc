@@ -12,6 +12,7 @@ function PostBeginPlay()
 }
 function class<KFWeapon> Replacement(KFWeapon W)
 {
+    if (W.Class==class'Knife') return class'KFVRTrackedKnife';
     if (W.Class==class'Single') return class'KFVRTrackedSingle';
     if (W.Class==class'Deagle') return class'KFVRTrackedDeagle';
     if (W.Class==class'Bullpup') return class'KFVRTrackedBullpup';
@@ -19,6 +20,8 @@ function class<KFWeapon> Replacement(KFWeapon W)
 }
 function bool AttachRig(KFWeapon W)
 {
+    if (KFVRTrackedKnife(W)!=None)
+    { KFVRTrackedKnife(W).VRRig=Rig; Rig.RegisterWeapon(W,3); return True; }
     if (KFVRTrackedSingle(W)!=None)
     { KFVRTrackedSingle(W).VRRig=Rig; Rig.RegisterWeapon(W,0); return True; }
     if (KFVRTrackedDeagle(W)!=None)
@@ -59,7 +62,7 @@ function Timer()
             Rig=Spawn(class'KFVRWeaponRig',PC);
         }
         if (Rig==None) return;
-        Rig.PC=PC;
+        Rig.PC=PC; Rig.bMeleeTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRMELEETEST=1")>=0;
         for (I=PC.Pawn.Inventory; I!=None; I=I.Inventory)
         {
             Old=KFWeapon(I);

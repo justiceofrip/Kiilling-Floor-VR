@@ -62,7 +62,12 @@ def build(game):
  support_match=re.search(r'KFVR_SUPPORT_TEST_RESULT checks=(\d+) failures=0',support_output)
  if support_result.returncode or not support_match:raise RuntimeError('Two-hand pose tests failed; see saved compiler log')
  print('UnrealScript two-hand pose alignment: '+support_match.group(1)+' checks passed')
+ melee_result=subprocess.run([str(system/'ucc.exe'),'KFVRGameplay.KFVRMeleeTests','ini=KFVRMake.ini'],cwd=system,capture_output=True,timeout=90)
+ melee_output=(melee_result.stdout+melee_result.stderr).decode('utf-8',errors='replace');(reports/'unrealscript-melee-tests.log').write_text(melee_output)
+ melee_match=re.search(r'KFVR_MELEE_TEST_RESULT checks=(\d+) failures=0',melee_output)
+ if melee_result.returncode or not melee_match:raise RuntimeError('Physical melee tests failed; see saved compiler log')
+ print('UnrealScript physical melee: '+melee_match.group(1)+' checks passed')
  out=ROOT/'build/unrealscript';out.mkdir(parents=True,exist_ok=True);shutil.copy2(package,out/package.name)
- (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),reload_pose_checks=int(pose_match.group(1)),magazine_checks=int(mag_match.group(1)),support_pose_checks=int(support_match.group(1)),inputs=manifest),indent=2))
+ (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),reload_pose_checks=int(pose_match.group(1)),magazine_checks=int(mag_match.group(1)),support_pose_checks=int(support_match.group(1)),melee_checks=int(melee_match.group(1)),inputs=manifest),indent=2))
 if __name__=='__main__':
  parser=argparse.ArgumentParser();parser.add_argument('--game',type=pathlib.Path,required=True);build(parser.parse_args().game.resolve())
