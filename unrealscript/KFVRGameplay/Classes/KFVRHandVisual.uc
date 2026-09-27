@@ -5,7 +5,8 @@ var name PalmBone;
 var name FingerBones[15];
 var vector PalmWorld, IndexTipWorld;
 var float ThumbCurl, IndexCurl, GripCurl, PalmError;
-var int PoseFrames;
+var int PoseFrames,GripRole;
+var float InputThumbCurl,InputIndexCurl,InputGripCurl;
 simulated function bool InitializeHand(Weapon Source, bool LeftHand)
 {
     local coords C;
@@ -60,7 +61,7 @@ simulated function bool InitializeHand(Weapon Source, bool LeftHand)
     Log("KFVR_HAND_CAL side=" $ LeftHand $ " palm=" $ PalmLocal $ " index=" $ C.Origin $ " X=" $ C.XAxis $ " Y=" $ C.YAxis $ " Z=" $ C.ZAxis);
     return VSize(PalmLocal)>1.0;
 }
-simulated function PoseHand(vector Position, rotator HandRotation, float Units, float Thumb, float Index, float Grip)
+simulated function PoseHand(vector Position, rotator HandRotation, float Units, float Thumb, float Index, float Grip, optional int GripKind)
 {
     local rotator Bend;
     local int Finger,Joint;
@@ -68,6 +69,13 @@ simulated function PoseHand(vector Position, rotator HandRotation, float Units, 
     local vector Forward,Side,Up;
     local coords C,Palm;
     ThumbCurl=FClamp(Thumb,0.0,1.0); IndexCurl=FClamp(Index,0.0,1.0); GripCurl=FClamp(Grip,0.0,1.0);
+    InputThumbCurl=ThumbCurl; InputIndexCurl=IndexCurl; InputGripCurl=GripCurl;
+    GripRole=Clamp(GripKind,0,3);
+    // A latched weapon remains held when the physical grip button is released.
+    // Thumb/index capacitance still layers onto its resting grasp.
+    if (GripRole>0) { GripCurl=FMax(GripCurl,0.72); ThumbCurl=FMax(ThumbCurl,0.35); }
+    if (GripRole==2) IndexCurl=FMax(IndexCurl,0.75);
+    if (GripRole==3) IndexCurl=FMax(IndexCurl,0.45);
     PoseAt(Position,HandRotation,Units);
     Palm=GetBoneCoords(PalmBone);
     for (Finger=0;Finger<5;Finger++)

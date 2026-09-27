@@ -29,7 +29,8 @@ def build(game):
  lines=configuration.splitlines();last=max(i for i,line in enumerate(lines) if line.lower().startswith('editpackages='));lines.insert(last+1,'EditPackages=KFVRGameplay');configuration='\n'.join(lines)+'\n'
  for name in ['KFVRMake.ini','Default.ini','KillingFloor.ini']:(system/name).write_text(configuration)
  shutil.copy2(source/'defuser.ini',system/'User.ini')
- for p in (ROOT/'unrealscript').rglob('*.uc'):
+ for p in (ROOT/'unrealscript').rglob('*'):
+  if not p.is_file() or p.suffix.lower() not in ['.uc','.lwo']:continue
   dest=work/p.relative_to(ROOT/'unrealscript');dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,dest)
  package=system/'KFVRGameplay.u'
  # A single generated file in the checked isolated directory; no game deletion.
@@ -37,7 +38,11 @@ def build(game):
  package.unlink(missing_ok=True)
  reports=ROOT/'reports';reports.mkdir(exist_ok=True)
  for label,args in [('make',['make','ini=KFVRMake.ini']),('ammo-tests',['KFVRGameplay.KFVRAmmoTests','ini=KFVRMake.ini'])]:
-  result=subprocess.run([str(system/'ucc.exe'),*args],cwd=system,capture_output=True,timeout=90)
+  try:result=subprocess.run([str(system/'ucc.exe'),*args,'-unattended'],cwd=system,capture_output=True,timeout=90)
+  except subprocess.TimeoutExpired as error:
+   partial=(error.stdout or b'')+(error.stderr or b'')
+   (reports/('unrealscript-'+label+'-timeout.log')).write_text(partial.decode('utf-8',errors='replace'))
+   raise
   output=(result.stdout+result.stderr).decode('utf-8',errors='replace');(reports/('unrealscript-'+label+'.log')).write_text(output);print('\n'.join(line for line in output[-6500:].splitlines() if 'SteamID' not in line and line.strip()))
   if result.returncode or (label=='make' and not package.exists()) or (label=='ammo-tests' and not re.search(r'KFVR_TEST_RESULT checks=\d+ failures=0',output)):raise RuntimeError(label+' failed; see saved compiler log')
  parity=ROOT/'build/x64/KFVRAmmoParity.exe'

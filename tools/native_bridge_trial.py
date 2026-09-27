@@ -37,6 +37,9 @@ with (folder/'receiver-errors.txt').open('w') as errors:
    else:
     from validate_weapon_trial import validate as validate_weapon
     print(json.dumps(validate_weapon(folder),indent=2))
+  if a.weapon:
+   from validate_status_display import validate as validate_status
+   print(json.dumps(validate_status(folder,inventory=a.inventory,dual=a.dual,belt=a.dual_belt),indent=2))
   print((folder/'receiver.json').read_text());print('Receiver evidence: '+str(folder))
  finally:
   if monitor is not None and monitor.poll() is None:monitor.terminate();monitor.wait(timeout=5)

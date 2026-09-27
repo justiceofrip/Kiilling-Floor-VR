@@ -34,6 +34,8 @@ var int InventoryCount, ActiveIndex, SwitchCount, ReloadCount;
 var bool bReloadArmed, bReloadPrevious, bCycleArmed, bCyclePrevious;
 var KFVRWeaponVisual Visual;
 var KFVRHandVisual LeftHand, RightHand;
+var KFVRStatusDisplay StatusDisplay;
+var bool bStatusFailed;
 var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
 var bool bManualArmed,bManualPrevious,bUseArmed,bUsePrevious;
@@ -231,6 +233,16 @@ function ReleaseInput()
     if (Visual!=None) Visual.bHidden=True;
     if (LeftHand!=None) LeftHand.bHidden=True;
     if (RightHand!=None) RightHand.bHidden=True;
+    if (StatusDisplay!=None) StatusDisplay.bHidden=True;
+}
+function int HandGripRole(bool Left)
+{
+    if (bHolstered || Gun==None) return 0;
+    if (!Left) { if (KFVRTrackedKnife(Gun)!=None) return 2; return 1; }
+    if (KFVRTrackedDualies(Gun)!=None) return 1;
+    if (bSupportHeld) return 3;
+    if (ManualReload!=None && (ManualReload.HeldMagazine>0 || ManualReload.bSlideHeld)) return 3;
+    return 0;
 }
 function Tick(float Delta)
 {
@@ -278,13 +290,20 @@ function Tick(float Delta)
     if (LeftHand!=None)
     {
         LeftHand.bHidden=(Tracking.Flags & 1)==0;
-        if (!LeftHand.bHidden) LeftHand.PoseHand(Tracking.LeftPosition,Tracking.LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl);
+        if (!LeftHand.bHidden) LeftHand.PoseHand(Tracking.LeftPosition,Tracking.LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl,HandGripRole(True));
     }
     if (RightHand!=None)
     {
         RightHand.bHidden=(Tracking.Flags & 2)==0;
-        if (!RightHand.bHidden) RightHand.PoseHand(Tracking.RightPosition,Tracking.RightRotation,Tracking.UnitsPerMetre,Tracking.RightThumb,Tracking.RightIndex,Tracking.RightCurl);
+        if (!RightHand.bHidden) RightHand.PoseHand(Tracking.RightPosition,Tracking.RightRotation,Tracking.UnitsPerMetre,Tracking.RightThumb,Tracking.RightIndex,Tracking.RightCurl,HandGripRole(False));
     }
+    if (StatusDisplay==None && !bStatusFailed)
+    {
+        StatusDisplay=Spawn(class'KFVRStatusDisplay',self);
+        if (StatusDisplay==None) bStatusFailed=True;
+        else if (!StatusDisplay.Initialize(self)) { StatusDisplay.Destroy(); StatusDisplay=None; bStatusFailed=True; }
+    }
+    if (StatusDisplay!=None) StatusDisplay.UpdateDisplay();
     if ((Tracking.Flags & 2)==0)
     {
         Visual.bHidden=True; bTriggerArmed=False; bGripArmed=False; bGripPrevious=False;
@@ -383,6 +402,7 @@ function Destroyed()
     local int I;
     ReleaseInput();
     if (MeleeTarget!=None) MeleeTarget.Destroy();
+    if (StatusDisplay!=None) StatusDisplay.Destroy();
     for (I=0;I<InventoryCount;I++)
     { if (InventoryVisuals[I]!=None) InventoryVisuals[I].Destroy(); if (InventoryManuals[I]!=None) InventoryManuals[I].Destroy(); }
     if (LeftHand!=None) LeftHand.Destroy();
