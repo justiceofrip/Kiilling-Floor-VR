@@ -14,6 +14,7 @@ simulated function bool InitializeHand(Weapon Source, bool LeftHand)
     SetBoneScale(0,1.0,'Hands_LArmCollarbone');
     SetBoneScale(1,1.0,'Hands_RArmCollarbone');
     SetBoneScale(2,0.0,'9mm_Gun');
+    if (KFVRTrackedDualies(Source)!=None) SetBoneScale(3,0.0,'9mm_Gun01');
     if (LeftHand) { PalmBone='Hands_LArmPalm'; SetBoneScale(1,0.0,'Hands_RArmCollarbone'); }
     else { PalmBone='Hands_RArmPalm'; SetBoneScale(0,0.0,'Hands_LArmCollarbone'); }
     // Reset placement before capturing the other palm's authored offset.

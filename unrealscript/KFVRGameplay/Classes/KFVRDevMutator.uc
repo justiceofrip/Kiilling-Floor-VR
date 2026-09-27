@@ -1,17 +1,19 @@
 // Standalone-only development entry point. No player config or original package edits.
 class KFVRDevMutator extends Mutator;
 var KFVRWeaponRig Rig;
-var bool bUnattended;
+var bool bUnattended,bDualTest;
 var Pawn TestPawn;
 function PostBeginPlay()
 {
     Super.PostBeginPlay();
     if (Level.NetMode!=NM_Standalone) { Destroy(); return; }
     bUnattended=InStr(Caps(Level.GetLocalURL()),"KFVRUNATTENDED=1")>=0;
+    bDualTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRDUALTEST=1")>=0;
     SetTimer(0.5,True);
 }
 function class<KFWeapon> Replacement(KFWeapon W)
 {
+    if (W.Class==class'Dualies') return class'KFVRTrackedDualies';
     if (W.Class==class'Knife') return class'KFVRTrackedKnife';
     if (W.Class==class'Single') return class'KFVRTrackedSingle';
     if (W.Class==class'Deagle') return class'KFVRTrackedDeagle';
@@ -20,6 +22,8 @@ function class<KFWeapon> Replacement(KFWeapon W)
 }
 function bool AttachRig(KFWeapon W)
 {
+    if (KFVRTrackedDualies(W)!=None)
+    { KFVRTrackedDualies(W).VRRig=Rig; KFVRTrackedDualies(W).EnsureFeed(); Rig.RegisterWeapon(W,0); return True; }
     if (KFVRTrackedKnife(W)!=None)
     { KFVRTrackedKnife(W).VRRig=Rig; Rig.RegisterWeapon(W,3); return True; }
     if (KFVRTrackedSingle(W)!=None)
@@ -86,6 +90,7 @@ function Timer()
         if (bUnattended && TestPawn!=PC.Pawn)
         {
             TestPawn=PC.Pawn; Previous=PC.Pawn.Weapon;
+            if (bDualTest) { NewGun=Spawn(class'Dualies',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn); }
             NewGun=Spawn(class'Deagle',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
             NewGun=Spawn(class'Bullpup',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
             if (Previous!=None) { PC.Pawn.PendingWeapon=Previous; PC.Pawn.ChangedWeapon(); }

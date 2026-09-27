@@ -29,8 +29,8 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,melee=false;unsigned width=640,height=480;
- for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,melee=false,dual=false;unsigned width=640,height=480;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
  Require(width>=64&&height>=64&&width<=4096&&height<=4096&&std::uint64_t(width)*height*40<=256*1024*1024,"Receiver dimensions exceed CPU bridge budget");
  const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
  ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level{};const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_0};
@@ -42,14 +42,15 @@ int wmain(int argc,wchar_t** argv){try{
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
  const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
- const unsigned trialMs=melee?22000:reload?54000:inventory?26700:7500;
- for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(reload?80000:inventory?60000:35000);++attempt){
+ const unsigned trialMs=dual?49000:melee?22000:reload?54000:inventory?26700:7500;
+ for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(reload||dual?80000:inventory?60000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
   if(movement){
    const auto elapsed=firstPair?now-firstPair:0;
    const unsigned ends[]={700,1300,1800,2400,3100,3800,4300,4900,5600,6300,7000,7500};unsigned phase=0;while(phase<11&&elapsed>=ends[phase])++phase;
    if(inventory){const unsigned inventoryEnds[]={700,1200,1600,1950,4650,4950,5650,6450,6950,7250,7600,10600,10900,11600,12300,13000,13900,14250,17550,17850,18450,19150,19650,20650,21650,22050,22550,23700};phase=0;if(elapsed<3000)phase=28u+unsigned(elapsed/1000);else while(phase<27&&elapsed-3000>=inventoryEnds[phase])++phase;}
+   if(dual)phase=std::min(47u,unsigned((elapsed<24000?elapsed:elapsed-1000)/1000));
    if(melee)phase=std::min(21u,unsigned(elapsed/1000));
    if(reload)phase=elapsed<3000?51u+unsigned(elapsed/1000):std::min(50u,unsigned((elapsed-3000)/1000));
    xr::ControllerFrame input{};input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;input.focused=phase!=4;input.hands[0].gripValid=input.hands[1].gripValid=true;
@@ -133,6 +134,25 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase==14)rh.stickX=1;
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
+    if(dual){
+     input={};input.focused=phase!=9;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.25f:-.28f,-.28f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
+     auto& rh=input.hands[1];auto& lh=input.hands[0];
+     lh.gripPose.orientation={0,.3f,0,.9539392f};rh.gripPose.orientation={0,-.2f,0,.9797959f};
+     if(phase==0||phase==1||phase==21||phase==22||phase==24||phase==25)rh.gripPose.position={.22f,-.62f,.05f};
+     if(phase==1||phase==21||phase==25)rh.squeeze=1;
+     if(phase==3)rh.trigger=1;
+     if(phase==5)lh.trigger=1;
+     if(phase==7||phase==9||phase==10||phase==12||phase==13||phase==14||phase==20||phase==23||phase==27||phase==29||phase==30)lh.trigger=rh.trigger=1;
+     if(phase==13)lh.gripValid=lh.aimValid=false;
+     if(phase==29)rh.gripValid=rh.aimValid=false;
+     if(phase==16||phase==41)rh.secondary=true;
+     if(phase>=32&&phase<=37){const auto drain=elapsed-33000;lh.trigger=drain<5000&&drain%400<200?1.f:0.f;}
+     if(phase==38||phase==39)lh.trigger=1;
+     if(phase==39)rh.trigger=1;
+     if(phase==46)lh.trigger=rh.trigger=1;
+     for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
+    }
     right.aimPose=right.gripPose;
     if(capturePhase!=phase||!capturePhaseStart){capturePhase=phase;capturePhaseStart=now;}
    }
@@ -140,7 +160,7 @@ int wmain(int argc,wchar_t** argv){try{
    controls<<"{\"uptime_ms\":"<<now<<",\"phase\":"<<phase<<",\"sent\":"<<(sent==ipc::ChannelResult::Ok?"true":"false")<<"}\n";
   }
   runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=0x200000001ULL;tracking.predictedNs=std::int64_t(now)*1000000+std::int64_t(attempt%1000);tracking.focused=tracking.headValid=true;
-  if(weapon&&!melee&&capturePhase==(inventory?6u:4u))tracking.head.orientation={-.537300f,0,0,.843391f};
+  if(weapon&&!melee&&!dual&&capturePhase==(inventory?6u:4u))tracking.head.orientation={-.537300f,0,0,.843391f};
   tracking.head.position.x=movement?0.f:float(pairs%4)*.04f;tracking.eyes={tracking.head,tracking.head};tracking.eyes[0].position.x-=.032f;tracking.eyes[1].position.x+=.032f;tracking.fov={math::FovTangents{-1.05f,.95f,.75f,-.75f},math::FovTangents{-.95f,1.05f,.75f,-.75f}};
   graphics::TextureDescriptor wire;graphics::PairTicket ticket;LARGE_INTEGER begin,end;QueryPerformanceCounter(&begin);
   const auto result=channel.RequestPair(req,tracking,50,wire,ticket);if(result!=ipc::ChannelResult::Ok){++timeouts;Sleep(1);continue;}

@@ -3,9 +3,11 @@ param(
  [string]$Game='F:\SteamLibrary\steamapps\common\KillingFloor',
  [ValidatePattern('^KF-[A-Za-z0-9_-]+$')][string]$Map='KF-Offices',
  [switch]$Unattended,
- [switch]$MeleeTest
+ [switch]$MeleeTest,
+ [switch]$DualTest
 )
 $ErrorActionPreference='Stop'
+if($DualTest -and !$Unattended){throw 'DualTest requires explicit Unattended mode.'}
 if($MeleeTest -and !$Unattended){throw 'MeleeTest requires explicit Unattended mode.'}
 $kfExe=[IO.Path]::GetFullPath((Join-Path $Game 'System\KillingFloor.exe'))
 if(@(Get-Process KillingFloor -ErrorAction SilentlyContinue | Where-Object {$_.Path -eq $kfExe}).Count){throw 'Close the existing KF process before loading the development package.'}
@@ -15,6 +17,7 @@ if($LASTEXITCODE -ne 0){throw 'Development package staging failed.'}
 $kfUrl=$Map+'.rom?Game=KFMod.KFGameType?Mutator=KFVRGameplay.KFVRDevMutator?Difficulty=1'
 if($Unattended){$kfUrl+='?KFVRUnattended=1'}
 if($MeleeTest){$kfUrl+='?KFVRMeleeTest=1'}
+if($DualTest){$kfUrl+='?KFVRDualTest=1'}
 $kfSteam=(Get-ItemProperty HKCU:\Software\Valve\Steam).SteamExe
 Start-Process -FilePath $kfSteam -ArgumentList @('-applaunch','1250',$kfUrl,'-windowed') -WindowStyle Hidden
 Write-Host 'Started the standalone KFVR development match. Once spawned, run Play-KFVR.ps1 -Weapons.'

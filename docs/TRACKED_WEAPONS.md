@@ -1,6 +1,6 @@
 # Tracked weapon and hand development
 
-This increment enables the **9mm, Deagle, Bullpup and knife** in an explicitly loaded standalone mutator. Both controllers drive separate KF hand/forearm actors with six-degree-of-freedom poses. Oculus Touch capacitance supplies index/thumb contact, with trigger/grip analog values and fallback on profiles without capacitance. This is controller-driven hand animation, not optical bare-hand tracking.
+This increment enables the **9mm, dual 9mm, Deagle, Bullpup and knife** in an explicitly loaded standalone mutator. Both controllers drive separate KF hand/forearm actors with six-degree-of-freedom poses. Oculus Touch capacitance supplies index/thumb contact, with trigger/grip analog values and fallback on profiles without capacitance. This is controller-driven hand animation, not optical bare-hand tracking.
 
 ## Run
 
@@ -17,6 +17,7 @@ The normal launcher retains runtime-recommended eye resolution, left-stick locom
 - Move/rotate the right controller to aim the pistol independently of the head and desktop camera. Right trigger fires. The pistol starts in hand.
 - Hip/shoulder slots follow body heading: 9mm at the right waist, Deagle at the left waist, Bullpup over the right shoulder, knife over the left shoulder. Squeeze the right grip near a slot to draw that owned weapon. Release it near the active slot to stow. Stowed weapons cannot fire. Left X cycles supported inventory weapons.
 - The knife uses physical swings after a short settle outside its holster. At least 20 cm of travel and 1.2 m/s are required; retract before another strike. Walking/snap turns do not count. Its blade endpoint is a provisional 20 cm offset from the installed knife bone and still needs wearer calibration. No trigger attack is generated while the physical knife is active.
+- Dual 9mm pistols use independent controller poses, triggers, recoil, muzzle rays and loaded-round counts. Right trigger fires the right pistol; left trigger fires the left. Right B currently performs the stock paired timed reload. The pair draws/stows from the right hip as one inventory weapon; the offhand pistol docks at the left-front waist. Belt reload gestures are the next integration step.
 - Right A calls KF's normal Use interaction once per press; a real door/trader interaction and VR menu navigation are still unverified.
 - Right B performs the stock timed reload. Its ammunition/perk timing remains the normal KF path. The idle world proxy does not yet display those timed reload animations.
 - With the Bullpup, squeeze the left grip near the foregrip to support the rifle. Both hand positions then determine its aim, with dominant-hand roll retained. Release the left grip to return to one-hand aiming.
@@ -55,3 +56,5 @@ Each inventory weapon retains its own physical ledger across switching. Magazine
 `Start-KFVRDev.ps1 -Unattended` additionally auto-readies, provides the three diagnostic weapons, enables god mode, delays zed spawning, and marks the local Steam-stat actor as using cheats. These are explicit test-mode behavior, never multiplayer behavior. The mutator refuses non-standalone worlds. Do not treat this development replacement as a finished pickup/trader/drop/dual-wielding adapter.
 
 Only the generated KFVRGameplay.u is staged; original game packages/assets remain untouched. No autoload configuration is added. Normal KF launches without this mutator remain available. The native probe stays inert and resident after teardown until KF exits.
+
+Dual acceptance: `Start-KFVRDev.ps1 -Unattended -DualTest` supplies the stock pair before conversion, and `native_bridge_trial.py --dual` checks independent and simultaneous shots, left-feed exhaustion, reloads, holstering and tracking recovery. It retains one stock ammo pool; KFVRDualFeedState only divides the mechanically loaded count for this timed-reload adapter. This is not yet the physical magazine/chamber ledger. KF normally replaces the single 9mm when the pair is acquired.

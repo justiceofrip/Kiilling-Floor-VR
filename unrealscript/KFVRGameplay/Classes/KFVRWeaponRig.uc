@@ -120,7 +120,7 @@ function RegisterWeapon(KFWeapon W, int Slot)
         BoundPawn=Pawn(W.Owner);
     }
     PruneInventory();
-    if (KFVRTrackedSingle(W)!=None) HandSource=W;
+    if (KFVRTrackedSingle(W)!=None || KFVRTrackedDualies(W)!=None) HandSource=W;
     for (I=0;I<InventoryCount;I++) if (InventoryWeapons[I]==W) return;
     if (InventoryCount>=8) return;
     InventoryWeapons[InventoryCount]=W; InventorySlots[InventoryCount]=Slot; InventoryVisualFailed[InventoryCount]=0;
@@ -143,6 +143,7 @@ function SelectInventoryWeapon(int Index)
     local KFWeapon Previous;
     if (Index<0 || Index>=InventoryCount || InventoryVisualFailed[Index]!=0 || InventoryWeapons[Index]==None || PC.Pawn==None || InventoryWeapons[Index].Owner!=PC.Pawn) return;
     Previous=Gun;
+    if (KFVRTrackedDualies(Previous)!=None) KFVRTrackedDualies(Previous).ResetInput();
     if (KFVRTrackedKnife(Previous)!=None) KFVRTrackedKnife(Previous).ResetMotion();
     if (ManualReload!=None && Previous==ManualReload.Gun) ManualReload.StoreForSwitch();
     if (Previous!=None) { Previous.StopFire(0); Previous.StopFire(1); }
@@ -219,6 +220,7 @@ function ReleaseInput()
     bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False;
     bManualArmed=False; bManualPrevious=False; bUseArmed=False; bUsePrevious=False;
     if (ManualReload!=None) ManualReload.Suspend();
+    for (I=0;I<InventoryCount;I++) if (KFVRTrackedDualies(InventoryWeapons[I])!=None) KFVRTrackedDualies(InventoryWeapons[I]).ResetInput();
     if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
     bReloadArmed=False; bReloadPrevious=False; bCycleArmed=False; bCyclePrevious=False;
     for (I=0;I<InventoryCount;I++) if (InventoryVisuals[I]!=None) InventoryVisuals[I].bHidden=True;
@@ -251,6 +253,7 @@ function Tick(float Delta)
         if (PC.Pawn.Weapon==InventoryWeapons[I] && Gun!=InventoryWeapons[I])
         {
             if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
+            if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).ResetInput();
             if (ManualReload!=None) ManualReload.StoreForSwitch();
             Gun=InventoryWeapons[I]; ActiveIndex=I; ManualReload=InventoryManuals[I]; bFiring=False; bTriggerArmed=False; bHolstered=False;
         }
@@ -286,6 +289,7 @@ function Tick(float Delta)
         Visual.bHidden=True; bTriggerArmed=False; bGripArmed=False; bGripPrevious=False;
         if (bFiring) Gun.StopFire(0); bFiring=False;
         if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
+        if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).ResetInput();
         return;
     }
     GetAxes(Tracking.BodyRotation,X,Y,Z);
@@ -323,6 +327,7 @@ function Tick(float Delta)
     if (bReloadArmed && ReloadDown && !bReloadPrevious && !bHolstered)
     {
         Gun.StopFire(0); bFiring=False; bTriggerArmed=False;
+        if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).ResetInput(True);
         if (ManualReload!=None && ManualReload.Gun==Gun) ManualReload.EjectMagazine();
         else if (Gun.AllowReload()) { Gun.ReloadMeNow(); ReloadCount++; }
     }
@@ -337,6 +342,7 @@ function Tick(float Delta)
     else
     {
         GunRotation=SupportedRotation();
+        if (KFVRTrackedDualies(Gun)!=None) Recoil=KFVRTrackedDualies(Gun).RightRecoil;
         GunRotation.Pitch+=int(Recoil*20000.0);
         Position=Tracking.RightPosition-vector(GunRotation)*Recoil*Tracking.UnitsPerMetre;
     }
@@ -348,6 +354,14 @@ function Tick(float Delta)
     // A missing tip must not silently turn an invalid origin into a shot.
     if (VSize(MuzzleLocation-Position)>1.4*Tracking.UnitsPerMetre) { ReleaseInput(); return; }
     AppliedFrames++; Recoil=FMax(0.0,Recoil-Delta*0.25);
+    for (I=0;I<InventoryCount;I++)
+        if (KFVRTrackedDualies(InventoryWeapons[I])!=None) KFVRTrackedDualies(InventoryWeapons[I]).PoseLeft(InventoryWeapons[I]==Gun,Delta);
+    if (KFVRTrackedDualies(Gun)!=None)
+    {
+        KFVRTrackedDualies(Gun).UpdateControls();
+        bFiring=KFVRTrackedDualies(Gun).bLeftFiring || KFVRTrackedDualies(Gun).bRightFiring;
+        return;
+    }
     if (KFVRTrackedKnife(Gun)!=None)
     {
         MuzzleLocation=Visual.Location+((Visual.TipLocal*Visual.DrawScale)>>GunRotation);

@@ -3,6 +3,7 @@
 class KFVRWeaponVisual extends Actor;
 var Weapon SourceWeapon;
 var vector BladeAxis;
+var bool bOffhandGun;
 var name TipBone;
 var vector PalmLocal, TipLocal, MagazineLocal, SlideLocal;
 var float ModelUnitsPerMetre, BoneTranslationScale;
@@ -23,7 +24,9 @@ simulated function bool Initialize(Weapon Source)
     PlayAnim('Idle',0.0,0.0); SetAnimFrame(0.0); StopAnimating(); BoneRefresh();
     TipBone='tip';
     if (KFVRTrackedKnife(Source)!=None) TipBone='knife';
+    if (KFVRTrackedDualies(Source)!=None) { if (bOffhandGun) TipBone='Tip_Left'; else TipBone='Tip_Right'; }
     Palm=GetBoneCoords('Hands_RArmPalm'); Tip=GetBoneCoords(TipBone);
+    if (bOffhandGun) Palm=GetBoneCoords('Hands_LArmPalm');
     PalmLocal=Palm.Origin; TipLocal=Tip.Origin;
     if (KFVRTrackedKnife(Source)!=None)
     {
@@ -53,6 +56,8 @@ simulated function bool Initialize(Weapon Source)
     // This is independent of the world's explicit metres-to-Unreal conversion.
     SetBoneScale(0,0.0,'Hands_LArmCollarbone');
     SetBoneScale(1,0.0,'Hands_RArmCollarbone');
+    if (KFVRTrackedDualies(Source)!=None)
+    { if (bOffhandGun) SetBoneScale(3,0.0,'9mm_Gun'); else SetBoneScale(3,0.0,'9mm_Gun01'); }
     return true;
 }
 simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units)
