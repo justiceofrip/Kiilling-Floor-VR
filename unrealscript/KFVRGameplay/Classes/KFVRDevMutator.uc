@@ -5,6 +5,7 @@ var bool bUnattended,bDualTest;
 var Pawn TestPawn;
 var KFVRDoorTest DoorTest;
 var KFVRTraderTest TraderTest;
+var KFVRMeleeTarget GrenadeTarget;
 function PostBeginPlay()
 {
     Super.PostBeginPlay();
@@ -26,6 +27,7 @@ function class<KFWeapon> Replacement(KFWeapon W)
 }
 function bool AttachRig(KFWeapon W)
 {
+    if (W.Class==class'Frag') { Rig.RegisterWeapon(W,6); return True; }
     if (KFVRTrackedWelder(W)!=None)
     { KFVRTrackedWelder(W).VRRig=Rig; KFVRTrackedWelder(W).VRTotalAmmo=W.AmmoAmount(0); Rig.RegisterWeapon(W,5); return True; }
     if (KFVRTrackedSyringe(W)!=None)
@@ -100,6 +102,11 @@ function Timer()
         if (bUnattended && TestPawn!=PC.Pawn)
         {
             TestPawn=PC.Pawn; Previous=PC.Pawn.Weapon;
+            if (InStr(Caps(Level.GetLocalURL()),"KFVRGRENADETEST=1")>=0)
+            {
+                NewGun=KFWeapon(PC.Pawn.FindInventoryType(class'Frag')); if (NewGun!=None) NewGun.ClientForceAmmoUpdate(0,5);
+                GrenadeTarget=Spawn(class'KFVRMeleeTarget',self,,PC.Pawn.Location+vector(PC.Rotation)*80);
+            }
             if (InStr(Caps(Level.GetLocalURL()),"KFVRHEALTEST=1")>=0) { PC.Pawn.Health=40; KFHumanPawn(PC.Pawn).healthToGive=0; }
             if (InStr(Caps(Level.GetLocalURL()),"KFVRDOORTEST=1")>=0)
             { if (DoorTest!=None) DoorTest.Destroy(); DoorTest=Spawn(class'KFVRDoorTest',self); if (DoorTest!=None) DoorTest.Initialize(PC); }

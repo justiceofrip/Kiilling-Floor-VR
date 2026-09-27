@@ -37,6 +37,7 @@ var KFVRWeaponVisual Visual;
 var KFVRHandVisual LeftHand, RightHand;
 var KFVRStatusDisplay StatusDisplay;
 var KFVRTraderPanel Trader;
+var KFVRGrenadeControl GrenadeControl;
 var bool bStatusFailed;
 var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
@@ -164,6 +165,7 @@ function vector DockPosition(int Slot)
 {
     local vector X,Y,Z;
     GetAxes(Tracking.BodyRotation,X,Y,Z);
+    if (Slot==6) return Tracking.HeadPosition+(Y*0.22-Z*0.48-X*0.28)*Tracking.UnitsPerMetre;
     if (Slot==5) return Tracking.HeadPosition+(Y*0.18-Z*0.28+X*0.08)*Tracking.UnitsPerMetre;
     if (Slot==4) return Tracking.HeadPosition+(-Y*0.18-Z*0.28+X*0.08)*Tracking.UnitsPerMetre;
     if (Slot==1) return Tracking.HeadPosition+(-Y*0.22-Z*0.62-X*0.05)*Tracking.UnitsPerMetre;
@@ -176,6 +178,7 @@ function SelectInventoryWeapon(int Index)
     local KFWeapon Previous;
     if (Index<0 || Index>=InventoryCount || InventoryVisualFailed[Index]!=0 || InventoryWeapons[Index]==None || PC.Pawn==None || InventoryWeapons[Index].Owner!=PC.Pawn) return;
     Previous=Gun;
+    if (GrenadeControl!=None) GrenadeControl.ResetInput();
     if (KFVRTrackedSyringe(Previous)!=None) KFVRTrackedSyringe(Previous).ResetInput();
     if (KFVRTrackedWelder(Previous)!=None) KFVRTrackedWelder(Previous).ResetInput();
     if (KFVRTrackedDualies(Previous)!=None) KFVRTrackedDualies(Previous).StoreForSwitch();
@@ -263,6 +266,7 @@ function RestoreTraderWeapon()
 function ParkForTrader()
 {
     local int I;
+    if (GrenadeControl!=None) GrenadeControl.ResetInput();
     if (Gun!=None) { Gun.StopFire(0); Gun.StopFire(1); }
     bFiring=False; bTriggerArmed=False; bHolstered=True;
     bSupportHeld=False; bSupportArmed=False; bGripArmed=False; bReloadArmed=False; bCycleArmed=False; bManualArmed=False;
@@ -281,6 +285,7 @@ function ReleaseInput()
 {
     local int I;
     if (Trader!=None) Trader.CloseShop();
+    if (GrenadeControl!=None) GrenadeControl.ResetInput();
     if (bSupportHeld) SupportReleases++;
     bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False;
     bManualArmed=False; bManualPrevious=False; bUseArmed=False; bUsePrevious=False;
@@ -302,7 +307,7 @@ function ReleaseInput()
 function int HandGripRole(bool Left)
 {
     if (bHolstered || Gun==None) return 0;
-    if (!Left) { if (KFVRTrackedKnife(Gun)!=None) return 2; return 1; }
+    if (!Left) { if (KFVRTrackedKnife(Gun)!=None || Gun.Class==class'Frag') return 2; return 1; }
     if (KFVRTrackedDualies(Gun)!=None) return 1;
     if (bSupportHeld) return 3;
     if (ManualReload!=None && (ManualReload.HeldMagazine>0 || ManualReload.bSlideHeld)) return 3;
@@ -384,6 +389,7 @@ function Tick(float Delta)
         if (KFVRTrackedSyringe(Gun)!=None) KFVRTrackedSyringe(Gun).ResetInput();
         if (KFVRTrackedWelder(Gun)!=None) KFVRTrackedWelder(Gun).ResetInput();
         if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
+        if (GrenadeControl!=None) GrenadeControl.ResetInput();
         if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).ResetInput();
         return;
     }
@@ -461,6 +467,12 @@ function Tick(float Delta)
         bFiring=KFVRTrackedDualies(Gun).bLeftFiring || KFVRTrackedDualies(Gun).bRightFiring;
         return;
     }
+    if (Gun.Class==class'Frag')
+    {
+        if (GrenadeControl==None) { GrenadeControl=Spawn(class'KFVRGrenadeControl',self); if (GrenadeControl!=None) GrenadeControl.Initialize(self); }
+        if (GrenadeControl!=None) GrenadeControl.UpdateControls();
+        Gun.StopFire(0); Gun.StopFire(1); bFiring=False; return;
+    }
     if (KFVRTrackedWelder(Gun)!=None)
     { KFVRTrackedWelder(Gun).UpdateControls(); bFiring=KFVRTrackedWelder(Gun).bWeldFiring; return; }
     if (KFVRTrackedSyringe(Gun)!=None)
@@ -485,6 +497,7 @@ function Destroyed()
     if (MeleeTarget!=None) MeleeTarget.Destroy();
     if (StatusDisplay!=None) StatusDisplay.Destroy();
     if (Trader!=None) Trader.Destroy();
+    if (GrenadeControl!=None) GrenadeControl.Destroy();
     for (I=0;I<InventoryCount;I++)
     { if (InventoryVisuals[I]!=None) InventoryVisuals[I].Destroy(); if (InventoryManuals[I]!=None) InventoryManuals[I].Destroy(); }
     if (LeftHand!=None) LeftHand.Destroy();

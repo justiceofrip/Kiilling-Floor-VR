@@ -65,10 +65,13 @@ simulated function UpdateDisplay()
         AmmoLine="L " $ DisplayedLeft $ "   R " $ DisplayedRight $ "    SPARE " $ DisplayedSpare;
     }
     else if (KFVRTrackedSyringe(DisplayedGun)!=None || KFVRTrackedWelder(DisplayedGun)!=None) AmmoLine="CHARGE " $ int(100*DisplayedGun.ChargeBar()) $ "%";
+    else if (DisplayedGun.Class==class'Frag') AmmoLine="GRENADES " $ DisplayedGun.AmmoAmount(0);
     else if (bMelee) AmmoLine="MELEE";
     else AmmoLine="LOADED " $ DisplayedLoaded $ "    SPARE " $ DisplayedSpare;
     ActionLine="READY";
     if (Rig.bHolstered) ActionLine="HOLSTERED";
+    else if (DisplayedGun.Class==class'Frag')
+    { if (Rig.GrenadeControl!=None && Rig.GrenadeControl.bPinRemoved) ActionLine="RELEASE GRIP TO THROW"; else ActionLine="HOLD GRIP + TRIGGER TO ARM"; }
     else if (KFVRTrackedSyringe(DisplayedGun)!=None)
     { if (KFVRTrackedSyringe(DisplayedGun).bPendingHeal) ActionLine="HEALING"; else ActionLine="TOUCH BODY AND SQUEEZE"; }
     else if (KFVRTrackedWelder(DisplayedGun)!=None)

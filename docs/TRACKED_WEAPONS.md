@@ -76,3 +76,10 @@ The welder draws from the right chest. Hold right trigger with the flame tip nea
 The VR trader opens with right A while standing inside an open shop. Point the right controller and press trigger for a single action; A or B closes. It currently buys/sells the supported Handcannon, Bullpup and dual 9mm, fills their ammunition and the single pistol's ammunition, and buys stock armor/healing. Prices, carry limits, actual cash/ammo changes and sale credit use the installed game's functions. The catalog reads the map's real category lists; unsupported weapon families are not listed yet. Stock healing takes time, shown as HEALING. Focus loss, shop closure or leaving its volume closes the panel. Weapon input is parked while shopping and requires a fresh trigger after exit.
 
 The adapter conversion now preserves SellValue as well as total/loaded ammo. Stock sales can select a hidden inventory weapon; trader exit recovers an owned supported weapon so VR Use continues. `Start-KFVRDev.ps1 -Unattended -TraderTest` uses an existing map shop and explicit fixture-only cash/health/weight changes; `native_bridge_trial.py --trader` verifies the resulting transactions with synthetic controllers. This is not complete catalog, pickup/drop, perk or multiplayer acceptance.
+
+
+## Physical grenades
+
+The stock frag grenade occupies the right rear waist: squeeze right grip near that dock to draw, hold grip and press trigger to arm, then release grip to throw with hand velocity. Release without arming does not throw. The stock fuse starts on the spawned projectile, not while held. Focus loss, lost hand tracking and a discontinuous pose cancel arming and require fresh neutral input. Stock grenade type/perks, ammo, bounce and explosion behavior remain in charge. Hand/model calibration remains provisional and has not had a wearer test; the pin is a button gesture, not a separate moving pin model.
+
+Explicit private fixture: `Start-KFVRDev.ps1 -Unattended -GrenadeTest`, then `tools/native_bridge_trial.py --pid <current> --game <KF> --grenade`. It supplies five actual grenades and a damage-counting target. Normal play gets no fixture ammo or target.

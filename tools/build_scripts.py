@@ -87,7 +87,12 @@ def build(game):
  arm_match=re.search(r'KFVR_ARM_TEST_RESULT checks=(\d+) failures=0',arm_output)
  if arm_result.returncode or not arm_match:raise RuntimeError('Arm geometry tests failed; see saved compiler log')
  print('UnrealScript arm geometry: '+arm_match.group(1)+' checks passed')
+ throw_result=subprocess.run([str(system/'ucc.exe'),'KFVRGameplay.KFVRThrowMotionTests','ini=KFVRMake.ini'],cwd=system,capture_output=True,timeout=90)
+ throw_output=(throw_result.stdout+throw_result.stderr).decode('utf-8',errors='replace');(reports/'unrealscript-throw-tests.log').write_text(throw_output)
+ throw_match=re.search(r'KFVR_THROW_RESULT checks=(\d+) failures=0',throw_output)
+ if throw_result.returncode or not throw_match:raise RuntimeError('Throw velocity tests failed; see saved compiler log')
+ print('UnrealScript throw velocity: '+throw_match.group(1)+' checks passed')
  out=ROOT/'build/unrealscript';out.mkdir(parents=True,exist_ok=True);shutil.copy2(package,out/package.name)
- (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),reload_pose_checks=int(pose_match.group(1)),magazine_checks=int(mag_match.group(1)),support_pose_checks=int(support_match.group(1)),arm_pose_checks=int(arm_match.group(1)),melee_checks=int(melee_match.group(1)),dual_feed_checks=int(dual_match.group(1)),dual_magazine_checks=int(dual_mag_match.group(1)),inputs=manifest),indent=2))
+ (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),reload_pose_checks=int(pose_match.group(1)),magazine_checks=int(mag_match.group(1)),support_pose_checks=int(support_match.group(1)),arm_pose_checks=int(arm_match.group(1)),throw_motion_checks=int(throw_match.group(1)),melee_checks=int(melee_match.group(1)),dual_feed_checks=int(dual_match.group(1)),dual_magazine_checks=int(dual_mag_match.group(1)),inputs=manifest),indent=2))
 if __name__=='__main__':
  parser=argparse.ArgumentParser();parser.add_argument('--game',type=pathlib.Path,required=True);build(parser.parse_args().game.resolve())

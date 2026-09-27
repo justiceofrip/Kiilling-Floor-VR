@@ -14,22 +14,31 @@ var float ActionTravelMetres;
 simulated function bool Initialize(Weapon Source)
 {
     local coords Palm,Tip,Part;
+    local name PoseSequence;
     bHidden=True;
     if (Source==None || Source.Mesh==None) return false;
     SourceWeapon=Source; LinkMesh(Source.Mesh); Skins=Source.Skins;
     bUnlit=Source.bUnlit; AmbientGlow=Source.AmbientGlow;
     SetLocation(vect(0,0,0)); SetRotation(rot(0,0,0));
     SetDrawScale(1.0); SetDrawScale3D(vect(1,1,1));
-    if (!HasAnim('Idle')) return false;
-    PlayAnim('Idle',0.0,0.0); SetAnimFrame(0.0); StopAnimating(); BoneRefresh();
+    PoseSequence='Idle';
+    if (Source.Class==class'Frag') PoseSequence=Frag(Source).TossAnim;
+    if (!HasAnim(PoseSequence)) return false;
+    PlayAnim(PoseSequence,0.0,0.0); SetAnimFrame(0.0); StopAnimating(); BoneRefresh();
     TipBone='tip';
+    if (Source.Class==class'Frag') TipBone='Frag';
     if (KFVRTrackedKnife(Source)!=None) TipBone='knife';
     if (KFVRTrackedSyringe(Source)!=None) TipBone='Syringe';
     if (KFVRTrackedWelder(Source)!=None) TipBone='flame_tip';
     if (KFVRTrackedDualies(Source)!=None) { if (bOffhandGun) TipBone='Tip_Left'; else TipBone='Tip_Right'; }
     Palm=GetBoneCoords('Hands_RArmPalm'); Tip=GetBoneCoords(TipBone);
-    if (bOffhandGun) Palm=GetBoneCoords('Hands_LArmPalm');
+    // KF's toss animation begins with the grenade in the authored left palm.
+    // The world proxy may attach that measured offset to either VR controller.
+    if (bOffhandGun || Source.Class==class'Frag') Palm=GetBoneCoords('Hands_LArmPalm');
     PalmLocal=Palm.Origin; TipLocal=Tip.Origin;
+    // Toss starts in the left hand facing back toward the player. Bring its
+    // grenade centre forward into the right controller grasp (provisional 4 cm).
+    if (Source.Class==class'Frag') PalmLocal=TipLocal-vect(12,0,0);
     if (KFVRTrackedKnife(Source)!=None)
     {
         BladeAxis=Normal(Tip.ZAxis);
@@ -62,6 +71,7 @@ simulated function bool Initialize(Weapon Source)
 
     }
     bCalibrated=VSize(PalmLocal)>1.0 && VSize(TipLocal)>1.0 && VSize(TipLocal-PalmLocal)>20.0 && VSize(TipLocal-PalmLocal)<400.0;
+    if (Source.Class==class'Frag') bCalibrated=VSize(PalmLocal)>1 && VSize(TipLocal)>1 && VSize(TipLocal-PalmLocal)<150;
     Log("KFVR_WEAPON_CAL weapon=" $ Source.Class $ " palm=" $ PalmLocal $ " tip=" $ TipLocal $ " valid=" $ bCalibrated);
     if (!bCalibrated) return false;
     // Presentation scale is provisional: the FP mesh is roughly 300 asset units/m.
