@@ -16,14 +16,15 @@ The normal launcher retains runtime-recommended eye resolution, left-stick locom
 
 - Move/rotate the right controller to aim the pistol independently of the head and desktop camera. Right trigger fires. The pistol starts in hand.
 - Hip/shoulder slots follow body heading: 9mm at the right waist, Deagle at the left waist, Bullpup over the right shoulder. Squeeze the right grip near a slot to draw that owned weapon. Release it near the active slot to stow. Stowed weapons cannot fire. Left X cycles supported inventory weapons.
+- Right A calls KF's normal Use interaction once per press; a real door/trader interaction and VR menu navigation are still unverified.
 - Right B performs the stock timed reload. Its ammunition/perk timing remains the normal KF path. The idle world proxy does not yet display those timed reload animations.
 - With the Bullpup, squeeze the left grip near the foregrip to support the rifle. Both hand positions then determine its aim, with dominant-hand roll retained. Release the left grip to return to one-hand aiming.
 - Moving the left controller moves the offhand independently. Capacitive index/thumb contact and analog grip animate the real KF finger bones.
 - Focus/tracking loss stops firing and hides the affected presentation. Return the trigger and grip to neutral before continuing. Mouse movement is not used to aim the tracked pistol.
-- With the 9mm selected, left Y toggles physical reload mode. The mode has its own haptic confirmation. Toggle it off only with a magazine seated, the offhand empty and the slide closed. While enabled, timed/keyboard reload callbacks are blocked.
+- With the 9mm or Deagle selected, left Y toggles physical reload mode. The mode has its own haptic confirmation. Toggle it off only with a magazine seated, the offhand empty and the slide closed. While enabled, timed/keyboard reload callbacks are blocked.
 - In physical mode, hold the left grip beneath the pistol and press right B to catch the magazine. Ejecting without catching discards its remaining rounds. A chambered round remains usable.
 - Move a held magazine to the left-front belt and release grip to retain it. Squeeze there again to take a replacement. Bring it to the pistol's magazine well, align it with the gun, and release grip to insert. Releasing elsewhere discards it.
-- An empty pistol requires cycling: pinch the slide with left trigger plus grip, pull back about 5 cm, then release. A short pull does not chamber a round; pulling a live chamber ejects that round. Tactical reloads retain the chamber for 15+1.
+- An empty pistol requires cycling: pinch the slide with left trigger plus grip, pull back about 5 cm, then release. A short pull does not chamber a round; pulling a live chamber ejects that round. Tactical reloads retain the chamber for 15+1 on the 9mm or 8+1 on the Deagle.
 - Switching or holstering retains a magazine held in the offhand and cancels an unfinished slide grab. Tracking loss cancels the grab without completing a reload.
 - Full arm IK, left-handed weapon dominance, independent dual wielding, the remaining weapons and complete pickup/trader integration are unfinished.
 
@@ -38,15 +39,15 @@ The derived Single, Deagle and Bullpup weapons/fire modes retain normal native W
 Shots and holster/draw transitions increment a reflected feedback serial. The native bridge sends bounded, one-shot haptic pulses tied to fresh controller input; a newly launched bridge does not replay old events. A stopped or unfocused bridge drops feedback.
 
 
-Physical 9mm reload authority is game-thread `KFVRMagazineState`, connected through `KFVRManualReload` and the stock `ConsumeAmmo` callback. It retains up to 64 magazine identities, separate loose reserve and chamber state. Stock shots remain responsible for rate, damage and native consumption; the ledger mirrors each successful shot once, then publishes the mechanically loaded count. Pickups adjust the owned budget without silently chambering a round. The standalone script adapter is separate from the portable single/dual C++ prototype and makes no multiplayer authority claim.
+Physical pistol reload authority is game-thread `KFVRMagazineState`, connected through `KFVRManualReload` and the stock `ConsumeAmmo` callback. It retains up to 64 magazine identities, separate loose reserve and chamber state. Stock shots remain responsible for rate, damage and native consumption; the ledger mirrors each successful shot once, then publishes the mechanically loaded count. Pickups adjust the owned budget without silently chambering a round. The standalone script adapter is separate from the portable single/dual C++ prototype and makes no multiplayer authority claim.
 
-Magazine and slide bones come from the installed model. A rendered calibration step measures UE2's extra import scale for bone translation. A held magazine follows offhand position and orientation; skeletal changes become visible through the ordinary animation cache. The support-hand solver uses the model's measured left/right palm offsets and a shortest-rotation alignment, independently of head direction.
+Each inventory weapon retains its own physical ledger across switching. Magazine and slide bones come from a shared profile of the installed model. The Bullpup remains on timed reload: its shipped skeleton has magazine/release/trigger bones but no independent charging-handle or bolt bone. A rendered calibration step measures UE2's extra import scale for bone translation. A held magazine follows offhand position and orientation; skeletal changes become visible through the ordinary animation cache. The support-hand solver uses the model's measured left/right palm offsets and a shortest-rotation alignment, independently of head direction.
 
 ## Private evidence and limits
 
 `tools/native_bridge_trial.py --pid <current> --game <KF> --weapon` runs synthetic controls against actual KF native rendering. `weapon-validation.json` checks three intended shots/three rounds, normal weapon ticking, aim changes with controller rotation, stow/draw, focus loss, held-trigger rearming, palm placement, finger input changes, feedback and presentation cleanup. Receiver images are genuine native eye renders; this is not a headset comfort/visual acceptance test.
 
-`--inventory` exercises three weapon slots, timed reloads and rifle support; `--reload` exercises the physical 9mm stages, stock shot counts, conservation and magazine bone attachment. Their validators distinguish actual script behavior from packet delivery.
+`--inventory` exercises three weapon slots, timed reloads and rifle support; `--reload` and `--deagle-reload` exercise the physical pistol stages, stock shot counts, conservation and magazine bone attachment. Their validators distinguish actual script behavior from packet delivery.
 
 `Start-KFVRDev.ps1 -Unattended` additionally auto-readies, provides the three diagnostic weapons, enables god mode, delays zed spawning, and marks the local Steam-stat actor as using cheats. These are explicit test-mode behavior, never multiplayer behavior. The mutator refuses non-standalone worlds. Do not treat this development replacement as a finished pickup/trader/drop/dual-wielding adapter.
 

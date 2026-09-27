@@ -15,6 +15,11 @@ function KFVRWeaponRig Rig()
         return KFVRTrackedDeagle(Weapon).VRRig;
     return None;
 }
+simulated function bool AllowFire()
+{
+    if (KFVRTrackedDeagle(Weapon)!=None && KFVRTrackedDeagle(Weapon).Manual!=None && !KFVRTrackedDeagle(Weapon).Manual.Ammo.CanFire()) return False;
+    return Super.AllowFire();
+}
 function DoFireEffect()
 {
     local KFVRWeaponRig R;

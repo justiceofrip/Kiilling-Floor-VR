@@ -97,3 +97,5 @@ The current `--inventory` receiver trial passes all 23 checks in reports/native-
 Official UCC additionally runs 20,012 live-magazine ledger checks and 720 two-hand alignment checks. Existing ammo parity/pose and native x86/x64 suites remain passing. The real InputIpcProbe forces mailbox contention and verifies bounded neutral failure with unchanged expiry/recenter/focus/peer-close behavior.
 
 The observer caches reflected field layouts and bulk-reads each object, retries only transient read snapshots, and takes a final snapshot after the existing script heartbeat has released input. A missing observation is a failed acceptance check; it is not treated as a pass.
+
+Physical profile regression: `native_bridge_trial.py --deagle-reload`, then `--reload` in the same process verifies 8+1/15+1 and independent inactive weapon state. `validate_reload_trial.py <report> --weapon deagle` can recheck saved Deagle evidence. Controller right-A Use is counted in the inventory trial, but actual trader/door interaction requires a separate acceptance case.

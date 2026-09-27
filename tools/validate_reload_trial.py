@@ -1,15 +1,17 @@
 """Assert live physical magazine, slide, stock-shot and bone behavior."""
 import json,pathlib
 
-def validate(folder):
+def validate(folder,weapon="single"):
  folder=pathlib.Path(folder)
  controls=[json.loads(x) for x in (folder/'controls.jsonl').read_text().splitlines()]
  rows=[json.loads(x) for x in (folder/'weapon-observations.jsonl').read_text().splitlines()]
- def objects(typ,selected=rows):return [o['values'] for row in selected for o in row['objects'] if o['type']==typ]
+ gun_type={'single':'KFVRTrackedSingle','deagle':'KFVRTrackedDeagle'}[weapon]
+ gun_addresses={o['address'] for row in rows for o in row['objects'] if o['type']==gun_type}
+ def objects(typ,selected=rows):return [o['values'] for row in selected for o in row['objects'] if o['type']==typ and (typ!='KFVRManualReload' or o['values']['Gun'] in gun_addresses)]
  def phase(n,typ='KFVRManualReload'):
   times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
   return objects(typ,[r for r in rows if times and min(times)+120<=r['uptime_ms']<=max(times)])
- checks={};rigs=objects('KFVRWeaponRig');manuals=objects('KFVRManualReload');guns=objects('KFVRTrackedSingle')
+ checks={};rigs=objects('KFVRWeaponRig');manuals=objects('KFVRManualReload');guns=objects(gun_type);capacity=guns[0]['MagCapacity']
  if not manuals:raise ValueError('Physical mode was never observed')
  start,end=manuals[0],manuals[-1];shots=rigs[-1]['TraceCount']-rigs[0]['TraceCount'];initial=start['OwnedRounds']+start['SpentRounds']+start['DiscardedRounds']
  def at(name,n,predicate,typ='KFVRManualReload'):
@@ -23,9 +25,9 @@ def validate(folder):
  at('insertion_does_not_feed',14,lambda m:m['InsertedMagazine']==2 and not m['bChambered'] and m['SpentRounds']==1)
  at('partial_slide_pull_does_not_feed',19,lambda m:m['RackCount']==0 and not m['bChambered'] and m['SpentRounds']==1)
  at('slide_open_blocks_fire',23,lambda m:m['SlideTravel']>.9 and not m['bChambered'] and m['SpentRounds']==1)
- at('full_return_feeds',24,lambda m:m['RackCount']==1 and m['bChambered'] and m['LoadedRounds']==15)
- at('stock_shot_consumes_chamber_and_feeds',26,lambda m:m['SpentRounds']==2 and m['LoadedRounds']==14 and m['bChambered'])
- at('tactical_reload_retains_plus_one',33,lambda m:m['LoadedRounds']==16 and m['bChambered'] and m['InsertedMagazine']==3)
+ at('full_return_feeds',24,lambda m:m['RackCount']==1 and m['bChambered'] and m['LoadedRounds']==capacity)
+ at('stock_shot_consumes_chamber_and_feeds',26,lambda m:m['SpentRounds']==2 and m['LoadedRounds']==capacity-1 and m['bChambered'])
+ at('tactical_reload_retains_plus_one',33,lambda m:m['LoadedRounds']==capacity+1 and m['bChambered'] and m['InsertedMagazine']==3)
  at('focus_loss_releases',35,lambda r:not r['bTracking'] and not r['bFiring'],'KFVRWeaponRig')
  at('held_trigger_needs_neutral',36,lambda m:m['SpentRounds']==3)
  checks['five_actual_stock_shots']=shots==5 and end['SpentRounds']==5 and guns[-1]['VRFireAttempts']-guns[0]['VRFireAttempts']==5
@@ -38,11 +40,18 @@ def validate(folder):
  at('switch_retains_held_magazine',44,lambda m:m['HeldMagazine']==0 and m['InsertedMagazine']==0 and m['StowCount']==3 and m['bChambered'])
  at('return_draw_retains_chamber',48,lambda m:m['bChambered'] and m['InsertedMagazine']==0 and m['LoadedRounds']==1)
  at('chamber_usable_after_switch',50,lambda m:m['SpentRounds']==5 and m['LoadedRounds']==0)
+ other_states={}
+ for row in rows:
+  for obj in row['objects']:
+   if obj['type']=='KFVRManualReload' and obj['values']['Gun'] not in gun_addresses:
+    m=obj['values'];other_states.setdefault(m['Gun'],[]).append(tuple(m[k] for k in ['OwnedRounds','LoadedRounds','SpentRounds','DiscardedRounds','HeldMagazine','InsertedMagazine','Revision']))
+ checks['other_physical_weapon_states_unchanged']=all(len(set(states))==1 for states in other_states.values())
  checks['input_released_at_stop']=not rigs[-1]['bTracking'] and not rigs[-1]['bFiring']
- report=dict(passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
+ report=dict(other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
  (folder/'reload-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Reload checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report
 if __name__=='__main__':
- import sys
- print(json.dumps(validate(sys.argv[1]),indent=2))
+ import argparse
+ parser=argparse.ArgumentParser();parser.add_argument('folder');parser.add_argument('--weapon',choices=['single','deagle'],default='single');args=parser.parse_args()
+ print(json.dumps(validate(args.folder,args.weapon),indent=2))

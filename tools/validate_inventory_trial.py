@@ -10,6 +10,7 @@ def validate(folder):
   times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
   return [r for r in rows if times and min(times)+150<=r['uptime_ms']<=max(times)]
  checks={};rigs=objects('KFVRWeaponRig');start,end=rigs[0],rigs[-1]
+ checks['one_stock_use_request']=end['UseCount']-start['UseCount']==1
  checks['three_owned_weapons']=start['InventoryCount']==end['InventoryCount']==3
  checks['three_holster_switches']=end['SwitchCount']-start['SwitchCount']==3 and end['ActiveIndex']==start['ActiveIndex']
  checks['three_reload_requests']=end['ReloadCount']-start['ReloadCount']==3

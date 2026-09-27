@@ -1,10 +1,10 @@
 """Bounded actual native game-to-x64 receiver test; no headset required."""
 import argparse,datetime,json,pathlib,subprocess,sys
 from trace_kf import trace
-p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--movement',action='store_true');p.add_argument('--weapon',action='store_true');p.add_argument('--inventory',action='store_true');p.add_argument('--reload',action='store_true');p.add_argument('--turning',action='store_true');p.add_argument('--width',type=int,default=640);p.add_argument('--height',type=int,default=480);a=p.parse_args();a.weapon=a.weapon or a.inventory or a.reload;a.movement=a.movement or a.turning or a.weapon
+p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--movement',action='store_true');p.add_argument('--weapon',action='store_true');p.add_argument('--inventory',action='store_true');p.add_argument('--reload',action='store_true');p.add_argument('--deagle-reload',action='store_true');p.add_argument('--turning',action='store_true');p.add_argument('--width',type=int,default=640);p.add_argument('--height',type=int,default=480);a=p.parse_args();a.reload=a.reload or a.deagle_reload;a.weapon=a.weapon or a.inventory or a.reload;a.movement=a.movement or a.turning or a.weapon
 root=pathlib.Path(__file__).resolve().parents[1];folder=root/'reports'/('native-bridge-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S'));folder.mkdir()
 with (folder/'receiver-errors.txt').open('w') as errors:
- host=subprocess.Popen([str(root/'build/x64/KFVRNativeBridgeProbe.exe'),str(folder),'--width',str(a.width),'--height',str(a.height)]+(['--movement'] if a.movement else [])+(['--turning'] if a.turning else [])+(['--weapon'] if a.weapon else [])+(['--inventory'] if a.inventory else [])+(['--reload'] if a.reload else []),stdout=subprocess.PIPE,stderr=errors,text=True,creationflags=subprocess.CREATE_NO_WINDOW)
+ host=subprocess.Popen([str(root/'build/x64/KFVRNativeBridgeProbe.exe'),str(folder),'--width',str(a.width),'--height',str(a.height)]+(['--movement'] if a.movement else [])+(['--turning'] if a.turning else [])+(['--weapon'] if a.weapon else [])+(['--inventory'] if a.inventory else [])+(['--deagle-reload'] if a.deagle_reload else ['--reload'] if a.reload else []),stdout=subprocess.PIPE,stderr=errors,text=True,creationflags=subprocess.CREATE_NO_WINDOW)
  monitor=None;monitor_log=(folder/"observer-log.txt").open("w")
  try:
   if a.weapon:monitor=subprocess.Popen([sys.executable,str(root/'tools/observe_weapon_rig.py'),'--pid',str(a.pid),'--game',str(a.game),'--output',str(folder/'weapon-observations.jsonl'),'--seconds','85' if a.reload else '45' if a.inventory else '22'],stdout=monitor_log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
@@ -21,7 +21,7 @@ with (folder/'receiver-errors.txt').open('w') as errors:
    if monitor.returncode:raise RuntimeError('Live weapon observer failed')
    if a.reload:
     from validate_reload_trial import validate as validate_reload
-    print(json.dumps(validate_reload(folder),indent=2))
+    print(json.dumps(validate_reload(folder,weapon="deagle" if a.deagle_reload else "single"),indent=2))
    elif a.inventory:
     from validate_inventory_trial import validate as validate_inventory
     print(json.dumps(validate_inventory(folder),indent=2))

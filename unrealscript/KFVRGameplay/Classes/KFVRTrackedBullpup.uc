@@ -1,12 +1,40 @@
 class KFVRTrackedBullpup extends Bullpup;
 var KFVRWeaponRig VRRig;
+var KFVRManualReload Manual;
 var int VRTotalAmmo;
 var int VRTicks, VRStartAttempts, VRStartAccepted;
 var int VRModeTicks, VRFireAttempts;
 var bool VRAllowFire, VRReadyToFire;
 simulated function WeaponTick(float Delta)
 {
-    VRTicks++; Super.WeaponTick(Delta); VRTotalAmmo=AmmoAmount(0);
+    VRTicks++; Super.WeaponTick(Delta);
+    if (Manual!=None) Manual.Reconcile();
+    VRTotalAmmo=AmmoAmount(0);
+}
+// Physical mode owns reload transfers; stock firing still owns cadence/damage.
+exec function ReloadMeNow()
+{
+    if (Manual!=None) return;
+    Super.ReloadMeNow();
+}
+simulated function bool AllowReload()
+{
+    if (Manual!=None) return False;
+    return Super.AllowReload();
+}
+function AddReloadedAmmo()
+{
+    if (Manual!=None) return;
+    Super.AddReloadedAmmo();
+}
+simulated function bool ConsumeAmmo(int Mode, float Load, optional bool bAmountNeededIsMax)
+{
+    local bool Result;
+    if (Manual!=None && Mode==0 && Load>0 && !Manual.Ammo.CanFire()) return False;
+    Result=Super.ConsumeAmmo(Mode,Load,bAmountNeededIsMax);
+    if (Result && Manual!=None && Mode==0 && Load>0)
+    { Manual.Ammo.ConsumeShot(); Manual.Publish(); }
+    return Result;
 }
 simulated function bool StartFire(int Mode)
 {

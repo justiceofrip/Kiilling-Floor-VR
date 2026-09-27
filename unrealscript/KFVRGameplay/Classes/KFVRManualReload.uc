@@ -1,7 +1,7 @@
 // All gestures execute once on the ordinary rig Tick. Rendering only poses bones.
 class KFVRManualReload extends Info;
 var KFVRWeaponRig Rig;
-var KFVRTrackedSingle Gun;
+var KFWeapon Gun;
 var KFVRMagazineState Ammo;
 var bool bLeftArmed,bLeftPrevious,bSlideHeld;
 var vector MagWell,SlideLocation,BeltLocation,SlideGrabLocal,MagazineWorld;
@@ -9,12 +9,12 @@ var float MagazineError,SlideTravel,MagazineDirectionDot;
 var int EjectCount,GrabCount,SeatCount,StowCount,DropCount,RackCount;
 var int LoadedRounds,OwnedRounds,SpentRounds,DiscardedRounds,HeldMagazine,InsertedMagazine,Revision;
 var bool bChambered,bValid;
-function bool Initialize(KFVRWeaponRig R,KFVRTrackedSingle W)
+function bool Initialize(KFVRWeaponRig R,KFWeapon W)
 {
-    if (W==None || W.Manual!=None || W.bIsReloading) return False;
+    if (W==None || class'KFVRWeaponProfile'.static.Manual(W)!=None || W.bIsReloading) return False;
     Rig=R; Gun=W; Ammo=new class'KFVRMagazineState';
     if (!Ammo.Initialize(W.MagCapacity,W.MagAmmoRemaining,W.AmmoAmount(0))) return False;
-    Gun.Manual=self; Publish(); return True;
+    class'KFVRWeaponProfile'.static.BindManual(Gun,self); Publish(); return True;
 }
 function Publish()
 {
@@ -38,7 +38,7 @@ function Suspend()
 }
 function StoreForSwitch()
 {
-    Suspend();
+    Reconcile(); Suspend();
     if (Ammo.Held>0 && Ammo.Stow()) StowCount++;
     if (Rig.Visual!=None) Rig.Visual.PoseMagazine(Ammo.Inserted>0,False,vect(0,0,0),Ammo.Travel);
     Publish();
@@ -60,6 +60,7 @@ function Update(float Delta)
     local coords Part;
     if (Rig.Gun!=Gun || !Rig.Active() || Rig.bHolstered || (Rig.Tracking.Flags & 3)!=3)
     { Suspend(); return; }
+    Reconcile();
     GetAxes(Rig.Tracking.BodyRotation,X,Y,Z);
     BeltLocation=Rig.Tracking.HeadPosition+(-Y*0.2-Z*0.60+X*0.12)*Rig.Tracking.UnitsPerMetre;
     MagWell=Rig.Visual.MagazineRest(); SlideLocation=Rig.Visual.SlideRest();
@@ -78,7 +79,7 @@ function Update(float Delta)
     {
         Displacement=Relative-SlideGrabLocal;
         if (Abs(Displacement.Y)>0.12*Rig.Tracking.UnitsPerMetre || Abs(Displacement.Z)>0.12*Rig.Tracking.UnitsPerMetre) Suspend();
-        else if (Down) Ammo.MoveSlide(-Displacement.X/(0.05*Rig.Tracking.UnitsPerMetre));
+        else if (Down) Ammo.MoveSlide(-Displacement.X/(Rig.Visual.ActionTravelMetres*Rig.Tracking.UnitsPerMetre));
         else
         {
             Before=float(Ammo.bFeedArmed); Ammo.MoveSlide(0); bSlideHeld=False;
@@ -94,7 +95,7 @@ function Update(float Delta)
     }
     bLeftPrevious=Down;
     Rig.Visual.PoseMagazine(Ammo.Inserted>0,Ammo.Held>0,Rig.Tracking.LeftPosition,Ammo.Travel,Rig.Tracking.LeftRotation);
-    Part=Rig.Visual.GetBoneCoords('9mm_Mag'); MagazineWorld=Part.Origin;
+    Part=Rig.Visual.GetBoneCoords(Rig.Visual.MagazineBone); MagazineWorld=Part.Origin;
     MagazineError=0;
     MagazineDirectionDot=Normal(Part.XAxis) dot (Rig.Visual.MagazineX>>Rig.Tracking.LeftRotation);
     if (Ammo.Held>0) MagazineError=VSize(MagazineWorld-Rig.Tracking.LeftPosition);
@@ -102,10 +103,10 @@ function Update(float Delta)
 }
 function Destroyed()
 {
-    if (Gun!=None && Gun.Manual==self)
+    if (Gun!=None && class'KFVRWeaponProfile'.static.Manual(Gun)==self)
     {
-        Gun.Manual=None;
-        if (Ammo!=None) { Gun.ClientForceAmmoUpdate(0,Ammo.Total()); Gun.MagAmmoRemaining=Min(Gun.MagCapacity,Ammo.Loaded()); }
+        class'KFVRWeaponProfile'.static.BindManual(Gun,None);
+        if (Ammo!=None) { Ammo.ReconcileTotal(Gun.AmmoAmount(0)); Gun.ClientForceAmmoUpdate(0,Ammo.Total()); Gun.MagAmmoRemaining=Min(Gun.MagCapacity,Ammo.Loaded()); }
     }
     Super.Destroyed();
 }

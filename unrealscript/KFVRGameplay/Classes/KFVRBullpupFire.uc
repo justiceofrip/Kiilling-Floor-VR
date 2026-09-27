@@ -15,6 +15,11 @@ function KFVRWeaponRig Rig()
         return KFVRTrackedBullpup(Weapon).VRRig;
     return None;
 }
+simulated function bool AllowFire()
+{
+    if (KFVRTrackedBullpup(Weapon)!=None && KFVRTrackedBullpup(Weapon).Manual!=None && !KFVRTrackedBullpup(Weapon).Manual.Ammo.CanFire()) return False;
+    return Super.AllowFire();
+}
 function DoFireEffect()
 {
     local KFVRWeaponRig R;

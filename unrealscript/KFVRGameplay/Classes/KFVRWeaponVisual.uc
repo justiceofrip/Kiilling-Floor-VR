@@ -5,7 +5,9 @@ var Weapon SourceWeapon;
 var vector PalmLocal, TipLocal, MagazineLocal, SlideLocal;
 var float ModelUnitsPerMetre, BoneTranslationScale;
 var vector MagazineX,MagazineY,MagazineZ,SupportLocal;
-var bool bCalibrated,bTranslationCalibrated,bTranslationProbe;
+var bool bCalibrated,bTranslationCalibrated,bTranslationProbe,bPhysicalProfile;
+var name MagazineBone,ActionBone;
+var float ActionTravelMetres;
 simulated function bool Initialize(Weapon Source)
 {
     local coords Palm,Tip,Part;
@@ -20,11 +22,16 @@ simulated function bool Initialize(Weapon Source)
     Palm=GetBoneCoords('Hands_RArmPalm'); Tip=GetBoneCoords('tip');
     PalmLocal=Palm.Origin; TipLocal=Tip.Origin;
     Part=GetBoneCoords('Hands_LArmPalm'); SupportLocal=Part.Origin;
-    if (KFVRTrackedSingle(Source)!=None)
+    MagazineBone=class'KFVRWeaponProfile'.static.MagazineBone(KFWeapon(Source));
+    ActionBone=class'KFVRWeaponProfile'.static.ActionBone(KFWeapon(Source));
+    ActionTravelMetres=class'KFVRWeaponProfile'.static.ActionTravel(KFWeapon(Source));
+    if (MagazineBone!='' && ActionBone!='')
     {
-        Part=GetBoneCoords('9mm_Mag'); MagazineLocal=Part.Origin;
+        Part=GetBoneCoords(MagazineBone); MagazineLocal=Part.Origin;
         MagazineX=Normal(Part.XAxis); MagazineY=Normal(Part.YAxis); MagazineZ=Normal(Part.ZAxis);
-        Part=GetBoneCoords('9mm_slide'); SlideLocal=Part.Origin;
+        Part=GetBoneCoords(ActionBone); SlideLocal=Part.Origin;
+        bPhysicalProfile=VSize(MagazineLocal)>1 && VSize(SlideLocal)>1 && VSize(MagazineLocal-PalmLocal)<300 && VSize(SlideLocal-PalmLocal)<300;
+        Log("KFVR_MECHANICAL_CAL weapon=" $ Source.Class $ " magazine=" $ MagazineBone $ ":" $ MagazineLocal $ " action=" $ ActionBone $ ":" $ SlideLocal $ " valid=" $ bPhysicalProfile);
 
     }
     bCalibrated=VSize(PalmLocal)>1.0 && VSize(TipLocal)>1.0 && VSize(TipLocal-PalmLocal)>20.0 && VSize(TipLocal-PalmLocal)<400.0;
@@ -46,19 +53,19 @@ simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units
     bHidden=False; BoneRefresh();
     // BoneRefresh does not invalidate the same-frame animation cache. Measure
     // a unit translation on the following ordinary Tick, after it has rendered.
-    if (KFVRTrackedSingle(SourceWeapon)!=None && !bTranslationCalibrated)
+    if (bPhysicalProfile && KFVRHandVisual(self)==None && !bTranslationCalibrated)
     {
         if (bTranslationProbe)
         {
-            Part=GetBoneCoords('9mm_Mag'); Measured=VSize(Part.Origin-MagazineRest())/DrawScale;
+            Part=GetBoneCoords(MagazineBone); Measured=VSize(Part.Origin-MagazineRest())/DrawScale;
             if (Measured>0.01 && Measured<100)
             {
                 BoneTranslationScale=Measured; bTranslationCalibrated=True;
-                SetBoneLocation('9mm_Mag',vect(0,0,0),1.0);
+                SetBoneLocation(MagazineBone,vect(0,0,0),1.0);
             }
         }
         else
-        { SetBoneLocation('9mm_Mag',vect(1,0,0),1.0); bTranslationProbe=True; }
+        { SetBoneLocation(MagazineBone,vect(1,0,0),1.0); bTranslationProbe=True; }
     }
 }
 simulated function vector MagazineRest() { return Location+((MagazineLocal*DrawScale)>>Rotation); }
@@ -67,13 +74,13 @@ simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, f
 {
     local vector Offset;
     local rotator Desired;
-    SetBoneScale(2,float(Inserted || Held),'9mm_Mag');
+    SetBoneScale(2,float(Inserted || Held),MagazineBone);
     if (Held) Offset=((HandPosition-Location)<<Rotation)/DrawScale-MagazineLocal;
     if (!Held) HandRotation=Rotation;
     Desired=OrthoRotation(MagazineX>>HandRotation,MagazineY>>HandRotation,MagazineZ>>HandRotation);
-    SetBoneDirection('9mm_Mag',Desired,vect(0,0,0),1.0,1);
-    SetBoneLocation('9mm_Mag',Offset/BoneTranslationScale,1.0);
-    SetBoneLocation('9mm_slide',vect(-15,0,0)*SlideTravel/BoneTranslationScale,1.0);
+    SetBoneDirection(MagazineBone,Desired,vect(0,0,0),1.0,1);
+    SetBoneLocation(MagazineBone,Offset/BoneTranslationScale,1.0);
+    SetBoneLocation(ActionBone,vect(-1,0,0)*ModelUnitsPerMetre*ActionTravelMetres*SlideTravel/BoneTranslationScale,1.0);
     BoneRefresh();
 }
 defaultproperties
