@@ -3,6 +3,8 @@ param(
  [string]$Game='F:\SteamLibrary\steamapps\common\KillingFloor',
  [ValidatePattern('^KF-[A-Za-z0-9_-]+$')][string]$Map='KF-Offices',
  [switch]$Unattended,
+ [switch]$VRProfile,
+ [ValidateRange(60,240)][int]$VRFrameLimit=144,
  [switch]$MeleeTest,
  [switch]$HealTest,
  [switch]$DoorTest,
@@ -34,6 +36,22 @@ if($TraderTest){$kfUrl+='?KFVRTraderTest=1'}
 if($GrenadeTest){$kfUrl+='?KFVRGrenadeTest=1'}
 if($DualTest){$kfUrl+='?KFVRDualTest=1'}
 $kfSteam=(Get-ItemProperty HKCU:\Software\Valve\Steam).SteamExe
-Start-Process -FilePath $kfSteam -ArgumentList @('-applaunch','1250',$kfUrl,'-windowed') -WindowStyle Hidden
+$kfLaunchArgs=@('-applaunch','1250',$kfUrl,'-windowed')
+if($VRProfile){
+ $kfProfileJson=& py -3.12 (Join-Path $PSScriptRoot 'tools\prepare_vr_profile.py') --game $Game --output (Join-Path $PSScriptRoot 'local\play-profile') --max-fps $VRFrameLimit
+ if($LASTEXITCODE -ne 0){throw 'Separate VR configuration could not be prepared.'}
+ $kfProfile=$kfProfileJson | ConvertFrom-Json
+ # UE2's legacy INI parser retains Steam's closing quote; use unquoted paths.
+ if($kfProfile.engine_ini -match '[\s"]' -or $kfProfile.user_ini -match '[\s"]'){throw 'The separate VR profile requires a project path without spaces or quotes.'}
+ $kfLaunchArgs+=@(('ini='+$kfProfile.engine_ini),('userini='+$kfProfile.user_ini))
+ Write-Host "Separate VR profile: desktop VSync off, $VRFrameLimit FPS limit."
+}
+if($VRProfile){
+ # Steam's -applaunch re-quotes name=value tokens even with no spaces. The
+ # legacy engine then treats the trailing quote as part of the INI filename.
+ Start-Process -FilePath $kfExe -ArgumentList ($kfLaunchArgs[2..($kfLaunchArgs.Count-1)] -join ' ') -WorkingDirectory (Split-Path $kfExe) -WindowStyle Hidden
+}else{
+ Start-Process -FilePath $kfSteam -ArgumentList $kfLaunchArgs -WindowStyle Hidden
+}
 Write-Host 'Started the standalone KFVR development match. Once spawned, run Play-KFVR.ps1 -Weapons.'
 if($Unattended){Write-Host 'Unattended test mode: auto-ready, god mode, zed spawning held, progression marked as using cheats.'}

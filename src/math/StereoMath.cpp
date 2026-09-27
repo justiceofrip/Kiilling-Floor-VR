@@ -202,6 +202,17 @@ std::optional<Pose> MakeRelativePose(
     return MakeRelativePoseInternal(reference, current, positionScale);
 }
 
+std::optional<Pose> MakeYawReferencePose(const Pose& head) noexcept
+{
+    if (!IsFinite(head.position)) return std::nullopt;
+    const auto orientation = Normalize(head.orientation);
+    if (!orientation) return std::nullopt;
+    const auto forward = Rotate(*orientation, {0.0F, 0.0F, -1.0F});
+    if (std::hypot(forward.x, forward.z) < 0.01F) return std::nullopt;
+    const float yaw = std::atan2(-forward.x, -forward.z);
+    return Pose{head.position, {0.0F, std::sin(yaw * 0.5F), 0.0F, std::cos(yaw * 0.5F)}};
+}
+
 Vec3 OpenXRToLhCoordinates(Vec3 value) noexcept
 {
     return {value.x, value.y, -value.z};

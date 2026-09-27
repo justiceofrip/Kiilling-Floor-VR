@@ -45,7 +45,17 @@ def validate(folder,inventory=False,dual=False,belt=False):
   at('hidden_on_focus_loss',23,lambda p:p['bHidden'])
   at('visible_again_after_focus_return',24,lambda p:not p['bHidden'])
   reloading=[p for p in phase(4) if p.get('ActionLine')=='RELOADING']
-  checks['pistol_count_while_reloading']=bool(reloading) and all(p['DisplayedLoaded']==14 for p in reloading)
+  # A held trigger can fire a different number of stock-cadence shots at
+  # different frame rates. Compare the display with the independently read
+  # weapon magazine during reload, rather than assuming one shot occurred.
+  reloading_ids={id(p) for p in reloading};reload_matches=[]
+  for row in rows:
+   objects={o['address']:o for o in row['objects']}
+   for panel in panels([row]):
+    if id(panel) not in reloading_ids:continue
+    gun=objects.get(panel['DisplayedGun']);v=gun['values'] if gun else {}
+    reload_matches.append(bool(gun) and gun['type']=='KFVRTrackedSingle' and v.get('bIsReloading') and panel['DisplayedLoaded']==v.get('MagAmmoRemaining') and 0<=panel['DisplayedLoaded']<v.get('MagCapacity',0))
+  checks['pistol_count_while_reloading']=bool(reload_matches) and all(reload_matches)
   ready=[p for p in phase(4) if p.get('ActionLine')=='READY']
   checks['pistol_count_after_reload']=bool(ready) and all(p['DisplayedLoaded']==15 for p in ready)
   ready=[p for p in phase(11) if p.get('ActionLine')=='READY']

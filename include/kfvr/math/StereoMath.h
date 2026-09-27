@@ -78,6 +78,10 @@ struct LhStereoTransformPair
     const Pose& current,
     float positionScale = 1.0F) noexcept;
 
+// Anchors position and horizontal heading without inheriting startup pitch or
+// roll. A near-vertical gaze has no stable heading and waits for another pose.
+[[nodiscard]] std::optional<Pose> MakeYawReferencePose(const Pose& head) noexcept;
+
 // Converts a position or direction from OpenXR's right-handed convention to
 // Lh's conventional left-handed world convention by preserving X/Y and
 // negating Z. It does not normalize directions.

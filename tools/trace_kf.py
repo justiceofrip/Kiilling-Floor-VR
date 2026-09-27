@@ -209,7 +209,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    summary.update(bridge_trial_passed=bridge_passed,bridge=bridge)
   weapon_passed=True
   if weapon_trial:
-   weapon=json.loads((directory/'native-weapon.json').read_text());weapon_passed=weapon.get('valid',0)>10 and weapon.get('failed',1)==0
+   weapon_path=directory/'native-weapon.json';weapon=json.loads(weapon_path.read_text()) if weapon_path.exists() else {};weapon_passed=weapon.get('valid',0)>10 and weapon.get('failed',1)==0
    summary.update(weapon_pose_delivery_passed=weapon_passed,weapon_valid_packets=weapon.get('valid',0))
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
   if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed or not input_passed or not movement_passed or not turning_passed or not weapon_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')

@@ -27,10 +27,21 @@ Build the authored UnrealScript package and run its engine tests in an isolated 
 py -3.12 G:\KFVR\tools\build_scripts.py --game 'F:\SteamLibrary\steamapps\common\KillingFloor'
 ```
 
-The driver copies SDK runtime inputs into ignored local/compiler, builds only authored KFVR source, executes the commandlet tests and checks its action-stream digests against the built x64 C++ reference. It produces build/unrealscript/KFVRGameplay.u. It does not install the package into the running game. The first package contains authoritative ammunition policies and tests; KF weapon/RPC bindings are not enabled yet. A build failure leaves its log in reports and returns nonzero.
+The driver copies SDK runtime inputs into ignored local/compiler, builds only authored KFVR source, executes the commandlet tests and checks its action-stream digests against the built x64 C++ reference. It produces build/unrealscript/KFVRGameplay.u. It does not install the package into the running game. The package contains the standalone tracked weapon/tool, reload, status and trader adapters plus their commandlet tests; multiplayer RPC integration is not enabled. A build failure leaves its log in reports and returns nonzero.
 
 Do not install the diagnostic DLL as a D3D proxy. Native trace tooling copies its exact payload into a private report directory and loads it explicitly for one bounded experiment; it has no startup integration. Closing that game process removes the inert resident probe modules.
 
 Bounded native camera diagnostics (standalone game only): `py -3.12 tools/trace_kf.py --pid <current-KF-PID> --game <game-folder> --target-trial`, `--camera-trial`, `--stereo-trial`, `--asymmetric-trial`, or `--pose-trial`. Each later option includes prerequisite checks; only the final three render additional views, once. Synthetic pose/FOV/scale are explicitly diagnostic. Nothing is auto-installed into the game.
 
 Hardware diagnostics: `build/x64/KFVRXrHost.exe --test-scene --seconds 45` displays the synthetic room. `--input-test --seconds 60` adds per-hand grip/aim sample counts, motion extents, trigger/grip press/release counts, thumbstick ranges and short trigger-confirmation haptics (20% amplitude, 50 ms, at least 300 ms apart). Input-test mode does not drive KF or change bindings. Raw host reports cannot certify what the wearer saw/felt; record their confirmation separately.
+
+## Pre-alpha runtime archive
+
+After both architecture checks and the UnrealScript build pass, commit the exact candidate and run:
+
+```powershell
+py -3.12 -m pip download --only-binary=:all: --no-deps pefile==2024.8.26 --dest local/release-deps
+py -3.12 tools/package_prealpha.py --version 0.1.0-prealpha.1-rc1
+```
+
+The packager verifies the pinned wheel hash, includes its license, requires a clean checkout, uses an explicit runtime-file list, and checks every archived member. Outputs go to ignored `dist/`. Source publication uses the Git-tracked checkout, never the ignored local SDK or reports. The candidate stays separate from a public pre-release until wearer feedback has been recorded.

@@ -30,7 +30,7 @@ DWORD Run(HANDLE process,std::uintptr_t function,Allocation& memory,DWORD timeou
     // If the remote operation times out, its argument must remain valid until
     // the game exits. Never terminate a game thread or free memory under it.
     memory.release=false;Require(WaitForSingleObject(thread.h,timeout)==WAIT_OBJECT_0,"Probe operation did not finish within its budget");memory.release=true;
-    DWORD result=0;Require(GetExitCodeThread(thread.h,&result)!=0,"Read probe result");return result;
+    DWORD result=0;Require(GetExitCodeThread(thread.h,&result)!=0,"Read probe result");Require(WaitForSingleObject(process,0)==WAIT_TIMEOUT,"Killing Floor exited before the bounded native operation completed");return result;
 }
 }
 int wmain(int argc,wchar_t** argv){try {

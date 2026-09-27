@@ -125,3 +125,9 @@ Trader extension 201202 / trace201202-807038 passes 32 real-game checks, includi
 
 
 Full-resolution cadence: `tools/native_bridge_trial.py --pid <current> --game <KF> --cadence --width 2064 --height 2208` runs a stationary 20-second native receiver benchmark. Read per-stage timings and no-request callback counts in the trace's native-bridge.json. It uses no headset and is not an OpenXR frame-rate acceptance test. Controlled V3/V4 comparison with identical SIMD and no receiver success delay measured 31.4 -> 50.3 fresh pairs/sec (202643 versus 202524). The regular inventory scenario retains its existing diagnostic pacing; full-resolution 202813 passes 25 inventory plus 22 HUD/grasp checks. Core tests exercise delayed completion versus queued requests; real x64/x86 IPC and input probes pass on v4.
+
+
+Pre-alpha candidate: see docs/PRE_ALPHA_TEST.md for the three-minute wearer checklist. Restored renderer 204850 passes 25 live gameplay + 22 HUD/grasp checks at 2064 x 2208. The reload display check compares against independently read actual magazine state, since a held-trigger phase can contain one or two stock-cadence shots. Profile startup, runtime and exit preserve original INI hashes; optional profile uses a direct executable launch because Steam re-quotes INI arguments. Candidate headset acceptance remains separate and pending.
+
+
+Wearer session205619 failed head/hand alignment acceptance. Corrective startup reference tests cover 48 tilted starts with vertical-motion and controller-alignment invariants. Runtime resolution selection checks the real 2528 x 2704 recommendation (99% fits) and the tested 82% selection. No corrective wearer acceptance yet; publication stays on hold.

@@ -72,6 +72,7 @@ struct Host {
     std::vector<XrTime> spaceChanges;
     math::Pose referenceHead{};
     std::uint64_t trackingGeneration=0,spaceGeneration=1;
+    unsigned poseLogSamples=0;
     explicit Host(HostReport& r):report(r){}
     ~Host(){
         AbortFrame();consumer.Reset();
@@ -203,12 +204,25 @@ struct Host {
             if(count==2&&(viewState.viewStateFlags&validViews)==validViews&&(head.locationFlags&validHead)==validHead){
                 runtime::TrackingFrame tracking{};tracking.generation=++trackingGeneration;tracking.spaceGeneration=spaceGeneration;tracking.predictedNs=frameTime;
                 tracking.focused=sessionState==XR_SESSION_STATE_FOCUSED;tracking.headValid=true;tracking.head=Pose(head.pose);
-                if(!referenceValid&&math::MakeRelativePose(tracking.head,tracking.head)){referenceHead=tracking.head;referenceValid=true;}tracking.referenceHead=referenceHead;
+                if(!referenceValid&&tracking.focused){
+                    const auto levelReference=math::MakeYawReferencePose(tracking.head);
+                    if(levelReference){referenceHead=*levelReference;referenceValid=true;}
+                }
+                tracking.referenceHead=referenceHead;
                 bool valid=referenceValid&&bool(math::MakeRelativePose(tracking.referenceHead,tracking.head));
                 for(unsigned eye=0;eye<2;++eye){tracking.eyes[eye]=Pose(views[eye].pose);const auto& fov=views[eye].fov;
                     tracking.fov[eye]={std::tan(fov.angleLeft),std::tan(fov.angleRight),std::tan(fov.angleUp),std::tan(fov.angleDown)};
                     valid&=bool(math::MakeRelativePose(tracking.referenceHead,tracking.eyes[eye]))&&bool(math::MakeLhProjectionFromFovTangents(tracking.fov[eye],.05f,100.f));}
                 tracking.headValid=valid;trackingEligible=valid&&tracking.focused;if(valid)++report.validTrackingFrames;
+                // Bounded incremental evidence survives a game exit before the
+                // final report. Same predicted time/reference for head and hands.
+                if(trackingEligible&&poseLogSamples<60&&(poseLogSamples==0||tracking.generation%30==0)){
+                    auto pose=[](const math::Pose& p){std::cerr<<'['<<p.position.x<<','<<p.position.y<<','<<p.position.z<<','<<p.orientation.x<<','<<p.orientation.y<<','<<p.orientation.z<<','<<p.orientation.w<<']';};
+                    std::cerr<<"tracking_pose={\"generation\":"<<tracking.generation<<",\"space\":"<<tracking.spaceGeneration<<",\"reference\":";pose(tracking.referenceHead);
+                    std::cerr<<",\"head\":";pose(tracking.head);
+                    for(unsigned hand=0;hand<2;++hand){std::cerr<<(hand?",\"right_valid\":":",\"left_valid\":")<<(controls.hands[hand].gripValid?"true":"false");std::cerr<<(hand?",\"right_grip\":":",\"left_grip\":");pose(controls.hands[hand].gripPose);}
+                    std::cerr<<'}'<<std::endl;++poseLogSamples;
+                }
                 graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};
                 if(valid&&tracking.focused&&provider&&provider->TryGetPair(report.requirements,tracking,descriptor,ticket)){
                     struct Feedback {IFrameProvider& provider;const graphics::PairTicket& ticket;bool consumed=false;~Feedback(){provider.PairConsumed(ticket,consumed);}} feedback{*provider,ticket};

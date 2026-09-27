@@ -1,4 +1,6 @@
-# Killing Floor VR
+# Kiilling Floor VR
+
+Pre-alpha candidate: see [test instructions and controls](docs/PRE_ALPHA_TEST.md) and [candidate release notes](docs/PRE_ALPHA_RELEASE.md). Publication is on hold after the first wearer pass reported head/hand alignment problems. Corrective work is underway.
 
 Native VR mod development for the original Killing Floor. Source/builds live in `G:\KFVR`; the installed game is `F:\SteamLibrary\steamapps\common\KillingFloor`. This does not use the unrelated Unity workspace.
 
