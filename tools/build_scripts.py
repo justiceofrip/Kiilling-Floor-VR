@@ -82,7 +82,12 @@ def build(game):
  dual_mag_match=re.search(r'KFVR_DUAL_MAG_TEST_RESULT checks=(\d+) failures=0',dual_mag_output)
  if dual_mag_result.returncode or not dual_mag_match:raise RuntimeError('Dual physical magazine tests failed; see saved compiler log')
  print('UnrealScript dual physical magazines: '+dual_mag_match.group(1)+' checks passed')
+ arm_result=subprocess.run([str(system/'ucc.exe'),'KFVRGameplay.KFVRArmMathTests','ini=KFVRMake.ini'],cwd=system,capture_output=True,timeout=90)
+ arm_output=(arm_result.stdout+arm_result.stderr).decode('utf-8',errors='replace');(reports/'unrealscript-arm-tests.log').write_text(arm_output)
+ arm_match=re.search(r'KFVR_ARM_TEST_RESULT checks=(\d+) failures=0',arm_output)
+ if arm_result.returncode or not arm_match:raise RuntimeError('Arm geometry tests failed; see saved compiler log')
+ print('UnrealScript arm geometry: '+arm_match.group(1)+' checks passed')
  out=ROOT/'build/unrealscript';out.mkdir(parents=True,exist_ok=True);shutil.copy2(package,out/package.name)
- (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),reload_pose_checks=int(pose_match.group(1)),magazine_checks=int(mag_match.group(1)),support_pose_checks=int(support_match.group(1)),melee_checks=int(melee_match.group(1)),dual_feed_checks=int(dual_match.group(1)),dual_magazine_checks=int(dual_mag_match.group(1)),inputs=manifest),indent=2))
+ (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),reload_pose_checks=int(pose_match.group(1)),magazine_checks=int(mag_match.group(1)),support_pose_checks=int(support_match.group(1)),arm_pose_checks=int(arm_match.group(1)),melee_checks=int(melee_match.group(1)),dual_feed_checks=int(dual_match.group(1)),dual_magazine_checks=int(dual_mag_match.group(1)),inputs=manifest),indent=2))
 if __name__=='__main__':
  parser=argparse.ArgumentParser();parser.add_argument('--game',type=pathlib.Path,required=True);build(parser.parse_args().game.resolve())

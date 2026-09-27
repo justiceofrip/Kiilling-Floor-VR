@@ -29,8 +29,8 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false;unsigned width=640,height=480;
- for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false;unsigned width=640,height=480;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
  Require(width>=64&&height>=64&&width<=4096&&height<=4096&&std::uint64_t(width)*height*40<=256*1024*1024,"Receiver dimensions exceed CPU bridge budget");
  const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
  ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level{};const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_0};
@@ -42,14 +42,15 @@ int wmain(int argc,wchar_t** argv){try{
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
  const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
- const unsigned trialMs=weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?54000:inventory?26700:7500;
- for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(reload||dual||dualBelt||heal||weld?90000:inventory?60000:35000);++attempt){
+ const unsigned trialMs=arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?54000:inventory?26700:7500;
+ for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(reload||dual||dualBelt||heal||weld||arms?90000:inventory?60000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
   if(movement){
    const auto elapsed=firstPair?now-firstPair:0;
    const unsigned ends[]={700,1300,1800,2400,3100,3800,4300,4900,5600,6300,7000,7500};unsigned phase=0;while(phase<11&&elapsed>=ends[phase])++phase;
    if(inventory){const unsigned inventoryEnds[]={700,1200,1600,1950,4650,4950,5650,6450,6950,7250,7600,10600,10900,11600,12300,13000,13900,14250,17550,17850,18450,19150,19650,20650,21650,22050,22550,23700};phase=0;if(elapsed<3000)phase=28u+unsigned(elapsed/1000);else while(phase<27&&elapsed-3000>=inventoryEnds[phase])++phase;}
+   if(arms)phase=std::min(13u,unsigned(elapsed/2000));
    if(weld)phase=std::min(35u,unsigned((elapsed<5000?elapsed:elapsed-1000)/1000));
    if(heal)phase=std::min(27u,unsigned(elapsed/1000));
    if(dualBelt)phase=std::min(61u,unsigned(elapsed/1000));
@@ -180,6 +181,20 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase==11||phase==13||phase==15||phase==18||phase==20||phase==24||phase==26||phase==28||phase==42||phase==47||phase==54||phase==56||phase==59)lh.trigger=rh.trigger=1;
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
+    if(arms){
+     input={};input.focused=phase!=7;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];const float side=h?1.f:-1.f;hand.gripValid=hand.aimValid=true;hand.gripPose.position={side*.25f,-.25f,-.4f};hand.triggerTouchActive=hand.thumbTouchActive=true;hand.triggerTouched=phase%2;hand.thumbTouched=phase%3;
+      if(phase==1)hand.gripPose.position.z=-.65f;
+      if(phase==12)hand.gripPose.position.z=-1.2f;
+      if(phase==2)hand.gripPose.position={side*.65f,-.25f,-.2f};
+      if(phase==3)hand.gripPose.position={-side*.2f,-.3f,-.3f};
+      if(phase==4)hand.gripPose.position={side*.2f,.2f,-.1f};
+      if(phase==5)hand.gripPose.orientation={0,0,side*.38268343f,.92387953f};
+      if(phase==6)hand.gripPose.position={side*.25f,-.65f,-.1f};
+      if(phase==9&&h==0||phase==10&&h==1)hand.gripValid=hand.aimValid=false;
+      hand.aimPose=hand.gripPose;
+     }
+    }
     if(weld){
      input={};input.focused=phase!=10;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position=h?math::Vec3{0,-.30f,-.72f}:math::Vec3{-.28f,-.28f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
@@ -215,8 +230,10 @@ int wmain(int argc,wchar_t** argv){try{
   }
   runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=0x200000001ULL;tracking.predictedNs=std::int64_t(now)*1000000+std::int64_t(attempt%1000);tracking.focused=tracking.headValid=true;
   if(dualBelt&&(capturePhase==8||capturePhase==9||capturePhase==24))tracking.head.orientation={-.537300f,0,0,.843391f};
+  if(arms&&capturePhase==6)tracking.head.orientation={-.537300f,0,0,.843391f};
+  if(arms&&capturePhase==4)tracking.head.orientation={.382683f,0,0,.923880f};
   if(heal&&(capturePhase==4||capturePhase==10))tracking.head.orientation={-.537300f,0,0,.843391f};
-  if(weapon&&!melee&&!dual&&!dualBelt&&!heal&&!weld&&capturePhase==(inventory?6u:4u))tracking.head.orientation={-.537300f,0,0,.843391f};
+  if(weapon&&!melee&&!dual&&!dualBelt&&!heal&&!weld&&!arms&&capturePhase==(inventory?6u:4u))tracking.head.orientation={-.537300f,0,0,.843391f};
   tracking.head.position.x=movement?0.f:float(pairs%4)*.04f;tracking.eyes={tracking.head,tracking.head};tracking.eyes[0].position.x-=.032f;tracking.eyes[1].position.x+=.032f;tracking.fov={math::FovTangents{-1.05f,.95f,.75f,-.75f},math::FovTangents{-.95f,1.05f,.75f,-.75f}};
   graphics::TextureDescriptor wire;graphics::PairTicket ticket;LARGE_INTEGER begin,end;QueryPerformanceCounter(&begin);
   const auto result=channel.RequestPair(req,tracking,50,wire,ticket);if(result!=ipc::ChannelResult::Ok){++timeouts;Sleep(1);continue;}

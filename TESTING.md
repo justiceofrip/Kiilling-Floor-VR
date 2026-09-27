@@ -113,3 +113,5 @@ Tracked healing: explicit `Start-KFVRDev.ps1 -Unattended -HealTest`, then `nativ
 Tracked welder and real door: launch the explicit unattended DoorTest fixture and run `native_bridge_trial.py --weld`. Evidence 184225 / trace184226-092559 passes 19 tool/door + ten status/grasp checks, 32 weld hits, 14 unweld hits, stock charge recovery, actual door open/close, and all interruption/cleanup checks. 1,150 stereo pairs, 2,163 valid tracking packets, 49 hand pulses. The native receiver now holds the initial contact-observation phase for two seconds; a one-second phase had no snapshot in the preceding otherwise-successful run.
 
 Six-item inventory regression with both tools installed: 184338 passes 25 inventory and 22 display/grasp checks, twelve shots and 828 stereo pairs.
+
+Experimental arms: launch `Start-KFVRDev.ps1 -Unattended -ArmTest`, then `py -3.12 tools/native_bridge_trial.py --pid <PID> --game <game> --arms`. The 28-second sequence covers both joint attachment and tracking/unreachable fallback. See WORKLOG for known sleeve deformation; normal gameplay does not enable it.

@@ -41,7 +41,7 @@ var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
 var bool bManualArmed,bManualPrevious,bUseArmed,bUsePrevious;
 var int UseCount;
-var bool bMeleeTest;
+var bool bMeleeTest,bArmTest;
 var KFVRMeleeTarget MeleeTarget;
 var bool bSupportHeld,bSupportArmed,bSupportPrevious;
 var int SupportGrabs,SupportReleases,SupportFrames;
