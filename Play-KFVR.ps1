@@ -13,6 +13,6 @@ if($kfProcesses.Count -ne 1){throw 'Start Killing Floor and join a solo match be
 $kfScript=Join-Path $PSScriptRoot 'tools\native_headset_trial.py'
 Write-Host "KFVR: left-stick movement, $SnapDegrees degree right-stick snaps, $Scale% headset resolution, $Seconds seconds."
 $kfWeaponArgs=@()
-if($Weapons){$kfWeaponArgs=@('--weapons');Write-Host 'Tracked 9mm, capacitive hands and right-waist holster enabled; the KFVR development mutator must be loaded.'}
+if($Weapons){$kfWeaponArgs=@('--weapons');Write-Host 'Tracked 9mm/Deagle/Bullpup, capacitive hands and inventory holsters enabled; the KFVR development mutator must be loaded.';Write-Host 'Right B: reload. Left X: cycle weapon. Left Y with 9mm: physical reload mode. Left grip at Bullpup foregrip: support hand.'}
 & py -3.12 $kfScript --pid $kfProcesses[0].Id --game $Game --movement --scale $Scale --seconds $Seconds --snap-degrees $SnapDegrees @kfWeaponArgs
 if($LASTEXITCODE -ne 0){throw 'KFVR session ended with an error. See the latest reports/native-headset and native-trace folders.'}

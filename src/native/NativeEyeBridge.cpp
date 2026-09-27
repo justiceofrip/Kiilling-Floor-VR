@@ -18,7 +18,7 @@ struct State {
  std::atomic<bool> stop=false,closed=true;DWORD thread=0;
  void* resetTarget=nullptr;Reset resetOriginal=nullptr;std::array<unsigned char,16> resetBytes{};
  bool resetEnabled=false,resetRestored=true;const char* reason="not_started";
- unsigned requests=0,rendered=0,published=0,consumed=0,discarded=0,expired=0,inputs=0,resets=0;
+ unsigned requests=0,rendered=0,published=0,consumed=0,discarded=0,expired=0,inputs=0,resets=0,inputBusy=0,inputInvalid=0;
  std::uint64_t frame=0,epoch=0,lastInput=0;double renderMs=0,renderMax=0,transferMs=0,transferMax=0;
 } s;
 long long Now(){LARGE_INTEGER q;QueryPerformanceCounter(&q);return q.QuadPart;}
@@ -80,7 +80,10 @@ bool StartEyeBridge(const wchar_t* token){
 bool ReadEyeBridgeControls(xr::ControllerFrame& controls,std::uint64_t& sequence) noexcept{
  controls={};sequence=0;
  if(s.closed.load(std::memory_order_acquire)||s.stop.load(std::memory_order_acquire)||s.thread!=GetCurrentThreadId())return false;
- return s.channel.ReadInput(controls,sequence)==ipc::ChannelResult::Ok;
+ const auto result=s.channel.ReadInput(controls,sequence);
+ if(result==ipc::ChannelResult::Busy)++s.inputBusy;
+ if(result==ipc::ChannelResult::Invalid)++s.inputInvalid;
+ return result==ipc::ChannelResult::Ok;
 }
 bool SendEyeBridgeHaptics(std::uint64_t sequence,const std::array<xr::HapticPulse,2>& pulses) noexcept {
  if(s.closed.load(std::memory_order_acquire)||s.stop.load(std::memory_order_acquire)||s.thread!=GetCurrentThreadId())return false;
@@ -131,6 +134,6 @@ void EyeBridgePresent(bool worldValid) noexcept {try{
 }catch(...){Close("present_exception");}}
 void WriteEyeBridgeReport(const std::filesystem::path& folder){
  std::ofstream out(folder/L"native-bridge.json");if(!EyeBridgeClosed()){out<<"{\"closed\":false,\"cleanup_pending_on_graphics_thread\":true}\n";return;}
- out<<std::boolalpha<<"{\"closed\":true,\"reason\":\""<<s.reason<<"\",\"reset_hook_restored\":"<<s.resetRestored<<",\"resources_released\":true,\"requests\":"<<s.requests<<",\"rendered_pairs\":"<<s.rendered<<",\"published_pairs\":"<<s.published<<",\"consumed_pairs\":"<<s.consumed<<",\"discarded_pairs\":"<<s.discarded<<",\"expired_before_transfer\":"<<s.expired<<",\"controller_samples\":"<<s.inputs<<",\"device_resets\":"<<s.resets<<",\"render_total_ms\":"<<s.renderMs<<",\"render_max_ms\":"<<s.renderMax<<",\"transfer_total_ms\":"<<s.transferMs<<",\"transfer_max_ms\":"<<s.transferMax<<",\"world_scale_calibrated\":false}\n";
+ out<<std::boolalpha<<"{\"closed\":true,\"reason\":\""<<s.reason<<"\",\"reset_hook_restored\":"<<s.resetRestored<<",\"resources_released\":true,\"requests\":"<<s.requests<<",\"rendered_pairs\":"<<s.rendered<<",\"published_pairs\":"<<s.published<<",\"consumed_pairs\":"<<s.consumed<<",\"discarded_pairs\":"<<s.discarded<<",\"expired_before_transfer\":"<<s.expired<<",\"controller_samples\":"<<s.inputs<<",\"input_busy_reads\":"<<s.inputBusy<<",\"input_invalid_reads\":"<<s.inputInvalid<<",\"device_resets\":"<<s.resets<<",\"render_total_ms\":"<<s.renderMs<<",\"render_max_ms\":"<<s.renderMax<<",\"transfer_total_ms\":"<<s.transferMs<<",\"transfer_max_ms\":"<<s.transferMax<<",\"world_scale_calibrated\":false}\n";
 }
 }

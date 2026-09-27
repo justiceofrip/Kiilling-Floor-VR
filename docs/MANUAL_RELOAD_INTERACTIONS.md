@@ -1,6 +1,8 @@
 # Physical reload pipeline
 
-The four-stage pipeline is implemented and tested as reusable C++ mechanics and geometry, with a compiled UE2 animation-presentation adapter. It is **not yet bound to live KF weapon rendering, firing or inventory**. No weapon profile is enabled. The owner is asleep and asked for unattended development without headset tests.
+The **9mm now has live physical reloads** in the standalone development mutator: catch or discard its magazine, retain a partial magazine at the belt, take and insert a replacement, then physically cycle the slide when needed. It uses a game-thread script ledger and the installed model's magazine/slide bones. See [controls and coverage](TRACKED_WEAPONS.md). This has live native-game synthetic-controller evidence, separate from wearer acceptance.
+
+The reusable C++ mechanics below also cover dual-gun belt reloads and stricter continuous insertion geometry. Those dual mechanics and the four-stage authored-animation adapter remain a separate tested foundation; they are not yet live dual-wield gameplay.
 
 ## Implemented behavior
 
@@ -32,7 +34,7 @@ The session emits separate ejection, presentation, seating and clearance events 
 
 ## Weapon and animation presentation
 
-`SolveTrackedWeapon` attaches the weapon and its muzzle to a calibrated controller grip using the same body/reference transform as the eye camera. The current eye/head pose is not an input. Looking around therefore cannot drag a held gun or its proposed shot direction. These transforms are not yet applied to KF's weapon actor or hit traces.
+`SolveTrackedWeapon` attaches the weapon and its muzzle to a calibrated controller grip using the same body/reference transform as the eye camera. The current eye/head pose is not an input. Looking around therefore cannot drag a held gun or its proposed shot direction. The live rig now applies them to its native-world presentation and stock shot traces for Single, Deagle and Bullpup.
 
 `KFVRReloadPoseProfile` provides four independently authored animation ranges. `KFVRReloadVisual` is a separate presentation actor: it links a weapon mesh and skins, samples the selected range with SetAnimFrame, and stops animation advancement. It is not a KFWeapon and contains no ammo-crediting callbacks. It is compiled but not spawned automatically. The profile tests use synthetic frame ranges; actual release/hold/insert/action markers have not been measured on the assets.
 
@@ -42,6 +44,6 @@ Dual rendering needs independently attached gun models. The stock combined dual-
 
 ## Integration boundary
 
-The older AmmoMachine and KFVRAmmoState remain the separately tested timed/tube-policy prototype. PhysicalReload is the new native detachable-magazine ledger; its dual magazine/object state has not been ported into the UnrealScript authority. A live adapter must select one authority and prevent stock ConsumeAmmo/AddReloadedAmmo and animation notifies from also changing its counts. Existing KF fire cadence, perks, pickups, trader and replication behavior still need explicit binding.
+The older AmmoMachine and KFVRAmmoState remain the separately tested timed/tube-policy prototype. PhysicalReload is the new native detachable-magazine ledger; its dual magazine/object state has not been ported into the UnrealScript authority. The live 9mm selects KFVRMagazineState as its reload authority, blocks timed reload entry points, and mirrors each successful stock ConsumeAmmo once. Stock firing still owns cadence, damage and perk behavior. Wider pickup/trader scenarios and server replication remain unverified.
 
-The current modules are a working foundation and headless pipeline, not a claim of playable manual reloads. Next: calibrate the Single model, attach its first-person presentation and muzzle ray on the normal game tick, wire trigger/fire and physical gestures, then adapt the dual presentation and server inventory. Do not request a wearer test for each small step.
+The live Single adapter is an early manual-reload implementation, with no wearer acceptance yet. Its current insertion uses proximity, alignment and a deliberate grip release; the portable continuous insertion-stroke checks are not yet connected. Next work includes dual independent presentation, other weapon mechanisms, server inventory and ergonomic refinement. Routine development continues without repeated wearer prompts.

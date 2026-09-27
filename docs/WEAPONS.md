@@ -2,7 +2,7 @@
 
 96 KFWeapon-derived classes, including abstract bases, skins, story tools and legacy variants. This is not a count of trader weapons.
 
-Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. The separate standalone KFVRTrackedSingle adapter now enables 9mm aiming/fire, hands and one waist holster; its physical reload remains unbound.
+Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm/Deagle/Bullpup tracked aiming, stock firing, controller reloads and inventory holsters. The 9mm also has physical magazine/slide manipulation; the Bullpup has a support-hand grip. Other families remain inactive.
 
 | Class | Candidate family | Capacity | Reload seconds | Notes |
 | --- | --- | ---: | ---: | --- |
@@ -10,14 +10,14 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.KFMeleeGun | Melee | 0 | 0.0 | Pending interaction/asset validation |
 | KFMod.BoomStick | BreakAction | 2 | 0.009999999776482582 | Pending interaction/asset validation |
 | KFMod.Dualies | DualMagazineFed | 30 | 3.5 | Pending interaction/asset validation |
-| KFMod.Deagle | MagazineFed | 8 | 2.200000047683716 | Pending interaction/asset validation |
+| KFMod.Deagle | MagazineFed | 8 | 2.200000047683716 | Tracked fire, timed controller reload, left hip slot |
 | KFMod.SeekerSixRocketLauncher | MultiTubeLauncher | 6 | 3.130000114440918 | Pending interaction/asset validation |
 | KFMod.FlareRevolver | Revolver | 6 | 3.200000047683716 | Pending interaction/asset validation |
 | KFMod.MK23Pistol | MagazineFed | 12 | 2.5999999046325684 | Pending interaction/asset validation |
 | KFMod.Syringe | Tool | 0 | 0.0 | Pending interaction/asset validation |
 | KFMod.Magnum44Pistol | Revolver | 6 | 2.5250000953674316 | Pending interaction/asset validation |
 | KFMod.M7A3MMedicGun | MagazineFed | 15 | 3.065999984741211 | Pending interaction/asset validation |
-| KFMod.Single | MagazineFed | 15 | 2.0 | Live tracked aiming/fire/holster adapter; physical reload pending |
+| KFMod.Single | MagazineFed | 15 | 2.0 | Live tracked aiming/fire/holster and physical reload adapter |
 | KFMod.ZEDGun | EnergyWeapon | 100 | 3.5 | Pending interaction/asset validation |
 | KFMod.Crossbow | SingleRoundBow | 1 | 0.009999999776482582 | Pending interaction/asset validation |
 | KFMod.MP7MMedicGun | MagazineFed | 20 | 3.1659998893737793 | Pending interaction/asset validation |
@@ -56,7 +56,7 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.SPGrenadeLauncher | BreakActionLauncher | 1 | 0.009999999776482582 | Pending interaction/asset validation |
 | KFMod.FNFAL_ACOG_AssaultRifle | MagazineFed | 20 | 3.5999999046325684 | Pending interaction/asset validation |
 | KFMod.MAC10MP | MagazineFed | 30 | 3.0 | Pending interaction/asset validation |
-| KFMod.Bullpup | MagazineFed | 40 | 1.9666670560836792 | Pending interaction/asset validation |
+| KFMod.Bullpup | MagazineFed | 40 | 1.9666670560836792 | Tracked automatic fire, timed reload, shoulder slot, support hand |
 | KFMod.Welder | Tool | 0 | 0.0 | Pending interaction/asset validation |
 | KFMod.Winchester | LeverAction | 10 | 0.6666666865348816 | Pending interaction/asset validation |
 | KFMod.M4203AssaultRifle | MagazineFed+UnderbarrelLauncher | 30 | 3.6333000659942627 | Pending interaction/asset validation |

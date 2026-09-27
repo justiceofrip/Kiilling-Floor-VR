@@ -2,6 +2,7 @@
 class KFVRDevMutator extends Mutator;
 var KFVRWeaponRig Rig;
 var bool bUnattended;
+var Pawn TestPawn;
 function PostBeginPlay()
 {
     Super.PostBeginPlay();
@@ -9,14 +10,32 @@ function PostBeginPlay()
     bUnattended=InStr(Caps(Level.GetLocalURL()),"KFVRUNATTENDED=1")>=0;
     SetTimer(0.5,True);
 }
+function class<KFWeapon> Replacement(KFWeapon W)
+{
+    if (W.Class==class'Single') return class'KFVRTrackedSingle';
+    if (W.Class==class'Deagle') return class'KFVRTrackedDeagle';
+    if (W.Class==class'Bullpup') return class'KFVRTrackedBullpup';
+    return None;
+}
+function bool AttachRig(KFWeapon W)
+{
+    if (KFVRTrackedSingle(W)!=None)
+    { KFVRTrackedSingle(W).VRRig=Rig; Rig.RegisterWeapon(W,0); return True; }
+    if (KFVRTrackedDeagle(W)!=None)
+    { KFVRTrackedDeagle(W).VRRig=Rig; Rig.RegisterWeapon(W,1); return True; }
+    if (KFVRTrackedBullpup(W)!=None)
+    { KFVRTrackedBullpup(W).VRRig=Rig; Rig.RegisterWeapon(W,2); return True; }
+    return False;
+}
 function Timer()
 {
     local PlayerController PC;
     local Inventory I;
-    local Single Old;
+    local KFWeapon Old,NewGun;
     local Weapon Previous;
-    local KFVRTrackedSingle NewGun;
+    local class<KFWeapon> NewType;
     local int Total,Loaded;
+    local bool WasSelected;
     local KFMonster Enemy;
     if (bUnattended)
     {
@@ -31,8 +50,7 @@ function Timer()
             PC.bGodMode=True;
             if (KFPlayerController(PC)!=None && KFPlayerController(PC).SteamStatsAndAchievements!=None)
                 KFPlayerController(PC).SteamStatsAndAchievements.bUsedCheats=True;
-            if (PC.Pawn==None && Level.Game.bWaitingToStartMatch && PC.PlayerReplicationInfo!=None)
-                PC.ServerRestartPlayer();
+            if (PC.Pawn==None && Level.Game.bWaitingToStartMatch && PC.PlayerReplicationInfo!=None) PC.ServerRestartPlayer();
         }
         if (PC.Pawn==None || PC.Pawn.Health<=0) continue;
         if (Rig==None || Rig.Owner!=PC)
@@ -41,22 +59,34 @@ function Timer()
             Rig=Spawn(class'KFVRWeaponRig',PC);
         }
         if (Rig==None) return;
+        Rig.PC=PC;
         for (I=PC.Pawn.Inventory; I!=None; I=I.Inventory)
-            if (KFVRTrackedSingle(I)!=None) { Rig.Gun=KFVRTrackedSingle(I); Rig.Gun.VRRig=Rig; return; }
-        for (I=PC.Pawn.Inventory; I!=None; I=I.Inventory)
-            if (I.Class==class'Single') { Old=Single(I); break; }
-        if (Old==None) return;
-        Total=Old.AmmoAmount(0); Loaded=Old.MagAmmoRemaining; Previous=PC.Pawn.Weapon;
-        NewGun=Spawn(class'KFVRTrackedSingle',PC.Pawn);
-        if (NewGun==None) return;
-        Old.StopFire(0); Old.StopFire(1);
-        PC.Pawn.DeleteInventory(Old); Old.Destroy();
-        NewGun.GiveTo(PC.Pawn);
-        NewGun.SetTransferredAmmo(Total,Loaded);
-        Rig.Gun=NewGun; NewGun.VRRig=Rig;
-        if (Previous!=None) { Previous.StopFire(0); Previous.PutDown(); }
-        PC.Pawn.PendingWeapon=None; PC.Pawn.Weapon=NewGun; NewGun.BringUp();
-        Log("KFVR_RIG_READY owner=" $ PC $ " gun=" $ NewGun $ " ammo=" $ Total $ " loaded=" $ Loaded);
+        {
+            Old=KFWeapon(I);
+            if (Old==None) continue;
+            if (AttachRig(Old)) continue;
+            NewType=Replacement(Old);
+            if (NewType==None) continue;
+            Total=Old.AmmoAmount(0); Loaded=Old.MagAmmoRemaining;
+            Previous=PC.Pawn.Weapon; WasSelected=Previous==Old;
+            NewGun=Spawn(NewType,PC.Pawn);
+            if (NewGun==None) return;
+            Old.StopFire(0); Old.StopFire(1); PC.Pawn.DeleteInventory(Old); Old.Destroy();
+            NewGun.GiveTo(PC.Pawn); NewGun.ClientForceAmmoUpdate(0,Total); NewGun.MagAmmoRemaining=Loaded;
+            AttachRig(NewGun);
+            if (WasSelected || PC.Pawn.Weapon==None || (Rig.InventoryCount==1 && KFVRTrackedSingle(NewGun)!=None))
+            { PC.Pawn.PendingWeapon=NewGun; PC.Pawn.ChangedWeapon(); }
+            else if (Previous!=None) { PC.Pawn.PendingWeapon=Previous; PC.Pawn.ChangedWeapon(); }
+            Log("KFVR_RIG_READY owner=" $ PC $ " gun=" $ NewGun $ " ammo=" $ Total $ " loaded=" $ Loaded);
+            return;
+        }
+        if (bUnattended && TestPawn!=PC.Pawn)
+        {
+            TestPawn=PC.Pawn; Previous=PC.Pawn.Weapon;
+            NewGun=Spawn(class'Deagle',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
+            NewGun=Spawn(class'Bullpup',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
+            if (Previous!=None) { PC.Pawn.PendingWeapon=Previous; PC.Pawn.ChangedWeapon(); }
+        }
         return;
     }
 }
