@@ -42,8 +42,8 @@ int wmain(int argc,wchar_t** argv){try{
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
  const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
- const unsigned trialMs=grenade?80000:trader?104000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?54000:inventory?26700:7500;
- for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader||grenade?150000:reload||dual||dualBelt||heal||weld||arms?90000:inventory?60000:35000);++attempt){
+ const unsigned trialMs=grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?54000:inventory?26700:7500;
+ for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:reload||dual||dualBelt||heal||weld||arms?90000:inventory?60000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
   if(movement){
@@ -51,7 +51,7 @@ int wmain(int argc,wchar_t** argv){try{
    const unsigned ends[]={700,1300,1800,2400,3100,3800,4300,4900,5600,6300,7000,7500};unsigned phase=0;while(phase<11&&elapsed>=ends[phase])++phase;
    if(inventory){const unsigned inventoryEnds[]={700,1200,1600,1950,4650,4950,5650,6450,6950,7250,7600,10600,10900,11600,12300,13000,13900,14250,17550,17850,18450,19150,19650,20650,21650,22050,22550,23700};phase=0;if(elapsed<3000)phase=28u+unsigned(elapsed/1000);else while(phase<27&&elapsed-3000>=inventoryEnds[phase])++phase;}
    if(grenade)phase=std::min(39u,unsigned(elapsed/2000));
-   if(trader)phase=std::min(51u,unsigned(elapsed/2000));
+   if(trader)phase=std::min(63u,unsigned(elapsed/2000));
    if(arms)phase=std::min(13u,unsigned(elapsed/2000));
    if(weld)phase=std::min(35u,unsigned((elapsed<5000?elapsed:elapsed-1000)/1000));
    if(heal)phase=std::min(27u,unsigned(elapsed/1000));
@@ -210,13 +210,15 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase>=13&&phase<=14)row=7;
      if(phase>=19&&phase<=21||phase>=24&&phase<=25)row=2;
      if(phase>=22&&phase<=23)row=3;
+     if(phase>=55)row=8;
      const float rowV=(244.f+row*80.f)/1024.f;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position=h?math::Vec3{.1f,0,-.45f}:math::Vec3{-.3f,-.3f,-.4f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      auto& rh=input.hands[1];
      const float pointAngle=std::atan2(-.08f+(.5f-rowV)*.9f,.55f);rh.gripPose.orientation={std::sin(pointAngle*.5f),0,0,std::cos(pointAngle*.5f)};
-     if(phase==1||phase==18||phase==29||phase==33||phase==40||phase==42)rh.primary=true;
-     if(phase==3||phase==4||phase==6||phase==8||phase==10||phase==12||phase==14||phase==16||phase==20||phase==21||phase==23||phase==25||phase==27||phase==31||phase==35||phase==36||phase==38||phase==45||phase==48)rh.trigger=1;
-     if(phase==43||phase==46||phase==49)input.hands[0].secondary=true;
+     if(phase==1||phase==18||phase==29||phase==33||phase==40||phase==42||phase==54||phase==60)rh.primary=true;
+     if(phase==3||phase==4||phase==6||phase==8||phase==10||phase==12||phase==14||phase==16||phase==20||phase==21||phase==23||phase==25||phase==27||phase==31||phase==35||phase==36||phase==38||phase==45||phase==48||phase==56||phase==57||phase==59)rh.trigger=1;
+     if(phase==43||phase==46||phase==49||phase==52)input.hands[0].secondary=true;
+     if(phase==30){rh.gripPose.position={.22f,-.62f,.05f};rh.squeeze=1;}
      if(phase==35)rh.gripValid=rh.aimValid=false;
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }

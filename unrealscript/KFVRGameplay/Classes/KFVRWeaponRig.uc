@@ -251,17 +251,19 @@ function bool WantsFire()
 {
     return Active() && (Tracking.Flags & 2)!=0 && bTriggerArmed && !bHolstered && Tracking.RightTrigger>0.75;
 }
-function RestoreTraderWeapon()
+function RestoreTraderWeapon(optional KFWeapon Preferred)
 {
     local int I;
     if (PC==None || PC.Pawn==None || PC.Pawn.Health<=0) return;
     PruneInventory();
-    for (I=0;I<InventoryCount;I++) if (PC.Pawn.Weapon==InventoryWeapons[I]) return;
-    // Stock selling may select its hidden grenade item. Return to a tracked slot.
     for (I=0;I<InventoryCount;I++)
-        if (InventoryWeapons[I]==Gun && InventoryVisualFailed[I]==0) { SelectInventoryWeapon(I); return; }
+        if (Preferred!=None && InventoryWeapons[I]==Preferred && InventoryVisualFailed[I]==0) { SelectInventoryWeapon(I); return; }
+    for (I=0;I<InventoryCount;I++) if (PC.Pawn.Weapon==InventoryWeapons[I] && InventoryWeapons[I].Class!=class'Frag') return;
+    // Stock selling may select its hidden quick-grenade item. Prefer a firearm after shopping.
     for (I=0;I<InventoryCount;I++)
-        if (InventoryVisualFailed[I]==0) { SelectInventoryWeapon(I); return; }
+        if (InventoryWeapons[I]==Gun && InventoryWeapons[I].Class!=class'Frag' && InventoryVisualFailed[I]==0) { SelectInventoryWeapon(I); return; }
+    for (I=0;I<InventoryCount;I++)
+        if (InventoryWeapons[I].Class!=class'Frag' && InventoryVisualFailed[I]==0) { SelectInventoryWeapon(I); return; }
 }
 function ParkForTrader()
 {
@@ -346,6 +348,7 @@ function Tick(float Delta)
             if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
             if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).StoreForSwitch();
             if (ManualReload!=None) ManualReload.StoreForSwitch();
+            if (GrenadeControl!=None) GrenadeControl.ResetInput();
             Gun=InventoryWeapons[I]; ActiveIndex=I; ManualReload=InventoryManuals[I]; bFiring=False; bTriggerArmed=False; bHolstered=False;
         }
     if (PC.Pawn.Weapon!=Gun) bHolstered=True;

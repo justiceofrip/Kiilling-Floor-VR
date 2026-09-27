@@ -26,6 +26,11 @@ def validate(folder):
  checks['buy_duals_once_while_held']=state(21,Duals=1) and last(21).get('BuyCount')==3
  checks['full_dual_ammo_rejects_charge']=last(23).get('ActionCount')==last(21).get('ActionCount') and last(23).get('RejectedCount')==last(21).get('RejectedCount',-1)+1 and last(23,'KFVRTraderTest').get('Cash')==last(21,'KFVRTraderTest').get('Cash') and all(w['VRTotalAmmo']==240 for w in phase(23,'KFVRTrackedDualies'))
  checks['selling_duals_restores_single']=state(26,Duals=0) and bool(phase(26,'KFVRTrackedSingle'))
+ checks['dual_sale_conserves_shared_ammo']=last(26).get('DualAmmoTransfers')==1 and last(26).get('TransferredTotal')==last(23,'KFVRTraderTest').get('PistolAmmo') and state(26,PistolAmmo=240) and all(w['MagAmmoRemaining']==15 for w in phase(26,'KFVRTrackedSingle'))
+ checks['single_can_fire_transferred_ammo']=last(32,'KFVRTrackedSingle').get('VRFireAttempts',0)>0 and last(32,'KFVRTraderTest').get('PistolAmmo',240)<240
+ checks['grenade_refill_pays_stock_price']=state(57,GrenadeAmmo=5,TestStage=4) and last(57).get('GrenadeFills')==1 and last(57).get('AmmoBefore')==2 and last(57).get('AmmoAfter')==5 and last(57).get('LastPrice',0)>0 and abs(last(57).get('CashBefore',0)-last(57).get('CashAfter',0)-last(57).get('LastPrice',-999))<0.01
+ checks['held_refill_runs_once']=last(57).get('ActionCount')==last(56).get('ActionCount')
+ checks['full_grenades_reject_charge']=last(59).get('ActionCount')==last(57).get('ActionCount') and last(59).get('RejectedCount')==last(57).get('RejectedCount',-1)+1 and last(59,'KFVRTraderTest').get('Cash')==last(57,'KFVRTraderTest').get('Cash')
  checks['repurchase_deagle']=state(28,Deagles=1)
  checks['close_button']=bool(phase(30)) and all(not p['bOpen'] for p in phase(30))
  checks['weapon_input_resumes']=bool(phase(32,'KFVRWeaponRig')) and max(r['TraceCount'] for r in phase(32,'KFVRWeaponRig'))>rigs[0]['TraceCount']

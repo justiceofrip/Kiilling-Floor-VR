@@ -2,7 +2,7 @@
 
 96 KFWeapon-derived classes, including abstract bases, skins, story tools and legacy variants. This is not a count of trader weapons.
 
-Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm, dual 9mm, Deagle, Bullpup knife, syringe and welder tracked weapons/tools with inventory holsters. Single pistols support physical magazines/slides, dual 9mm supports physical belt reloads, the Bullpup has a support-hand grip, and the knife uses physical swings. Other families remain inactive.
+Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm, dual 9mm, Deagle, Bullpup, knife, syringe, welder and stock frag grenade interactions with inventory holsters. Single pistols support physical magazines/slides, dual 9mm supports physical belt reloads, the Bullpup has a support-hand grip, and the knife uses physical swings. Other families remain inactive.
 
 | Class | Candidate family | Capacity | Reload seconds | Notes |
 | --- | --- | ---: | ---: | --- |
@@ -26,7 +26,7 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.MP5MMedicGun | MagazineFed | 32 | 3.799999952316284 | Pending interaction/asset validation |
 | KFMod.M14EBRBattleRifle | MagazineFed | 20 | 3.365999937057495 | Pending interaction/asset validation |
 | KFMod.FlameThrower | FuelWeapon | 100 | 4.139999866485596 | Pending interaction/asset validation |
-| KFMod.Frag | Throwable | 1 | 1.0 | Pending interaction/asset validation |
+| KFMod.Frag | Throwable | 1 | 1.0 | Exact stock item; rear-waist draw, grip release throws, stock projectiles/ammo/damage pass live synthetic checks |
 | KFMod.M79GrenadeLauncher | BreakActionLauncher | 1 | 0.009999999776482582 | Pending interaction/asset validation |
 | KFMod.LAW | SingleRoundLauncher | 1 | 3.0 | Pending interaction/asset validation |
 | KFMod.DualDeagle | DualMagazineFed | 16 | 3.5 | Pending interaction/asset validation |

@@ -6,12 +6,13 @@ var bool bReady,bPreviousCommand,bShopOpen;
 var int TestStage;
 var float OriginalMaxWeight;
 var float Cash,CarryWeight;
-var int WeaponCount,Deagles,Bullpups,Duals,PistolAmmo;
+var int WeaponCount,Deagles,Bullpups,Duals,PistolAmmo,GrenadeAmmo;
 function bool Initialize(PlayerController Player)
 {
     local ShopVolume S,T;
     local vector Candidate;
     local int I;
+    local Weapon Grenades;
     PC=Player;
     if (Level.NetMode!=NM_Standalone || PC==None || PC.Pawn==None) return False;
     KFGameType(Level.Game).bWaveInProgress=False; KFGameType(Level.Game).WaveCountDown=300;
@@ -29,6 +30,7 @@ function bool Initialize(PlayerController Player)
                 {
                     TestShop=S; bReady=True; OriginalMaxWeight=KFHumanPawn(PC.Pawn).MaxCarryWeight; PC.SetRotation(rot(0,0,0)); PC.Pawn.SetRotation(rot(0,0,0));
                     PC.PlayerReplicationInfo.Score=2000; PC.Pawn.Health=40; PC.Pawn.ShieldStrength=0;
+                    Grenades=Weapon(PC.Pawn.FindInventoryType(class'Frag')); if (Grenades!=None) Grenades.ClientForceAmmoUpdate(0,2);
                     Log("KFVR_TRADER_TEST_READY shop=" $ S $ " pawn=" $ PC.Pawn.Location); return True;
                 }
         }
@@ -50,6 +52,7 @@ function Tick(float Delta)
         if (TestStage==1) PC.PlayerReplicationInfo.Score=0;
         if (TestStage==2) { PC.PlayerReplicationInfo.Score=2000; KFHumanPawn(PC.Pawn).MaxCarryWeight=KFHumanPawn(PC.Pawn).CurrentWeight; }
         if (TestStage==3) { KFHumanPawn(PC.Pawn).MaxCarryWeight=OriginalMaxWeight; TestShop.CloseShop(); }
+        if (TestStage==4) { TestShop.OpenShop(); PC.PlayerReplicationInfo.Score=2000; }
     }
     bPreviousCommand=Command; bShopOpen=TestShop.bCurrentlyOpen;
     Cash=PC.PlayerReplicationInfo.Score; CarryWeight=KFHumanPawn(PC.Pawn).CurrentWeight;
@@ -60,6 +63,7 @@ function Tick(float Delta)
         if (Deagle(I)!=None) Deagles++;
         if (Bullpup(I)!=None) Bullpups++;
         if (Dualies(I)!=None) Duals++;
+        if (I.Class==class'Frag') GrenadeAmmo=Weapon(I).AmmoAmount(0);
         if (Single(I)!=None || Dualies(I)!=None) PistolAmmo=Weapon(I).AmmoAmount(0);
     }
 }

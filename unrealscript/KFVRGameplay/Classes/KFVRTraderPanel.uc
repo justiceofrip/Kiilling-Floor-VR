@@ -3,6 +3,8 @@ class KFVRTraderPanel extends KFVRStatusDisplay;
 var ShopVolume Shop;
 var KFLevelRules Rules;
 var KFHumanPawn Customer;
+var KFWeapon PreviousGun;
+var int DualAmmoTransfers,GrenadeFills,TransferredTotal,TransferredLoaded;
 var bool bOpen,bSelectArmed,bSelectPrevious,bCloseArmed,bClosePrevious,bWasHolstered;
 var int HoverRow,OpenCount,CloseCount,ActionCount,BuyCount,SellCount,AmmoCount,ArmorCount,HealCount,RejectedCount;
 var float CursorU,CursorV,DisplayedCash,DisplayedWeight,DisplayedMaxWeight;
@@ -50,7 +52,7 @@ function bool OpenShop(ShopVolume S)
     if (Rig==None || Rig.PC==None) return False;
     Customer=KFHumanPawn(Rig.PC.Pawn); Shop=S;
     if (!Eligible()) return False;
-    bWasHolstered=Rig.bHolstered; Rig.ParkForTrader();
+    PreviousGun=Rig.Gun; bWasHolstered=Rig.bHolstered; Rig.ParkForTrader();
     GetAxes(Rig.Tracking.BodyRotation,X,Y,Z);
     SetLocation(Rig.Tracking.HeadPosition+(X-Z*0.08)*Rig.Tracking.UnitsPerMetre);
     SetRotation(OrthoRotation(-X,-Y,Z)); SetDrawScale(Rig.Tracking.UnitsPerMetre*0.9/100);
@@ -62,7 +64,7 @@ function CloseShop()
     if (!bOpen) return;
     bOpen=False; bHidden=True; CloseCount++; HoverRow=-1;
     bSelectArmed=False; bCloseArmed=False;
-    if (Rig!=None) { Rig.RestoreTraderWeapon(); Rig.bHolstered=bWasHolstered; Rig.bTriggerArmed=False; Rig.bUseArmed=False; Rig.bUsePrevious=True; }
+    if (Rig!=None) { Rig.RestoreTraderWeapon(PreviousGun); Rig.bHolstered=bWasHolstered; Rig.bTriggerArmed=False; Rig.bUseArmed=False; Rig.bUsePrevious=True; }
 }
 function KFWeapon Owned(class<KFWeapon> Kind)
 {
@@ -86,6 +88,7 @@ function float SalePrice(KFWeapon W)
 }
 function KFWeapon AmmoWeapon(int Row)
 {
+    if (Row==8) return Owned(class'Frag');
     if (Row==3) { if (Owned(class'Dualies')!=None) return Owned(class'Dualies'); return Owned(class'Single'); }
     return Owned(Catalog[Row-4]);
 }
@@ -122,8 +125,9 @@ function Snapshot()
                 && Customer.CanCarry(class<KFWeaponPickup>(Catalog[I].default.PickupClass).default.Weight);
         }
     }
-    for (I=3;I<6;I++)
+    for (I=3;I<9;I++)
     {
+        if (I==6 || I==7) continue;
         W=AmmoWeapon(I); Rows[I]="AMMO - WEAPON NOT OWNED"; StateRows[I].Enabled=False;
         if (W!=None)
         { Price=FillPrice(W); Rows[I]="FILL " $ W.ItemName $ " AMMO   " $ int(Price); StateRows[I].Enabled=Price>0 && DisplayedCash>0; }
@@ -133,10 +137,28 @@ function Snapshot()
     Rows[7]="HEAL " $ Customer.Health $ "%   " $ class'FirstAidKit'.default.ItemCost;
     StateRows[7].Enabled=Customer.Health+Customer.healthToGive<100 && DisplayedCash>=class'FirstAidKit'.default.ItemCost;
     if (Customer.healthToGive>0) Rows[7]="HEALING   " $ Customer.Health $ "%";
-    Rows[8]="CLOSE"; StateRows[8].Enabled=True;
     Combined=HeaderLine $ "|" $ HoverRow $ "|" $ int(CursorU*1024) $ "|" $ int(CursorV*1024);
     for (I=0;I<9;I++) Combined=Combined $ "|" $ Rows[I] $ StateRows[I].Enabled;
     if (Combined!=PreviousText) { PreviousText=Combined; Surface.Revision++; TextureUpdates++; }
+}
+// KF creates Single before destroying Dualies, so the shared ammo actor is
+// destroyed underneath its replacement. Rebind through stock GiveAmmo and
+// restore the measured total/right feed only after a successful owned sale.
+function SellTracked(KFWeapon W)
+{
+    local KFVRTrackedDualies D;
+    local KFWeapon Remaining;
+    local int Total,Loaded;
+    D=KFVRTrackedDualies(W); Total=-1;
+    if (D!=None) { D.EnsureFeed(); Total=D.AmmoAmount(0); Loaded=D.RightLoaded; }
+    Customer.ServerSellWeapon(W.Class);
+    if (Total<0 || Owned(class'Dualies')!=None) return;
+    Remaining=Owned(class'Single');
+    if (Remaining==None || Remaining.Owner!=Customer) return;
+    Remaining.GiveAmmo(0,None,False);
+    Remaining.ClientForceAmmoUpdate(0,Min(Total,Remaining.MaxAmmo(0)));
+    Remaining.MagAmmoRemaining=Min(Loaded,Min(Remaining.MagCapacity,Remaining.AmmoAmount(0)));
+    TransferredTotal=Remaining.AmmoAmount(0); TransferredLoaded=Remaining.MagAmmoRemaining; DualAmmoTransfers++;
 }
 function ExecuteRow(int Row)
 {
@@ -150,17 +172,18 @@ function ExecuteRow(int Row)
     {
         W=Owned(Catalog[Row]);
         if (W!=None)
-        { LastSellValue=W.SellValue; LastPrice=SalePrice(W); Customer.ServerSellWeapon(W.Class); SellCount++; }
+        { LastSellValue=W.SellValue; LastPrice=SalePrice(W); SellTracked(W); SellCount++; }
         else
         { LastPrice=WeaponPrice(Catalog[Row]); Customer.ServerBuyWeapon(Catalog[Row],class<KFWeaponPickup>(Catalog[Row].default.PickupClass).default.Weight); BuyCount++; }
     }
-    else if (Row<6)
+    else if (Row<6 || Row==8)
     {
         W=AmmoWeapon(Row);
         if (W!=None)
         {
             AmmoBefore=W.AmmoAmount(0); LastPrice=FillPrice(W);
             Customer.ServerBuyAmmo(W.AmmoClass[0],False); AmmoAfter=W.AmmoAmount(0); AmmoCount++;
+            if (Row==8 && AmmoAfter>AmmoBefore) GrenadeFills++;
             for (I=0;I<Rig.InventoryCount;I++) if (Rig.InventoryManuals[I]!=None) Rig.InventoryManuals[I].Reconcile();
             if (KFVRTrackedDualies(W)!=None) KFVRTrackedDualies(W).EnsureFeed();
         }
