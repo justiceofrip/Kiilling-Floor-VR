@@ -2,7 +2,7 @@
 
 96 KFWeapon-derived classes, including abstract bases, skins, story tools and legacy variants. This is not a count of trader weapons.
 
-Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm, dual 9mm, Deagle, Bullpup knife and syringe tracked weapons with inventory holsters. Single pistols support physical magazines/slides, dual 9mm supports physical belt reloads, the Bullpup has a support-hand grip, and the knife uses physical swings. Other families remain inactive.
+Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm, dual 9mm, Deagle, Bullpup knife, syringe and welder tracked weapons/tools with inventory holsters. Single pistols support physical magazines/slides, dual 9mm supports physical belt reloads, the Bullpup has a support-hand grip, and the knife uses physical swings. Other families remain inactive.
 
 | Class | Candidate family | Capacity | Reload seconds | Notes |
 | --- | --- | ---: | ---: | --- |
@@ -57,7 +57,7 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.FNFAL_ACOG_AssaultRifle | MagazineFed | 20 | 3.5999999046325684 | Pending interaction/asset validation |
 | KFMod.MAC10MP | MagazineFed | 30 | 3.0 | Pending interaction/asset validation |
 | KFMod.Bullpup | MagazineFed | 40 | 1.9666670560836792 | Tracked automatic fire, timed reload, shoulder slot, support hand |
-| KFMod.Welder | Tool | 0 | 0.0 | Pending interaction/asset validation |
+| KFMod.Welder | Tool | 0 | 0.0 | Tracked flame tip, stock charge/perks, real Offices door weld/unweld/Use verified |
 | KFMod.Winchester | LeverAction | 10 | 0.6666666865348816 | Pending interaction/asset validation |
 | KFMod.M4203AssaultRifle | MagazineFed+UnderbarrelLauncher | 30 | 3.6333000659942627 | Pending interaction/asset validation |
 | KFMod.TrenchGun | PumpShotgun | 6 | 0.699999988079071 | Pending interaction/asset validation |

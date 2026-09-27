@@ -3,6 +3,7 @@ class KFVRDevMutator extends Mutator;
 var KFVRWeaponRig Rig;
 var bool bUnattended,bDualTest;
 var Pawn TestPawn;
+var KFVRDoorTest DoorTest;
 function PostBeginPlay()
 {
     Super.PostBeginPlay();
@@ -13,6 +14,7 @@ function PostBeginPlay()
 }
 function class<KFWeapon> Replacement(KFWeapon W)
 {
+    if (W.Class==class'Welder') return class'KFVRTrackedWelder';
     if (W.Class==class'Syringe') return class'KFVRTrackedSyringe';
     if (W.Class==class'Dualies') return class'KFVRTrackedDualies';
     if (W.Class==class'Knife') return class'KFVRTrackedKnife';
@@ -23,6 +25,8 @@ function class<KFWeapon> Replacement(KFWeapon W)
 }
 function bool AttachRig(KFWeapon W)
 {
+    if (KFVRTrackedWelder(W)!=None)
+    { KFVRTrackedWelder(W).VRRig=Rig; KFVRTrackedWelder(W).VRTotalAmmo=W.AmmoAmount(0); Rig.RegisterWeapon(W,5); return True; }
     if (KFVRTrackedSyringe(W)!=None)
     { KFVRTrackedSyringe(W).VRRig=Rig; KFVRTrackedSyringe(W).VRTotalAmmo=W.AmmoAmount(0); Rig.RegisterWeapon(W,4); return True; }
     if (KFVRTrackedDualies(W)!=None)
@@ -94,6 +98,8 @@ function Timer()
         {
             TestPawn=PC.Pawn; Previous=PC.Pawn.Weapon;
             if (InStr(Caps(Level.GetLocalURL()),"KFVRHEALTEST=1")>=0) { PC.Pawn.Health=40; KFHumanPawn(PC.Pawn).healthToGive=0; }
+            if (InStr(Caps(Level.GetLocalURL()),"KFVRDOORTEST=1")>=0)
+            { if (DoorTest!=None) DoorTest.Destroy(); DoorTest=Spawn(class'KFVRDoorTest',self); if (DoorTest!=None) DoorTest.Initialize(PC); }
             if (bDualTest) { NewGun=Spawn(class'Dualies',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn); }
             NewGun=Spawn(class'Deagle',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
             NewGun=Spawn(class'Bullpup',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);

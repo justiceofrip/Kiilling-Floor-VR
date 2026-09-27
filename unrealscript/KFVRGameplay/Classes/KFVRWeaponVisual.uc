@@ -25,6 +25,7 @@ simulated function bool Initialize(Weapon Source)
     TipBone='tip';
     if (KFVRTrackedKnife(Source)!=None) TipBone='knife';
     if (KFVRTrackedSyringe(Source)!=None) TipBone='Syringe';
+    if (KFVRTrackedWelder(Source)!=None) TipBone='flame_tip';
     if (KFVRTrackedDualies(Source)!=None) { if (bOffhandGun) TipBone='Tip_Left'; else TipBone='Tip_Right'; }
     Palm=GetBoneCoords('Hands_RArmPalm'); Tip=GetBoneCoords(TipBone);
     if (bOffhandGun) Palm=GetBoneCoords('Hands_LArmPalm');
@@ -44,6 +45,8 @@ simulated function bool Initialize(Weapon Source)
         ToolAxis=Normal(Tip.XAxis); TipLocal+=ToolAxis*45.0;
         SetBoneScale(3,0.0,'Syringe Capsule');
     }
+    if (KFVRTrackedWelder(Source)!=None)
+    { Part=GetBoneCoords('flame_base'); ToolAxis=Normal(Tip.Origin-Part.Origin); }
     Part=GetBoneCoords('Hands_LArmPalm'); SupportLocal=Part.Origin;
     MagazineBone=class'KFVRWeaponProfile'.static.MagazineBone(KFWeapon(Source));
     ActionBone=class'KFVRWeaponProfile'.static.ActionBone(KFWeapon(Source));

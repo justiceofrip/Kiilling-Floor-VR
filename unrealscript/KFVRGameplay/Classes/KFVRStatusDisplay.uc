@@ -64,13 +64,18 @@ simulated function UpdateDisplay()
         DisplayedLeft=D.LeftLoaded; DisplayedRight=D.RightLoaded;
         AmmoLine="L " $ DisplayedLeft $ "   R " $ DisplayedRight $ "    SPARE " $ DisplayedSpare;
     }
-    else if (KFVRTrackedSyringe(DisplayedGun)!=None) AmmoLine="CHARGE " $ int(100*DisplayedGun.ChargeBar()) $ "%";
+    else if (KFVRTrackedSyringe(DisplayedGun)!=None || KFVRTrackedWelder(DisplayedGun)!=None) AmmoLine="CHARGE " $ int(100*DisplayedGun.ChargeBar()) $ "%";
     else if (bMelee) AmmoLine="MELEE";
     else AmmoLine="LOADED " $ DisplayedLoaded $ "    SPARE " $ DisplayedSpare;
     ActionLine="READY";
     if (Rig.bHolstered) ActionLine="HOLSTERED";
     else if (KFVRTrackedSyringe(DisplayedGun)!=None)
     { if (KFVRTrackedSyringe(DisplayedGun).bPendingHeal) ActionLine="HEALING"; else ActionLine="TOUCH BODY AND SQUEEZE"; }
+    else if (KFVRTrackedWelder(DisplayedGun)!=None)
+    {
+        if (KFVRTrackedWelder(DisplayedGun).ContactDoor==None) ActionLine="POINT TIP AT CLOSED DOOR";
+        else ActionLine="DOOR " $ int(KFVRTrackedWelder(DisplayedGun).DoorPercent) $ "%  L: UNWELD";
+    }
     else if (DisplayedGun.bIsReloading) ActionLine="RELOADING";
     else if (D!=None && D.Belt!=None)
     {

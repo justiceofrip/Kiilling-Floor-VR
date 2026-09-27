@@ -5,9 +5,11 @@ param(
  [switch]$Unattended,
  [switch]$MeleeTest,
  [switch]$HealTest,
+ [switch]$DoorTest,
  [switch]$DualTest
 )
 $ErrorActionPreference='Stop'
+if($DoorTest -and !$Unattended){throw 'DoorTest requires explicit Unattended mode.'}
 if($HealTest -and !$Unattended){throw 'HealTest requires explicit Unattended mode.'}
 if($DualTest -and !$Unattended){throw 'DualTest requires explicit Unattended mode.'}
 if($MeleeTest -and !$Unattended){throw 'MeleeTest requires explicit Unattended mode.'}
@@ -20,6 +22,7 @@ $kfUrl=$Map+'.rom?Game=KFMod.KFGameType?Mutator=KFVRGameplay.KFVRDevMutator?Diff
 if($Unattended){$kfUrl+='?KFVRUnattended=1'}
 if($MeleeTest){$kfUrl+='?KFVRMeleeTest=1'}
 if($HealTest){$kfUrl+='?KFVRHealTest=1'}
+if($DoorTest){$kfUrl+='?KFVRDoorTest=1'}
 if($DualTest){$kfUrl+='?KFVRDualTest=1'}
 $kfSteam=(Get-ItemProperty HKCU:\Software\Valve\Steam).SteamExe
 Start-Process -FilePath $kfSteam -ArgumentList @('-applaunch','1250',$kfUrl,'-windowed') -WindowStyle Hidden
