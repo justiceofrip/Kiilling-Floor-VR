@@ -36,6 +36,7 @@ var bool bReloadArmed, bReloadPrevious, bCycleArmed, bCyclePrevious;
 var KFVRWeaponVisual Visual;
 var KFVRHandVisual LeftHand, RightHand;
 var KFVRStatusDisplay StatusDisplay;
+var KFVRTraderPanel Trader;
 var bool bStatusFailed;
 var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
@@ -138,6 +139,7 @@ function UseTracked()
     local vector HitLocation,HitNormal,End;
     local KFDoorMover Door;
     local Actor T;
+    local ShopVolume S;
     if (!Active() || PC.Pawn==None || !PC.Pawn.bCanUse || (Tracking.Flags & 2)==0) return;
     if (PC.Pawn.Trace(HitLocation,HitNormal,Tracking.RightPosition,Tracking.HeadPosition,True)!=None) return;
     End=Tracking.RightPosition+vector(Tracking.RightRotation)*1.4*Tracking.UnitsPerMetre;
@@ -149,6 +151,13 @@ function UseTracked()
             if (T==Door.MyTrigger) { Door.MyTrigger.UsedBy(PC.Pawn); DoorUseCount++; return; }
         return;
     }
+    foreach PC.Pawn.TouchingActors(class'ShopVolume',S)
+        if (S.bCurrentlyOpen && !S.bAlwaysClosed)
+        {
+            if (Trader==None)
+            { Trader=Spawn(class'KFVRTraderPanel',self); if (Trader!=None && !Trader.Initialize(self)) { Trader.Destroy(); Trader=None; } }
+            if (Trader!=None && Trader.OpenShop(S)) return;
+        }
     PC.Use();
 }
 function vector DockPosition(int Slot)
@@ -239,9 +248,39 @@ function bool WantsFire()
 {
     return Active() && (Tracking.Flags & 2)!=0 && bTriggerArmed && !bHolstered && Tracking.RightTrigger>0.75;
 }
+function RestoreTraderWeapon()
+{
+    local int I;
+    if (PC==None || PC.Pawn==None || PC.Pawn.Health<=0) return;
+    PruneInventory();
+    for (I=0;I<InventoryCount;I++) if (PC.Pawn.Weapon==InventoryWeapons[I]) return;
+    // Stock selling may select its hidden grenade item. Return to a tracked slot.
+    for (I=0;I<InventoryCount;I++)
+        if (InventoryWeapons[I]==Gun && InventoryVisualFailed[I]==0) { SelectInventoryWeapon(I); return; }
+    for (I=0;I<InventoryCount;I++)
+        if (InventoryVisualFailed[I]==0) { SelectInventoryWeapon(I); return; }
+}
+function ParkForTrader()
+{
+    local int I;
+    if (Gun!=None) { Gun.StopFire(0); Gun.StopFire(1); }
+    bFiring=False; bTriggerArmed=False; bHolstered=True;
+    bSupportHeld=False; bSupportArmed=False; bGripArmed=False; bReloadArmed=False; bCycleArmed=False; bManualArmed=False;
+    for (I=0;I<InventoryCount;I++)
+    {
+        if (InventoryManuals[I]!=None) InventoryManuals[I].StoreForSwitch();
+        if (InventoryVisuals[I]!=None) InventoryVisuals[I].bHidden=True;
+        if (KFVRTrackedDualies(InventoryWeapons[I])!=None) KFVRTrackedDualies(InventoryWeapons[I]).StoreForSwitch();
+        if (KFVRTrackedWelder(InventoryWeapons[I])!=None) KFVRTrackedWelder(InventoryWeapons[I]).ResetInput();
+        if (KFVRTrackedSyringe(InventoryWeapons[I])!=None) KFVRTrackedSyringe(InventoryWeapons[I]).ResetInput();
+        if (KFVRTrackedKnife(InventoryWeapons[I])!=None) KFVRTrackedKnife(InventoryWeapons[I]).ResetMotion();
+    }
+    if (StatusDisplay!=None) StatusDisplay.bHidden=True;
+}
 function ReleaseInput()
 {
     local int I;
+    if (Trader!=None) Trader.CloseShop();
     if (bSupportHeld) SupportReleases++;
     bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False;
     bManualArmed=False; bManualPrevious=False; bUseArmed=False; bUsePrevious=False;
@@ -286,6 +325,13 @@ function Tick(float Delta)
     }
     if (!bTracking || Level.TimeSeconds-LastInputTime>0.1 || Tracking.UnitsPerMetre<1 || Tracking.UnitsPerMetre>200)
     { ReleaseInput(); return; }
+    if (Trader!=None && Trader.bOpen)
+    {
+        Trader.UpdateDisplay();
+        if (LeftHand!=None) { LeftHand.bHidden=(Tracking.Flags & 1)==0; if (!LeftHand.bHidden) LeftHand.PoseHand(Tracking.LeftPosition,Tracking.LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl,0); }
+        if (RightHand!=None) { RightHand.bHidden=(Tracking.Flags & 2)==0; if (!RightHand.bHidden) RightHand.PoseHand(Tracking.RightPosition,Tracking.RightRotation,Tracking.UnitsPerMetre,Tracking.RightThumb,Tracking.RightIndex,Tracking.RightCurl,0); }
+        return;
+    }
     if (Gun==None) { ReleaseInput(); return; }
     for (I=0;I<InventoryCount;I++)
         if (PC.Pawn.Weapon==InventoryWeapons[I] && Gun!=InventoryWeapons[I])
@@ -358,6 +404,7 @@ function Tick(float Delta)
     if (!UseDown) bUseArmed=True;
     if (bUseArmed && UseDown && !bUsePrevious) { UseTracked(); UseCount++; }
     bUsePrevious=UseDown;
+    if (Trader!=None && Trader.bOpen) return;
     ReloadDown=(Tracking.Flags & 32)!=0; CycleDown=(Tracking.Flags & 4)!=0;
     ManualDown=(Tracking.Flags & 16)!=0;
     if (!ManualDown) bManualArmed=True;
@@ -437,6 +484,7 @@ function Destroyed()
     ReleaseInput();
     if (MeleeTarget!=None) MeleeTarget.Destroy();
     if (StatusDisplay!=None) StatusDisplay.Destroy();
+    if (Trader!=None) Trader.Destroy();
     for (I=0;I<InventoryCount;I++)
     { if (InventoryVisuals[I]!=None) InventoryVisuals[I].Destroy(); if (InventoryManuals[I]!=None) InventoryManuals[I].Destroy(); }
     if (LeftHand!=None) LeftHand.Destroy();

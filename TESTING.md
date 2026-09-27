@@ -115,3 +115,5 @@ Tracked welder and real door: launch the explicit unattended DoorTest fixture an
 Six-item inventory regression with both tools installed: 184338 passes 25 inventory and 22 display/grasp checks, twelve shots and 828 stereo pairs.
 
 Experimental arms: launch `Start-KFVRDev.ps1 -Unattended -ArmTest`, then `py -3.12 tools/native_bridge_trial.py --pid <PID> --game <game> --arms`. The 28-second sequence covers both joint attachment and tracking/unreachable fallback. See WORKLOG for known sleeve deformation; normal gameplay does not enable it.
+
+VR trader: `Start-KFVRDev.ps1 -Unattended -TraderTest`, then `native_bridge_trial.py --trader`. The 104-second sequence uses actual shop/pawn transactions; fixture-only left-Y commands set zero cash, restrict carry capacity and close the map shop for negative checks. Current evidence 193902 passes 27 assertions. Stock healing is checked both while pending and after completion; an already-full ammo request must leave cash unchanged. The fixture's cash/weight edits are unavailable in an ordinary match.

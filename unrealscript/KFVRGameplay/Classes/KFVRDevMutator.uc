@@ -4,6 +4,7 @@ var KFVRWeaponRig Rig;
 var bool bUnattended,bDualTest;
 var Pawn TestPawn;
 var KFVRDoorTest DoorTest;
+var KFVRTraderTest TraderTest;
 function PostBeginPlay()
 {
     Super.PostBeginPlay();
@@ -49,6 +50,7 @@ function Timer()
     local Weapon Previous;
     local class<KFWeapon> NewType;
     local int Total,Loaded;
+    local float SaleValue;
     local bool WasSelected;
     local KFMonster Enemy;
     if (bUnattended)
@@ -82,12 +84,12 @@ function Timer()
             if (AttachRig(Old)) continue;
             NewType=Replacement(Old);
             if (NewType==None) continue;
-            Total=Old.AmmoAmount(0); Loaded=Old.MagAmmoRemaining;
+            Total=Old.AmmoAmount(0); Loaded=Old.MagAmmoRemaining; SaleValue=Old.SellValue;
             Previous=PC.Pawn.Weapon; WasSelected=Previous==Old;
             NewGun=Spawn(NewType,PC.Pawn);
             if (NewGun==None) return;
             Old.StopFire(0); Old.StopFire(1); PC.Pawn.DeleteInventory(Old); Old.Destroy();
-            NewGun.GiveTo(PC.Pawn); NewGun.ClientForceAmmoUpdate(0,Total); NewGun.MagAmmoRemaining=Loaded;
+            NewGun.SellValue=SaleValue; NewGun.GiveTo(PC.Pawn); NewGun.ClientForceAmmoUpdate(0,Total); NewGun.MagAmmoRemaining=Loaded;
             AttachRig(NewGun);
             if (WasSelected || PC.Pawn.Weapon==None || (Rig.InventoryCount==1 && KFVRTrackedSingle(NewGun)!=None))
             { PC.Pawn.PendingWeapon=NewGun; PC.Pawn.ChangedWeapon(); }
@@ -101,6 +103,8 @@ function Timer()
             if (InStr(Caps(Level.GetLocalURL()),"KFVRHEALTEST=1")>=0) { PC.Pawn.Health=40; KFHumanPawn(PC.Pawn).healthToGive=0; }
             if (InStr(Caps(Level.GetLocalURL()),"KFVRDOORTEST=1")>=0)
             { if (DoorTest!=None) DoorTest.Destroy(); DoorTest=Spawn(class'KFVRDoorTest',self); if (DoorTest!=None) DoorTest.Initialize(PC); }
+            if (InStr(Caps(Level.GetLocalURL()),"KFVRTRADERTEST=1")>=0)
+            { if (TraderTest!=None) TraderTest.Destroy(); TraderTest=Spawn(class'KFVRTraderTest',self); if (TraderTest!=None) TraderTest.Initialize(PC); return; }
             if (bDualTest) { NewGun=Spawn(class'Dualies',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn); }
             NewGun=Spawn(class'Deagle',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
             NewGun=Spawn(class'Bullpup',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);

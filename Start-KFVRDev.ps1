@@ -7,9 +7,11 @@ param(
  [switch]$HealTest,
  [switch]$DoorTest,
  [switch]$ArmTest,
+ [switch]$TraderTest,
  [switch]$DualTest
 )
 $ErrorActionPreference='Stop'
+if($TraderTest -and !$Unattended){throw 'TraderTest requires explicit Unattended mode.'}
 if($ArmTest -and !$Unattended){throw 'ArmTest requires explicit Unattended mode.'}
 if($DoorTest -and !$Unattended){throw 'DoorTest requires explicit Unattended mode.'}
 if($HealTest -and !$Unattended){throw 'HealTest requires explicit Unattended mode.'}
@@ -26,6 +28,7 @@ if($MeleeTest){$kfUrl+='?KFVRMeleeTest=1'}
 if($HealTest){$kfUrl+='?KFVRHealTest=1'}
 if($DoorTest){$kfUrl+='?KFVRDoorTest=1'}
 if($ArmTest){$kfUrl+='?KFVRArmTest=1'}
+if($TraderTest){$kfUrl+='?KFVRTraderTest=1'}
 if($DualTest){$kfUrl+='?KFVRDualTest=1'}
 $kfSteam=(Get-ItemProperty HKCU:\Software\Valve\Steam).SteamExe
 Start-Process -FilePath $kfSteam -ArgumentList @('-applaunch','1250',$kfUrl,'-windowed') -WindowStyle Hidden

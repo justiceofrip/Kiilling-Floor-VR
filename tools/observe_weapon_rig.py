@@ -1,7 +1,7 @@
 """Read-only snapshots of our reflected script rig; never an input/write path."""
 import argparse,ctypes,json,pathlib,struct,time
 from observe_kf import Observer,unpack
-OWNERS={'KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedWelder','KFVRDoorTest','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget','KFWeapon'}
+OWNERS={'KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedWelder','KFVRTraderPanel','KFVRTraderTest','KFVRDoorTest','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget','KFWeapon'}
 def layout(o):
  fields=[]
  for row in o.rows:
@@ -11,7 +11,7 @@ def layout(o):
    fields.append((row['outer'],row['name'],row['class'],off,size,unpack(d,112)))
  schema=[]
  for row in o.rows:
-  if row['class'] not in ['KFHumanPawn','KFVRWeaponRig','KFVRWeaponVisual','KFVRHandVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedWelder','KFVRDoorTest','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget']:continue
+  if row['class'] not in ['KFHumanPawn','KFVRWeaponRig','KFVRWeaponVisual','KFVRHandVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedWelder','KFVRTraderPanel','KFVRTraderTest','KFVRDoorTest','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget']:continue
   address=int(row['address'],16);chain=[];cls=unpack(o.read(address+40,4))
   while cls:
    chain.append(o.object_name(cls));cls=unpack(o.read(cls+44,4))
@@ -26,7 +26,7 @@ def sample(o):
   address=int(row['address'],16);buffer=o.read(address,size_needed);values={}
   for owner,name,typ,off,size,mask in fields:
    data=buffer[off:off+size]
-   if typ=='StrProperty' and owner=='KFVRStatusDisplay':
+   if typ=='StrProperty' and owner in ['KFVRStatusDisplay','KFVRTraderPanel']:
     pointer,count,capacity=struct.unpack('<III',data)
     if count==0:value=''
     elif 0<count<=capacity<=1024:value=o.read(pointer,count*2).decode('utf-16le').rstrip('\x00')
