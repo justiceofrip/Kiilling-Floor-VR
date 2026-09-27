@@ -2,15 +2,15 @@
 
 96 KFWeapon-derived classes, including abstract bases, skins, story tools and legacy variants. This is not a count of trader weapons.
 
-Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm/Deagle/Bullpup tracked aiming, stock firing, controller reloads and inventory holsters. The 9mm also has physical magazine/slide manipulation; the Bullpup has a support-hand grip. Other families remain inactive.
+Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm, dual 9mm, Deagle, Bullpup and knife tracked weapons with inventory holsters. Single pistols support physical magazines/slides, dual 9mm supports physical belt reloads, the Bullpup has a support-hand grip, and the knife uses physical swings. Other families remain inactive.
 
 | Class | Candidate family | Capacity | Reload seconds | Notes |
 | --- | --- | ---: | ---: | --- |
 | KFMod.KFWeapon | Unclassified | 0 | 0.0 | Abstract base |
 | KFMod.KFMeleeGun | Melee | 0 | 0.0 | Pending interaction/asset validation |
 | KFMod.BoomStick | BreakAction | 2 | 0.009999999776482582 | Pending interaction/asset validation |
-| KFMod.Dualies | DualMagazineFed | 30 | 3.5 | Pending interaction/asset validation |
-| KFMod.Deagle | MagazineFed | 8 | 2.200000047683716 | Tracked fire, timed controller reload, left hip slot |
+| KFMod.Dualies | DualMagazineFed | 30 | 3.5 | Independent poses/fire, shared-ammo belt reloads, tactical 16+16; live synthetic checks passed |
+| KFMod.Deagle | MagazineFed | 8 | 2.200000047683716 | Tracked fire, timed/physical reload, tactical 8+1, left hip slot |
 | KFMod.SeekerSixRocketLauncher | MultiTubeLauncher | 6 | 3.130000114440918 | Pending interaction/asset validation |
 | KFMod.FlareRevolver | Revolver | 6 | 3.200000047683716 | Pending interaction/asset validation |
 | KFMod.MK23Pistol | MagazineFed | 12 | 2.5999999046325684 | Pending interaction/asset validation |

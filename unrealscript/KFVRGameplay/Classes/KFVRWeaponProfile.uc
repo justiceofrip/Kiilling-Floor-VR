@@ -2,13 +2,13 @@
 class KFVRWeaponProfile extends Object;
 static function name MagazineBone(KFWeapon W)
 {
-    if (KFVRTrackedSingle(W)!=None) return '9mm_Mag';
+    if (KFVRTrackedSingle(W)!=None || KFVRTrackedDualies(W)!=None) return '9mm_Mag';
     if (KFVRTrackedDeagle(W)!=None || KFVRTrackedBullpup(W)!=None) return 'Magazine';
     return '';
 }
 static function name ActionBone(KFWeapon W)
 {
-    if (KFVRTrackedSingle(W)!=None) return '9mm_slide';
+    if (KFVRTrackedSingle(W)!=None || KFVRTrackedDualies(W)!=None) return '9mm_slide';
     if (KFVRTrackedDeagle(W)!=None) return 'Slide';
     // This installed Bullpup skeleton has no independent action/bolt bone.
     // Keep its physical action profile disabled until a presentation is authored.

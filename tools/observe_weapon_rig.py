@@ -1,7 +1,7 @@
 """Read-only snapshots of our reflected script rig; never an input/write path."""
 import argparse,ctypes,json,pathlib,struct,time
 from observe_kf import Observer,unpack
-OWNERS={'KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRMeleeTarget','KFWeapon'}
+OWNERS={'KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRMeleeTarget','KFWeapon'}
 def layout(o):
  fields=[]
  for row in o.rows:
@@ -11,7 +11,7 @@ def layout(o):
    fields.append((row['outer'],row['name'],row['class'],off,size,unpack(d,112)))
  schema=[]
  for row in o.rows:
-  if row['class'] not in ['KFVRWeaponRig','KFVRWeaponVisual','KFVRHandVisual','KFVRTrackedSingle','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRMeleeTarget']:continue
+  if row['class'] not in ['KFVRWeaponRig','KFVRWeaponVisual','KFVRHandVisual','KFVRTrackedSingle','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRMeleeTarget']:continue
   address=int(row['address'],16);chain=[];cls=unpack(o.read(address+40,4))
   while cls:
    chain.append(o.object_name(cls));cls=unpack(o.read(cls+44,4))

@@ -1,6 +1,7 @@
 class KFVRTrackedDualies extends Dualies;
 var KFVRWeaponRig VRRig;
 var KFVRDualFeedState Feed;
+var KFVRDualBeltReload Belt;
 var KFVRWeaponVisual LeftVisual;
 var bool bLeftArmed,bRightArmed,bLeftFiring,bRightFiring,bLeftVisualFailed;
 var int LeftLoaded,RightLoaded,LeftShots,RightShots,VRTotalAmmo,ReloadCompletions;
@@ -9,16 +10,20 @@ var vector LeftMuzzle,LeftTraceStart,RightTraceStart,LeftTraceDirection,RightTra
 var rotator LeftAim;
 function EnsureFeed()
 {
+    if (Belt!=None) { Belt.Reconcile(); return; }
     if (Feed==None) { Feed=new(None) class'KFVRDualFeedState'; Feed.Initialize(MagCapacity,MagAmmoRemaining); }
     LeftLoaded=Feed.LeftLoaded; RightLoaded=Feed.RightLoaded; VRTotalAmmo=AmmoAmount(0);
 }
 simulated function WeaponTick(float Delta)
 {
-    Super.WeaponTick(Delta); EnsureFeed(); Feed.Reconcile(MagAmmoRemaining);
+    Super.WeaponTick(Delta); EnsureFeed();
+    if (Belt!=None) return;
+    Feed.Reconcile(MagAmmoRemaining);
     LeftLoaded=Feed.LeftLoaded; RightLoaded=Feed.RightLoaded; VRTotalAmmo=AmmoAmount(0);
 }
 function AddReloadedAmmo()
 {
+    if (Belt!=None) return;
     Super.AddReloadedAmmo(); EnsureFeed(); Feed.Reconcile(MagAmmoRemaining);
     LeftLoaded=Feed.LeftLoaded; RightLoaded=Feed.RightLoaded; ReloadCompletions++;
 }
@@ -26,12 +31,47 @@ simulated function bool ConsumeAmmo(int Mode,float Load,optional bool bAmountNee
 {
     local bool Result;
     EnsureFeed();
-    if (Load>0 && Feed.Loaded(Mode)<1) return False;
+    if (Load>0 && ((Belt!=None && !Belt.Ammo.CanFire(Mode)) || (Belt==None && Feed.Loaded(Mode)<1))) return False;
     // Both modes deliberately use the same normal KF ammunition object.
     Result=Super.ConsumeAmmo(Mode,Load,bAmountNeededIsMax);
+    if (Belt!=None)
+    { if (Result && Load>0) Belt.Ammo.Consume(Mode); Belt.Publish(); return Result; }
     if (Result && Load>0) Feed.Consume(Mode);
     LeftLoaded=Feed.LeftLoaded; RightLoaded=Feed.RightLoaded;
     return Result;
+}
+exec function ReloadMeNow()
+{
+    if (Belt!=None) return;
+    Super.ReloadMeNow();
+}
+simulated function bool AllowReload()
+{
+    if (Belt!=None) return False;
+    return Super.AllowReload();
+}
+function StoreForSwitch()
+{
+    if (Belt!=None) Belt.StoreForSwitch(); ResetInput();
+}
+function ToggleBelt()
+{
+    local KFVRDualBeltReload NewBelt;
+    if (VRRig==None || VRRig.Visual==None || LeftVisual==None || !VRRig.Visual.bTranslationCalibrated || !LeftVisual.bTranslationCalibrated || bIsReloading || VRRig.bHolstered) return;
+    EnsureFeed();
+    if (Belt!=None)
+    {
+        if (!Belt.CanDisable()) return;
+        VRRig.Visual.PoseMagazine(True,False,vect(0,0,0),0);
+        LeftVisual.PoseMagazine(True,False,vect(0,0,0),0); Belt.Destroy(); Belt=None;
+    }
+    else
+    {
+        NewBelt=Spawn(class'KFVRDualBeltReload',self);
+        if (NewBelt==None) return;
+        if (!NewBelt.Initialize(self)) { NewBelt.Destroy(); return; }
+    }
+    ResetInput(True); VRRig.PulseLeft(0.5,40);
 }
 function bool WantsFire(int Mode)
 {
@@ -51,6 +91,7 @@ simulated event ClientStopFire(int Mode)
 }
 function ResetInput(optional bool KeepVisual)
 {
+    if (Belt!=None) Belt.Suspend();
     bLeftArmed=False; bRightArmed=False; bLeftFiring=False; bRightFiring=False;
     StopFire(0); StopFire(1); LeftRecoil=0; RightRecoil=0;
     if (!KeepVisual && LeftVisual!=None) LeftVisual.bHidden=True;
@@ -102,7 +143,7 @@ simulated event RenderOverlays(Canvas Canvas)
 }
 simulated function Destroyed()
 {
-    ResetInput(); if (LeftVisual!=None) LeftVisual.Destroy(); Super.Destroyed();
+    ResetInput(); if (Belt!=None) Belt.Destroy(); if (LeftVisual!=None) LeftVisual.Destroy(); Super.Destroyed();
 }
 defaultproperties
 {

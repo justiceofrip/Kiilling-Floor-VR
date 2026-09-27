@@ -4,7 +4,9 @@ simulated function bool AllowFire()
 {
     local KFVRTrackedDualies D;
     D=Pair(); if (D==None) return False;
-    D.EnsureFeed(); if (D.Feed.Loaded(ThisModeNum)<1) return False;
+    D.EnsureFeed();
+    if (D.Belt!=None) { if (!D.Belt.Ammo.CanFire(ThisModeNum)) return False; }
+    else if (D.Feed.Loaded(ThisModeNum)<1) return False;
     return Super.AllowFire();
 }
 event ModeDoFire()

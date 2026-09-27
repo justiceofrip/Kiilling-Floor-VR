@@ -63,6 +63,7 @@ function PulseLeft(float Strength, int DurationMs)
 function ToggleManualReload()
 {
     if (Gun==None || Visual==None || !Visual.bPhysicalProfile || !Visual.bTranslationCalibrated || Gun.bIsReloading || bHolstered) return;
+    if (KFVRTrackedDualies(Gun)!=None) { KFVRTrackedDualies(Gun).ToggleBelt(); return; }
     if (ManualReload!=None)
     {
         if (!ManualReload.CanDisable()) return;
@@ -143,7 +144,7 @@ function SelectInventoryWeapon(int Index)
     local KFWeapon Previous;
     if (Index<0 || Index>=InventoryCount || InventoryVisualFailed[Index]!=0 || InventoryWeapons[Index]==None || PC.Pawn==None || InventoryWeapons[Index].Owner!=PC.Pawn) return;
     Previous=Gun;
-    if (KFVRTrackedDualies(Previous)!=None) KFVRTrackedDualies(Previous).ResetInput();
+    if (KFVRTrackedDualies(Previous)!=None) KFVRTrackedDualies(Previous).StoreForSwitch();
     if (KFVRTrackedKnife(Previous)!=None) KFVRTrackedKnife(Previous).ResetMotion();
     if (ManualReload!=None && Previous==ManualReload.Gun) ManualReload.StoreForSwitch();
     if (Previous!=None) { Previous.StopFire(0); Previous.StopFire(1); }
@@ -253,7 +254,7 @@ function Tick(float Delta)
         if (PC.Pawn.Weapon==InventoryWeapons[I] && Gun!=InventoryWeapons[I])
         {
             if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
-            if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).ResetInput();
+            if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).StoreForSwitch();
             if (ManualReload!=None) ManualReload.StoreForSwitch();
             Gun=InventoryWeapons[I]; ActiveIndex=I; ManualReload=InventoryManuals[I]; bFiring=False; bTriggerArmed=False; bHolstered=False;
         }
@@ -303,7 +304,7 @@ function Tick(float Delta)
             { SelectInventoryWeapon(I); break; }
     }
     else if (bGripArmed && !bHolstered && !GripDown && bGripPrevious && VSize(Tracking.RightPosition-HolsterLocation)<0.18*Tracking.UnitsPerMetre)
-    { if (ManualReload!=None && ManualReload.Gun==Gun) ManualReload.StoreForSwitch(); bHolstered=True; HolsterCount++; PulseRight(0.2,15); }
+    { if (ManualReload!=None && ManualReload.Gun==Gun) ManualReload.StoreForSwitch(); if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).StoreForSwitch(); bHolstered=True; HolsterCount++; PulseRight(0.2,15); }
     bGripPrevious=GripDown;
     UseDown=(Tracking.Flags & 8)!=0;
     if (!UseDown) bUseArmed=True;
@@ -328,7 +329,8 @@ function Tick(float Delta)
     {
         Gun.StopFire(0); bFiring=False; bTriggerArmed=False;
         if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).ResetInput(True);
-        if (ManualReload!=None && ManualReload.Gun==Gun) ManualReload.EjectMagazine();
+        if (KFVRTrackedDualies(Gun)!=None && KFVRTrackedDualies(Gun).Belt!=None) KFVRTrackedDualies(Gun).Belt.EjectDownward();
+        else if (ManualReload!=None && ManualReload.Gun==Gun) ManualReload.EjectMagazine();
         else if (Gun.AllowReload()) { Gun.ReloadMeNow(); ReloadCount++; }
     }
     if (bCycleArmed && CycleDown && !bCyclePrevious && InventoryCount>1)
@@ -358,6 +360,7 @@ function Tick(float Delta)
         if (KFVRTrackedDualies(InventoryWeapons[I])!=None) KFVRTrackedDualies(InventoryWeapons[I]).PoseLeft(InventoryWeapons[I]==Gun,Delta);
     if (KFVRTrackedDualies(Gun)!=None)
     {
+        if (KFVRTrackedDualies(Gun).Belt!=None) KFVRTrackedDualies(Gun).Belt.Update(Delta);
         KFVRTrackedDualies(Gun).UpdateControls();
         bFiring=KFVRTrackedDualies(Gun).bLeftFiring || KFVRTrackedDualies(Gun).bRightFiring;
         return;

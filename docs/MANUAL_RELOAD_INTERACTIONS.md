@@ -1,8 +1,8 @@
 # Physical reload pipeline
 
-The **9mm now has live physical reloads** in the standalone development mutator: catch or discard its magazine, retain a partial magazine at the belt, take and insert a replacement, then physically cycle the slide when needed. It uses a game-thread script ledger and the installed model's magazine/slide bones. See [controls and coverage](TRACKED_WEAPONS.md). This has live native-game synthetic-controller evidence, separate from wearer acceptance.
+The **9mm and Deagle now have live physical reloads** in the standalone development mutator: catch or discard its magazine, retain a partial magazine at the belt, take and insert a replacement, then physically cycle the slide when needed. It uses a game-thread script ledger and the installed model's magazine/slide bones. See [controls and coverage](TRACKED_WEAPONS.md). This has live native-game synthetic-controller evidence, separate from wearer acceptance.
 
-The reusable C++ mechanics below also cover dual-gun belt reloads and stricter continuous insertion geometry. Those dual mechanics and the four-stage authored-animation adapter remain a separate tested foundation; they are not yet live dual-wield gameplay.
+The reusable C++ mechanics below also cover dual-gun belt reloads and stricter continuous insertion geometry. The live dual-9mm adapter now provides the same shared-supply belt interaction through a game-thread script ledger; the four-stage authored-animation adapter remains a separate foundation.
 
 ## Implemented behavior
 
@@ -40,12 +40,14 @@ The session emits separate ejection, presentation, seating and clearance events 
 
 Read-only `tools/extract_reload_profiles.py` now obtains the six pistol/dual class defaults, actual mesh references, Reload animation names, fire classes, scales and muzzle-bone names. It follows MeshRef for assets loaded lazily and treats Unreal object names case-insensitively. Raw results stay in ignored reports/reload-assets-20260927.json. They are class defaults, not current perk-modified stats.
 
-Dual rendering needs independently attached gun models. The stock combined dual-pistol mesh/animation is not an independent two-controller rig. Grip, muzzle, magwell, magazine-tip and action transforms, plus authored hand visibility/IK, still need calibration.
+Dual rendering uses two actors linked to the installed combined mesh, each hiding the opposite gun branch. Both palms, muzzle bones, magazine/slide bones and bone-translation scales have been measured in the live game. Wearer ergonomics and full arm IK remain unverified.
 
 ## Integration boundary
 
-The older AmmoMachine and KFVRAmmoState remain the separately tested timed/tube-policy prototype. PhysicalReload is the new native detachable-magazine ledger; its dual magazine/object state has not been ported into the UnrealScript authority. The live 9mm selects KFVRMagazineState as its reload authority, blocks timed reload entry points, and mirrors each successful stock ConsumeAmmo once. Stock firing still owns cadence, damage and perk behavior. Wider pickup/trader scenarios and server replication remain unverified.
+The older AmmoMachine and KFVRAmmoState remain the separately tested timed/tube-policy prototype. PhysicalReload is the new native detachable-magazine ledger; the live KFVRDualMagazineState supplies corresponding magazine identity and shared-reserve accounting in standalone UnrealScript. The live 9mm selects KFVRMagazineState as its reload authority, blocks timed reload entry points, and mirrors each successful stock ConsumeAmmo once. Stock firing still owns cadence, damage and perk behavior. Wider pickup/trader scenarios and server replication remain unverified.
 
-The live Single adapter is an early manual-reload implementation, with no wearer acceptance yet. Its current insertion uses proximity, alignment and a deliberate grip release; the portable continuous insertion-stroke checks are not yet connected. Next work includes dual independent presentation, other weapon mechanisms, server inventory and ergonomic refinement. Routine development continues without repeated wearer prompts.
+The live Single adapter is an early manual-reload implementation, with no wearer acceptance yet. Its current insertion uses proximity, alignment and a deliberate grip release; the portable continuous insertion-stroke checks are not yet connected. Next work includes other weapon mechanisms, server inventory and ergonomic refinement. Routine development continues without repeated wearer prompts.
 
 The live standalone pistol adapter now supports both 9mm and Deagle through KFVRWeaponProfile. Independent inventory ledgers preserve each chamber and partial magazines across switches. Bullpup physical cycling is deferred because its installed skeleton has no separate action bone; it retains stock timed reload. See WORKLOG.md for consecutive same-process Deagle/9mm acceptance evidence.
+
+The live dual belt gate requires a fresh aligned approach and continuous movement through seating depth; a hand appearing inside the dock after focus/tracking loss cannot seat. The chosen convenience rule assists any empty chamber with one actual magazine round, including a chamber fired after its magazine was removed. A latched pistol cannot fire until withdrawn. Ejection retains partial magazines, and holstering stores presented magazines without adding ammunition. Disabling physical mode requires both magazines seated and both guns clear; it clamps any plus-one loaded count to the stock capacity while preserving the total owned rounds.

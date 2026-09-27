@@ -40,6 +40,7 @@ simulated function bool Initialize(Weapon Source)
     MagazineBone=class'KFVRWeaponProfile'.static.MagazineBone(KFWeapon(Source));
     ActionBone=class'KFVRWeaponProfile'.static.ActionBone(KFWeapon(Source));
     ActionTravelMetres=class'KFVRWeaponProfile'.static.ActionTravel(KFWeapon(Source));
+    if (KFVRTrackedDualies(Source)!=None && bOffhandGun) { MagazineBone='9mm_Mag01'; ActionBone='9mm_slide01'; }
     if (MagazineBone!='' && ActionBone!='')
     {
         Part=GetBoneCoords(MagazineBone); MagazineLocal=Part.Origin;
