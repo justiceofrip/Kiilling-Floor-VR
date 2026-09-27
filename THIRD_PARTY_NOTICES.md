@@ -11,3 +11,5 @@ Portable math, interaction policies, frame coordination, D3D11 transport, IPC an
 The portable-source manifest records original copied-file hashes and initial destination hashes. Subsequent modifications belong to the KFVR git history. The generic process-bootstrap launcher is adapted from the existing BC2 native launcher; all KF identity checks, script/object audit, camera conversion and gameplay modules are project-specific.
 
 Proprietary KF binaries, extracted scripts and assets are never committed. Private logs/captures/reports and runtime binary inputs are ignored. Numerical matrix/default-value observations inform tests and documentation; no claim of owning Tripwire's code or assets is made.
+
+ControllerFingerCurls adapts the BF2142VR controller touch policy. Its source hash is recorded in licenses/finger-pose-provenance.json; KF skeletal names/transforms are independently derived from the installed game.

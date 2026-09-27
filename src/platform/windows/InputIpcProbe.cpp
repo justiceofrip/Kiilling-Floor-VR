@@ -19,14 +19,15 @@ struct Child {
 void Wait(HANDLE event){Require(WaitForSingleObject(event,5000)==WAIT_OBJECT_0,"Input verification handshake timeout");}
 std::wstring Name(const std::wstring& token,const wchar_t* suffix){return L"Local\\KFVR.InputTest."+token+suffix;}
 constexpr std::uint64_t Generation=0x234567891ULL;constexpr std::int64_t Predicted=0x734567891LL;
-bool Neutral(const xr::ControllerFrame& f){if(f.focused)return false;for(const auto& h:f.hands)if(h.gripValid||h.aimValid||h.trigger||h.squeeze||h.stickX||h.stickY||h.menu)return false;return true;}
-xr::ControllerFrame Sample(){xr::ControllerFrame f{};f.focused=true;f.spaceGeneration=Generation;f.predictedNs=Predicted;for(unsigned i=0;i<2;++i){auto& h=f.hands[i];h.gripValid=h.aimValid=h.menu=true;h.gripPose.position={float(i)*.5f-.25f,1.4f,-.3f};h.aimPose.position={.2f,1.5f,-.4f};h.trigger=.7f;h.squeeze=.3f;h.stickX=.6f;h.stickY=.8f;}return f;}
+bool Neutral(const xr::ControllerFrame& f){if(f.focused)return false;for(const auto& h:f.hands)if(h.gripValid||h.aimValid||h.trigger||h.squeeze||h.stickX||h.stickY||h.menu||h.primary||h.secondary||h.triggerTouchActive||h.triggerTouched||h.thumbTouchActive||h.thumbTouched)return false;return true;}
+xr::ControllerFrame Sample(){xr::ControllerFrame f{};f.focused=true;f.spaceGeneration=Generation;f.predictedNs=Predicted;for(unsigned i=0;i<2;++i){auto& h=f.hands[i];h.gripValid=h.aimValid=h.menu=true;h.gripPose.position={float(i)*.5f-.25f,1.4f,-.3f};h.aimPose.position={.2f,1.5f,-.4f};h.primary=h.triggerTouchActive=h.triggerTouched=h.thumbTouchActive=true;h.thumbTouched=(i==1);h.trigger=.7f;h.squeeze=.3f;h.stickX=.6f;h.stickY=.8f;}return f;}
 int Produce(const std::wstring& token){
  ipc::FrameChannel endpoint;Require(endpoint.ConnectProducer(token),"Connect input producer");
  Handle go{OpenEventW(SYNCHRONIZE,FALSE,Name(token,L".go").c_str())},ack{OpenEventW(EVENT_MODIFY_STATE,FALSE,Name(token,L".ack").c_str())};Require(go.h&&ack.h,"Open input-test events");SetEvent(ack.h);
  xr::ControllerFrame frame;std::uint64_t sequence=0;
  Wait(go.h);Require(endpoint.ReadInput(frame,sequence)==ipc::ChannelResult::Ok&&frame.focused&&sequence,"Read cross-process controls");
  Require(frame.spaceGeneration==Generation&&frame.predictedNs==Predicted,"Controller 64-bit identity truncated");Require(frame.hands[0].gripValid&&frame.hands[1].aimValid&&frame.hands[0].menu&&frame.hands[1].trigger==.7f&&frame.hands[1].gripPose.position.x==.25f,"Controller values changed in transport");
+ Require(frame.hands[0].primary&&frame.hands[0].triggerTouchActive&&frame.hands[0].triggerTouched&&frame.hands[0].thumbTouchActive&&!frame.hands[0].thumbTouched&&frame.hands[1].thumbTouched,"Capacitive/face input changed in transport");
  Require(endpoint.SendHaptics(sequence,{xr::HapticPulse{.8f,25},xr::HapticPulse{2,500}})==ipc::ChannelResult::Ok,"Return haptics");SetEvent(ack.h);
  Wait(go.h);const auto start=GetTickCount64();bool expired=false;
  while(GetTickCount64()-start<2000){const auto result=endpoint.ReadInput(frame,sequence);if(result==ipc::ChannelResult::Invalid){Require(Neutral(frame)&&sequence==0,"Stale input did not release all controls");expired=true;break;}Sleep(1);}Require(expired,"Host stall did not expire controls");SetEvent(ack.h);
@@ -47,5 +48,5 @@ int wmain(int argc,wchar_t** argv){try{
  frame.focused=true;++frame.spaceGeneration;Send(host,frame);SetEvent(go.h);Wait(ack.h);Require(host.ReceiveHaptics()[0].milliseconds==0,"Old feedback survived recenter");
  frame.hands[0].gripPose.position.x=std::numeric_limits<float>::quiet_NaN();Send(host,frame,ipc::ChannelResult::Invalid);SetEvent(go.h);Wait(ack.h);
  host.Close();SetEvent(go.h);Wait(ack.h);child.Wait();
- std::cout<<"{\"state\":\"verified\",\"host_bits\":"<<sizeof(void*)*8<<",\"producer_bits\":"<<(type==SCS_32BIT_BINARY?32:64)<<",\"controller_roundtrip\":true,\"haptic_roundtrip\":true,\"input_expiration\":true,\"focus_loss_without_eye_frame\":true,\"recenter\":true,\"invalid_pose_release\":true,\"host_close_release\":true,\"game_connected\":false,\"headset_used\":false}\n";return 0;
+ std::cout<<"{\"state\":\"verified\",\"host_bits\":"<<sizeof(void*)*8<<",\"producer_bits\":"<<(type==SCS_32BIT_BINARY?32:64)<<",\"controller_roundtrip\":true,\"capacitive_roundtrip\":true,\"haptic_roundtrip\":true,\"input_expiration\":true,\"focus_loss_without_eye_frame\":true,\"recenter\":true,\"invalid_pose_release\":true,\"host_close_release\":true,\"game_connected\":false,\"headset_used\":false}\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

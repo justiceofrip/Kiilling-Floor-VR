@@ -8,7 +8,7 @@ struct HandWire {
  std::uint32_t flags=0,reserved=0;
 };
 struct alignas(8) ControlWire {
- std::uint32_t magic=0x3149464b,version=1,bytes=208,flags=0;
+ std::uint32_t magic=0x3149464b,version=2,bytes=208,flags=0;
  std::uint64_t sequence=0,spaceGeneration=0;
  std::int64_t predictedNs=0,expiresQpc=0;
  std::array<HandWire,2> hands{};

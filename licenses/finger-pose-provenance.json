@@ -1,0 +1,7 @@
+{
+  "source": "G:\\BF2142VR\\source\\src\\bf2142\\FingerPose.h",
+  "source_sha256": "baf0e6b914655205bbac10f7a38a5ed685f9c4bd2766c09c2ad75064c82cdee5",
+  "destination": "include/kfvr/interaction/FingerPose.h",
+  "scope": "Adapted controller capacitive curl policy only; no native ABI or bone indices",
+  "license": "BFVR MIT; licenses/BFVR-MIT.txt"
+}

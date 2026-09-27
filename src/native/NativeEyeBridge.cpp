@@ -82,6 +82,10 @@ bool ReadEyeBridgeControls(xr::ControllerFrame& controls,std::uint64_t& sequence
  if(s.closed.load(std::memory_order_acquire)||s.stop.load(std::memory_order_acquire)||s.thread!=GetCurrentThreadId())return false;
  return s.channel.ReadInput(controls,sequence)==ipc::ChannelResult::Ok;
 }
+bool SendEyeBridgeHaptics(std::uint64_t sequence,const std::array<xr::HapticPulse,2>& pulses) noexcept {
+ if(s.closed.load(std::memory_order_acquire)||s.stop.load(std::memory_order_acquire)||s.thread!=GetCurrentThreadId())return false;
+ return s.channel.SendHaptics(sequence,pulses)==ipc::ChannelResult::Ok;
+}
 void StopEyeBridge() noexcept{s.stop.store(true,std::memory_order_release);}
 bool EyeBridgeClosed() noexcept{return s.closed.load(std::memory_order_acquire);}
 void EyeBridgeLevel(void* scene,void* ri,IDirect3DDevice9* device,EyeRenderer render) noexcept {try{

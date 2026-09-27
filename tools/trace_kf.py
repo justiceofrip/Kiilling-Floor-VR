@@ -23,9 +23,9 @@ def validate_eye_packet(camera,eye_data,pose_trial,asymmetric_trial):
  summary['camera_packet_valid']=matrices_valid
  return summary
 
-def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False,channel_token=None,input_trial=False,movement_trial=False,turning_trial=False,snap_degrees=30,duration_ms=15000):
+def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False,channel_token=None,input_trial=False,movement_trial=False,turning_trial=False,snap_degrees=30,duration_ms=15000,weapon_trial=False):
  if not 100<=duration_ms<=(180000 if channel_token else 15000):raise ValueError("Invalid native session duration")
- movement_trial=movement_trial or turning_trial
+ movement_trial=movement_trial or turning_trial or weapon_trial
  if movement_trial and not channel_token:raise ValueError("Movement requires a bounded bridge session")
  input_trial=input_trial or movement_trial
  stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
@@ -40,7 +40,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<15I',1080,9,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
+  p=snapshot['properties'];config=struct.pack('<15I',1112,11,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
   images={}
   def installed_image(file):
    if file not in images:
@@ -112,8 +112,37 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    if observer.read(base+rva,16)!=call_expected:raise ValueError('CallFunction entry is already modified')
    input_evidence.append(dict(address=base+rva,expected=call_expected.hex()))
   if not 15<=snap_degrees<=90:raise ValueError('Snap angle must be 15..90 degrees')
+  rig_data=[0]*7
+  if weapon_trial:
+   module=game/'System/KFVRGameplay.u'
+   if not module.exists() or hashlib.sha256(module.read_bytes()).digest()!=hashlib.sha256((root/'build/unrealscript/KFVRGameplay.u').read_bytes()).digest():raise ValueError('Stage the current KFVR gameplay package and start a fresh KF process')
+   rigs=[row for row in observer.rows if row['class']=='KFVRWeaponRig' and struct.unpack('<I',observer.read(int(row['address'],16)+p['Actor.Owner']['offset'],4))[0]==int(controller['address'],16)]
+   if len(rigs)!=1:raise ValueError('Launch a standalone match with KFVRGameplay.KFVRDevMutator and spawn first')
+   rig=rigs[0];address=int(rig['address'],16);cls=struct.unpack('<I',observer.read(address+0x28,4))[0]
+   field=next(row for row in observer.rows if row['class']=='StructProperty' and row['name']=='Tracking' and row['outer']=='KFVRWeaponRig')
+   metadata=observer.read(int(field['address'],16),80);offset=struct.unpack_from('<I',metadata,76)[0]
+   if struct.unpack_from('<II',metadata,56)!=(1,124) or not 44<=offset<=8192:raise ValueError('Invalid tracked weapon packet')
+   fields=[('LeftPosition',0,12),('LeftRotation',12,12),('RightPosition',24,12),('RightRotation',36,12),('LeftTrigger',48,4),('LeftGrip',52,4),('RightTrigger',56,4),('RightGrip',60,4),('LeftThumb',64,4),('LeftIndex',68,4),('LeftCurl',72,4),('RightThumb',76,4),('RightIndex',80,4),('RightCurl',84,4),('HeadPosition',88,12),('BodyRotation',100,12),('UnitsPerMetre',112,4),('Flags',116,4),('Serial',120,4)]
+   for name,at,size in fields:
+    row=next(row for row in observer.rows if row['name']==name and observer.path(int(row['address'],16)).endswith('KFVRWeaponRig.TrackingPacket.'+name))
+    data=observer.read(int(row['address'],16),80)
+    expected='StructProperty' if size==12 else 'IntProperty' if name in ['Flags','Serial'] else 'FloatProperty'
+    if row['class']!=expected or struct.unpack_from('<II',data,56)!=(1,size) or struct.unpack_from('<I',data,76)[0]!=at:raise ValueError('Tracked weapon member mismatch: '+name)
+   feedback=next(row for row in observer.rows if row['class']=='StructProperty' and row['name']=='Feedback' and row['outer']=='KFVRWeaponRig')
+   data=observer.read(int(feedback['address'],16),80);feedback_offset=struct.unpack_from('<I',data,76)[0]
+   if struct.unpack_from('<II',data,56)!=(1,20) or not 44<=feedback_offset<=8192:raise ValueError('Invalid weapon feedback packet')
+   for name,at,typ in [('Serial',0,'IntProperty'),('LeftAmplitude',4,'FloatProperty'),('RightAmplitude',8,'FloatProperty'),('LeftMs',12,'IntProperty'),('RightMs',16,'IntProperty')]:
+    row=next(row for row in observer.rows if row['name']==name and observer.path(int(row['address'],16)).endswith('KFVRWeaponRig.FeedbackPacket.'+name))
+    data=observer.read(int(row['address'],16),80)
+    if row['class']!=typ or struct.unpack_from('<II',data,56)!=(1,4) or struct.unpack_from('<I',data,76)[0]!=at:raise ValueError('Weapon feedback member mismatch')
+   tick=next(row for row in observer.rows if row['class']=='Function' and row['name']=='Tick' and row['outer']=='KFVRWeaponRig')
+   tick_name_rig=struct.unpack('<I',observer.read(int(tick['address'],16)+0x24,4))[0]
+   rotation_offset=p['Actor.Rotation']['offset']
+   if p['Actor.Rotation']['type']!='StructProperty' or p['Actor.Rotation']['size']!=12:raise ValueError('Invalid rotation field')
+   rig_data=[address,rig['index'],cls,offset,tick_name_rig,p['Actor.Owner']['offset'],feedback_offset]
   config+=struct.pack('<3If',int(turning_trial),rotation_offset,rotation_name,snap_degrees)+call_expected
-  assert len(config)==1080
+  config+=struct.pack('<8I',int(weapon_trial),*rig_data)
+  assert len(config)==1112
   request_path=directory/'request.bin';request_path.write_bytes(config)
   source=root/'build/x86/KFVRNativeProbe.dll';dll=directory/'KFVRNativeProbe.dll';dll.write_bytes(source.read_bytes())
   launcher=root/'build/x86/KFVRNativeTrace.exe'
@@ -121,7 +150,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   result=subprocess.run([str(launcher),'--game',str(game),'--dll',str(dll),'--request',str(request_path)],capture_output=True,text=True,timeout=duration_ms/1000+20)
   (directory/'launcher.txt').write_text(result.stdout+result.stderr)
   restored=all(observer.read(e['address'],16).hex()==e['expected'] for e in evidence+input_evidence)
-  summary=dict(pid=pid,launcher_exit=result.returncode,entry_bytes_restored=restored,game_files_modified=False,report=str(report_path),module_resident_until_exit=True)
+  summary=dict(pid=pid,launcher_exit=result.returncode,entry_bytes_restored=restored,native_trace_modified_game_files=False,development_package_required=weapon_trial,report=str(report_path),module_resident_until_exit=True)
   if report_path.exists():
    report=json.loads(report_path.read_text());summary.update(frames=len(report['frames']),hooks_disabled=report['hooks_disabled'],render_counts=sorted(set(f['renders'] for f in report['frames'])),engine_ticks_observed_inside_draw=any(f['ticks_before']!=f['ticks_after'] for f in report['frames']))
   if report_path.exists():
@@ -177,8 +206,12 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    bridge_path=directory/'native-bridge.json';bridge=json.loads(bridge_path.read_text()) if bridge_path.exists() else {}
    bridge_passed=all(bridge.get(k) is True for k in ['closed','reset_hook_restored','resources_released']) and bridge.get('consumed_pairs',0)>0 and bridge.get('reason') in ['duration_finished','host_closed']
    summary.update(bridge_trial_passed=bridge_passed,bridge=bridge)
+  weapon_passed=True
+  if weapon_trial:
+   weapon=json.loads((directory/'native-weapon.json').read_text());weapon_passed=weapon.get('valid',0)>10 and weapon.get('failed',1)==0
+   summary.update(weapon_pose_delivery_passed=weapon_passed,weapon_valid_packets=weapon.get('valid',0))
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
-  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed or not input_passed or not movement_passed or not turning_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
+  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed or not input_passed or not movement_passed or not turning_passed or not weapon_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
   return summary
  finally:observer.close()
 if __name__=='__main__':

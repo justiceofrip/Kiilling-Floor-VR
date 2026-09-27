@@ -11,21 +11,21 @@ bool ValidPose(const PoseWire& p){for(float v:p.values)if(!std::isfinite(v))retu
 }
 bool DecodeControls(const ControlWire& wire,std::int64_t now,xr::ControllerFrame& out,std::uint64_t& sequence)noexcept{
  out={};sequence=0;
- if(wire.magic!=0x3149464b||wire.version!=1||wire.bytes!=sizeof(wire)||wire.flags>1||!wire.sequence||now<=0||wire.expiresQpc<=now)return false;
+ if(wire.magic!=0x3149464b||wire.version!=2||wire.bytes!=sizeof(wire)||wire.flags>1||!wire.sequence||now<=0||wire.expiresQpc<=now)return false;
  const bool focused=wire.flags==1;if(focused&&(!wire.spaceGeneration||wire.predictedNs<=0))return false;
  xr::ControllerFrame frame{};frame.focused=focused;frame.spaceGeneration=wire.spaceGeneration;frame.predictedNs=wire.predictedNs;
  for(unsigned hand=0;hand<2;++hand){const auto& w=wire.hands[hand];auto& h=frame.hands[hand];
-  if(w.flags>7||w.reserved||(!focused&&w.flags)||!Unit(w.trigger)||!Unit(w.squeeze)||!std::isfinite(w.stickX)||!std::isfinite(w.stickY)||std::hypot(w.stickX,w.stickY)>1.0001f)return false;
-  h.gripValid=(w.flags&1)!=0;h.aimValid=(w.flags&2)!=0;h.menu=(w.flags&4)!=0;
+  if(w.flags>511||((w.flags&16)&&!(w.flags&8))||((w.flags&64)&&!(w.flags&32))||w.reserved||(!focused&&w.flags)||!Unit(w.trigger)||!Unit(w.squeeze)||!std::isfinite(w.stickX)||!std::isfinite(w.stickY)||std::hypot(w.stickX,w.stickY)>1.0001f)return false;
+  h.gripValid=(w.flags&1)!=0;h.aimValid=(w.flags&2)!=0;h.menu=(w.flags&4)!=0;h.triggerTouchActive=(w.flags&8)!=0;h.triggerTouched=(w.flags&16)!=0;h.thumbTouchActive=(w.flags&32)!=0;h.thumbTouched=(w.flags&64)!=0;h.primary=(w.flags&128)!=0;h.secondary=(w.flags&256)!=0;
   if(h.gripValid){if(!ValidPose(w.grip))return false;h.gripPose=Unpack(w.grip);h.trigger=w.trigger;h.squeeze=w.squeeze;h.stickX=w.stickX;h.stickY=w.stickY;}
-  else if(!Empty(w.grip)||w.trigger||w.squeeze||w.stickX||w.stickY||h.menu)return false;
+  else if(!Empty(w.grip)||w.trigger||w.squeeze||w.stickX||w.stickY||(w.flags&~2u))return false;
   if(h.aimValid){if(!ValidPose(w.aim))return false;h.aimPose=Unpack(w.aim);}else if(!Empty(w.aim))return false;
  }
  out=frame;sequence=wire.sequence;return true;
 }
 bool EncodeControls(const xr::ControllerFrame& frame,std::uint64_t sequence,std::int64_t expires,ControlWire& out)noexcept{
  ControlWire wire{};wire.sequence=sequence;wire.expiresQpc=expires;wire.spaceGeneration=frame.spaceGeneration;wire.predictedNs=frame.predictedNs;wire.flags=frame.focused?1:0;
- if(frame.focused)for(unsigned hand=0;hand<2;++hand){auto& w=wire.hands[hand];const auto& h=frame.hands[hand];if(h.gripValid){w.flags|=1;w.grip=Pack(h.gripPose);w.trigger=h.trigger;w.squeeze=h.squeeze;w.stickX=h.stickX;w.stickY=h.stickY;if(h.menu)w.flags|=4;}if(h.aimValid){w.flags|=2;w.aim=Pack(h.aimPose);}}
+ if(frame.focused)for(unsigned hand=0;hand<2;++hand){auto& w=wire.hands[hand];const auto& h=frame.hands[hand];if(h.gripValid){w.flags|=1;w.grip=Pack(h.gripPose);w.trigger=h.trigger;w.squeeze=h.squeeze;w.stickX=h.stickX;w.stickY=h.stickY;if(h.menu)w.flags|=4;if(h.triggerTouchActive)w.flags|=8;if(h.triggerTouched)w.flags|=16;if(h.thumbTouchActive)w.flags|=32;if(h.thumbTouched)w.flags|=64;if(h.primary)w.flags|=128;if(h.secondary)w.flags|=256;}if(h.aimValid){w.flags|=2;w.aim=Pack(h.aimPose);}}
  xr::ControllerFrame check;std::uint64_t id;if(!DecodeControls(wire,1,check,id))return false;out=wire;return true;
 }
 bool EncodeHaptics(const ControlWire& input,std::uint64_t sequence,std::int64_t now,const std::array<xr::HapticPulse,2>& pulses,HapticWire& out)noexcept{

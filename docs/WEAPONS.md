@@ -2,7 +2,7 @@
 
 96 KFWeapon-derived classes, including abstract bases, skins, story tools and legacy variants. This is not a count of trader weapons.
 
-Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. No weapon profile is enabled by this ledger.
+Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. The separate standalone KFVRTrackedSingle adapter now enables 9mm aiming/fire, hands and one waist holster; its physical reload remains unbound.
 
 | Class | Candidate family | Capacity | Reload seconds | Notes |
 | --- | --- | ---: | ---: | --- |
@@ -17,7 +17,7 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.Syringe | Tool | 0 | 0.0 | Pending interaction/asset validation |
 | KFMod.Magnum44Pistol | Revolver | 6 | 2.5250000953674316 | Pending interaction/asset validation |
 | KFMod.M7A3MMedicGun | MagazineFed | 15 | 3.065999984741211 | Pending interaction/asset validation |
-| KFMod.Single | MagazineFed | 15 | 2.0 | Pending interaction/asset validation |
+| KFMod.Single | MagazineFed | 15 | 2.0 | Live tracked aiming/fire/holster adapter; physical reload pending |
 | KFMod.ZEDGun | EnergyWeapon | 100 | 3.5 | Pending interaction/asset validation |
 | KFMod.Crossbow | SingleRoundBow | 1 | 0.009999999776482582 | Pending interaction/asset validation |
 | KFMod.MP7MMedicGun | MagazineFed | 20 | 3.1659998893737793 | Pending interaction/asset validation |

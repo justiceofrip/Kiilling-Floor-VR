@@ -2,7 +2,7 @@
 #include <cstdint>
 namespace kfvr::native {
 struct NativeProbeConfig {
- std::uint32_t bytes=1080,version=9,durationMs=12000,maxFrames=180;
+ std::uint32_t bytes=1112,version=11,durationMs=12000,maxFrames=180;
  std::uint32_t controller=0,controllerIndex=0,viewport=0,level=0,levelIndex=0;
  std::uint32_t levelOffset=0,playerOffset=0,netModeOffset=0;
  // stereoTrial: 0 disabled, 1 parallel native, 2 asymmetric, 3 synthetic head pose.
@@ -16,6 +16,7 @@ struct NativeProbeConfig {
  std::uint32_t inputTrial=0,inputOffsets[10]{},playerTickName=0;std::uint8_t inputPrologue[16]{};
  std::uint32_t movementTrial=0,pawnOffset=0,healthOffset=0,pawnControllerOffset=0,pauserOffset=0,locationOffset=0;
  std::uint32_t turningTrial=0,rotationOffset=0,rotationName=0;float snapDegrees=30;std::uint8_t callPrologue[16]{};
+ std::uint32_t weaponTrial=0,rig=0,rigIndex=0,rigClass=0,rigTrackingOffset=0,rigTickName=0,ownerOffset=0,rigFeedbackOffset=0;
 };
-static_assert(sizeof(NativeProbeConfig)==1080);
+static_assert(sizeof(NativeProbeConfig)==1112);
 }
