@@ -36,7 +36,9 @@ struct alignas(8) FrameSlot {
     FrameRequest request{};
     graphics::TextureDescriptor descriptor{};
     graphics::PairTicket ticket{};
-    std::uint64_t reserved=0;
+    // Completion survives a newly queued request until the producer releases
+    // the previous GPU pair. Take remains blocked until that completion is reaped.
+    std::uint64_t completedId=0;
 };
 static_assert(sizeof(FrameSlot)==416 && offsetof(FrameSlot,ticket)==312);
 static_assert(std::is_trivially_copyable_v<FrameSlot>);

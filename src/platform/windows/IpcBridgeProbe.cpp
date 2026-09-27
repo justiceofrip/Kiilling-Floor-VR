@@ -51,7 +51,7 @@ int wmain(int argc,wchar_t** argv){try {
     if(argc==3&&(std::wstring(argv[1])==L"--abandon"||std::wstring(argv[1])==L"--connect-exit")){
         ipc::FrameChannel endpoint;Require(endpoint.ConnectProducer(argv[2]),"Connect failure-test endpoint");
         if(std::wstring(argv[1])==L"--abandon"){
-            const auto name=L"Local\\KFVR.Control.v3."+std::wstring(argv[2])+L".mutex";
+            const auto name=L"Local\\KFVR.Control.v4."+std::wstring(argv[2])+L".mutex";
             HANDLE mutex=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,name.c_str());Require(mutex&&WaitForSingleObject(mutex,1000)==WAIT_OBJECT_0,"Acquire abandonment-test mutex");
         }
         ExitProcess(0); // Deliberately bypass RAII to exercise an actual peer crash.

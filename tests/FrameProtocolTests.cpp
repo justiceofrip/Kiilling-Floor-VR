@@ -40,5 +40,37 @@ int main(){
     CHECK(ipc::Begin(slot,request,1));CHECK(ipc::Take(slot,2,taken));ipc::Skip(slot,request.requestId);
     auto next=request;++next.requestId;CHECK(ipc::Begin(slot,next,3));CHECK(!ipc::Publish(slot,request.requestId,4,d,ticket));CHECK(slot.phase==ipc::Phase::Requested);
     slot.phase=ipc::Phase::Closed;CHECK(!ipc::Begin(slot,request,1));CHECK(ipc::Reap(slot,next.requestId,2)==ipc::Outcome::Discarded);
+    // Queue the next request before the render thread reaps the prior pair.
+    // Delayed feedback must neither release its textures early nor erase the
+    // queued request. Exercise consumed/discarded pairs and both thread orders.
+    for(bool consumed:{false,true})for(bool reapFirst:{false,true})for(bool expire:{false,true}){
+        slot={};CHECK(ipc::Begin(slot,request,1));CHECK(ipc::Take(slot,2,taken));
+        CHECK(ipc::Publish(slot,request.requestId,3,d,ticket));CHECK(ipc::Deliver(slot,request.requestId,4,got,pair));
+        CHECK(ipc::Acknowledge(slot,request.requestId,consumed));
+        const auto expected=consumed?ipc::Outcome::Consumed:ipc::Outcome::Discarded;
+        if(reapFirst)CHECK(ipc::Reap(slot,request.requestId,5)==expected);
+        next=request;++next.requestId;CHECK(ipc::Begin(slot,next,6));
+        CHECK(!ipc::Acknowledge(slot,request.requestId,true));ipc::Cancel(slot,request.requestId);ipc::Skip(slot,request.requestId);
+        CHECK(!ipc::Publish(slot,request.requestId,7,d,ticket));CHECK(slot.phase==ipc::Phase::Requested);
+        if(!reapFirst){
+            CHECK(!ipc::Take(slot,8,taken));CHECK(ipc::Reap(slot,next.requestId+1,8)==ipc::Outcome::Discarded);
+            CHECK(slot.completedId==request.requestId);CHECK(ipc::Reap(slot,request.requestId,9)==expected);
+        }
+        CHECK(slot.phase==ipc::Phase::Requested&&slot.completedId==0);
+        CHECK(ipc::Take(slot,expire?1000:10,taken)==!expire);
+        if(!expire){
+            CHECK(taken.requestId==next.requestId);CHECK(ipc::Publish(slot,next.requestId,11,d,ticket));
+            CHECK(ipc::Deliver(slot,next.requestId,12,got,pair));CHECK(ipc::Acknowledge(slot,next.requestId,false));
+            auto third=next;++third.requestId;CHECK(ipc::Begin(slot,third,13));ipc::Cancel(slot,third.requestId);
+            CHECK(slot.phase==ipc::Phase::Idle&&slot.completedId==next.requestId);
+            CHECK(ipc::Reap(slot,next.requestId,14)==ipc::Outcome::Discarded);
+        }
+        CHECK(slot.phase==ipc::Phase::Idle&&slot.completedId==0&&slot.consumed==0);
+    }
+    // Expired published frames can likewise hand off to a new queued request.
+    slot={};CHECK(ipc::Begin(slot,request,1));CHECK(ipc::Take(slot,2,taken));CHECK(ipc::Publish(slot,request.requestId,3,d,ticket));
+    CHECK(!ipc::Deliver(slot,request.requestId,1000,got,pair));next=request;++next.requestId;next.deadlineQpc=3000;
+    CHECK(ipc::Begin(slot,next,1001));CHECK(ipc::Reap(slot,request.requestId,1002)==ipc::Outcome::Discarded);
+    CHECK(ipc::Take(slot,1003,taken)&&taken.requestId==next.requestId);
     return 0;
 }

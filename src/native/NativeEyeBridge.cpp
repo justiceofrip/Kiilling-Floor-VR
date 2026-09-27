@@ -18,6 +18,7 @@ struct State {
  std::atomic<bool> stop=false,closed=true;DWORD thread=0;
  void* resetTarget=nullptr;Reset resetOriginal=nullptr;std::array<unsigned char,16> resetBytes{};
  bool resetEnabled=false,resetRestored=true;const char* reason="not_started";
+ unsigned levelCallbacks=0,noRequestCallbacks=0,pendingPairCallbacks=0;long long started=0,finished=0;graphics::D3D9TransferTiming timing{};
  unsigned requests=0,rendered=0,published=0,consumed=0,discarded=0,expired=0,inputs=0,resets=0,inputBusy=0,inputInvalid=0;
  std::uint64_t frame=0,epoch=0,lastInput=0;double renderMs=0,renderMax=0,transferMs=0,transferMax=0;
 } s;
@@ -26,7 +27,7 @@ double Milliseconds(long long ticks){LARGE_INTEGER f;QueryPerformanceFrequency(&
 bool Read(const void* p,void* out,SIZE_T n){SIZE_T got=0;return ReadProcessMemory(GetCurrentProcess(),p,out,n,&got)&&got==n;}
 void Close(const char* reason){
  if(s.closed.load(std::memory_order_relaxed))return;
- s.reason=reason;s.stop=true;
+ s.reason=reason;s.stop=true;s.finished=Now();
  for(auto& eye:s.eyes)eye.Reset();s.transfer.Reset();s.d11.Reset();s.device.Reset();s.channel.Close();
  if(s.resetEnabled){const auto result=MH_DisableHook(s.resetTarget);std::array<unsigned char,16> bytes{};s.resetRestored=(result==MH_OK||result==MH_ERROR_DISABLED)&&Read(s.resetTarget,bytes.data(),bytes.size())&&bytes==s.resetBytes;s.resetEnabled=!s.resetRestored;}
  // Publish statistics only after render-thread resource cleanup. Keep the DLL
@@ -95,9 +96,10 @@ void EyeBridgeLevel(void* scene,void* ri,IDirect3DDevice9* device,EyeRenderer re
  if(s.closed.load(std::memory_order_acquire)||s.stop.load(std::memory_order_acquire))return;
  if(!s.thread)s.thread=GetCurrentThreadId();if(s.thread!=GetCurrentThreadId()){s.stop=true;return;}
  if(s.device&&s.device.Get()!=device){Close("device_changed");return;}
- Reap();if(s.closed.load()||s.stage!=Stage::Idle)return;
+ ++s.levelCallbacks;if(!s.started)s.started=Now();
+ Reap();if(s.closed.load()||s.stage!=Stage::Idle){++s.pendingPairCallbacks;return;}
  const auto taken=s.channel.TryTake(s.request);
- if(taken==ipc::ChannelResult::Closed){Close("host_closed");return;}if(taken!=ipc::ChannelResult::Ok)return;
+ if(taken==ipc::ChannelResult::Closed){Close("host_closed");return;}if(taken!=ipc::ChannelResult::Ok){++s.noRequestCallbacks;return;}
  ++s.requests;
  if(!ipc::Decode(s.request,s.requirements,s.tracking)||s.requirements.width>4096||s.requirements.height>4096||std::uint64_t(s.requirements.width)*s.requirements.height*40>256*1024*1024){Close("unsupported_request");return;}
  if(!s.device)s.device=device;
@@ -122,6 +124,7 @@ void EyeBridgePresent(bool worldValid) noexcept {try{
   const auto result=s.transfer.Publish({s.eyes[0].Get(),s.eyes[1].Get()},metadata,s.ticket);
   for(auto& eye:s.eyes)eye.Reset();
   if(result!=graphics::TransferResult::Ok){Close("pixel_transfer_failed");return;}
+  const auto timing=s.transfer.LastTiming();s.timing.resolveMs+=timing.resolveMs;s.timing.readbackMs+=timing.readbackMs;s.timing.convertMs+=timing.convertMs;s.timing.uploadMs+=timing.uploadMs;s.timing.publishMs+=timing.publishMs;
   const auto ms=s.transfer.LastTransferMs();s.transferMs+=ms;s.transferMax=std::max(s.transferMax,ms);s.stage=Stage::Publish;
  }
  if(s.stage==Stage::Publish){
@@ -134,6 +137,6 @@ void EyeBridgePresent(bool worldValid) noexcept {try{
 }catch(...){Close("present_exception");}}
 void WriteEyeBridgeReport(const std::filesystem::path& folder){
  std::ofstream out(folder/L"native-bridge.json");if(!EyeBridgeClosed()){out<<"{\"closed\":false,\"cleanup_pending_on_graphics_thread\":true}\n";return;}
- out<<std::boolalpha<<"{\"closed\":true,\"reason\":\""<<s.reason<<"\",\"reset_hook_restored\":"<<s.resetRestored<<",\"resources_released\":true,\"requests\":"<<s.requests<<",\"rendered_pairs\":"<<s.rendered<<",\"published_pairs\":"<<s.published<<",\"consumed_pairs\":"<<s.consumed<<",\"discarded_pairs\":"<<s.discarded<<",\"expired_before_transfer\":"<<s.expired<<",\"controller_samples\":"<<s.inputs<<",\"input_busy_reads\":"<<s.inputBusy<<",\"input_invalid_reads\":"<<s.inputInvalid<<",\"device_resets\":"<<s.resets<<",\"render_total_ms\":"<<s.renderMs<<",\"render_max_ms\":"<<s.renderMax<<",\"transfer_total_ms\":"<<s.transferMs<<",\"transfer_max_ms\":"<<s.transferMax<<",\"world_scale_calibrated\":false}\n";
+ out<<std::boolalpha<<"{\"closed\":true,\"reason\":\""<<s.reason<<"\",\"reset_hook_restored\":"<<s.resetRestored<<",\"resources_released\":true,\"requests\":"<<s.requests<<",\"rendered_pairs\":"<<s.rendered<<",\"published_pairs\":"<<s.published<<",\"consumed_pairs\":"<<s.consumed<<",\"discarded_pairs\":"<<s.discarded<<",\"expired_before_transfer\":"<<s.expired<<",\"controller_samples\":"<<s.inputs<<",\"input_busy_reads\":"<<s.inputBusy<<",\"input_invalid_reads\":"<<s.inputInvalid<<",\"device_resets\":"<<s.resets<<",\"render_total_ms\":"<<s.renderMs<<",\"render_max_ms\":"<<s.renderMax<<",\"transfer_total_ms\":"<<s.transferMs<<",\"transfer_max_ms\":"<<s.transferMax<<",\"elapsed_ms\":"<<Milliseconds(s.finished-s.started)<<",\"level_callbacks\":"<<s.levelCallbacks<<",\"no_request_callbacks\":"<<s.noRequestCallbacks<<",\"pending_pair_callbacks\":"<<s.pendingPairCallbacks<<",\"resolve_total_ms\":"<<s.timing.resolveMs<<",\"readback_total_ms\":"<<s.timing.readbackMs<<",\"convert_total_ms\":"<<s.timing.convertMs<<",\"upload_total_ms\":"<<s.timing.uploadMs<<",\"publish_total_ms\":"<<s.timing.publishMs<<",\"world_scale_calibrated\":false}\n";
 }
 }

@@ -2,6 +2,7 @@
 #include <dxgi.h>
 #include <wrl/client.h>
 #include <cstring>
+#include <emmintrin.h>
 #include <vector>
 namespace kfvr::graphics {
 using Microsoft::WRL::ComPtr;
@@ -15,9 +16,10 @@ struct D3D9CpuPair::State {
  bool pending=false,faulted=false;
 };
 D3D9CpuPair::D3D9CpuPair()=default;D3D9CpuPair::~D3D9CpuPair()=default;
-void D3D9CpuPair::Reset()noexcept{state_.reset();error_=S_OK;lastMs_=0;}
+void D3D9CpuPair::Reset()noexcept{state_.reset();error_=S_OK;lastMs_=0;timing_={};}
 HRESULT D3D9CpuPair::LastError()const noexcept{return error_;}
 double D3D9CpuPair::LastTransferMs()const noexcept{return lastMs_;}
+D3D9TransferTiming D3D9CpuPair::LastTiming()const noexcept{return timing_;}
 TextureDescriptor D3D9CpuPair::Descriptor()const noexcept{return state_?state_->producer.Descriptor():TextureDescriptor{};}
 HRESULT D3D9CpuPair::AdapterLuid(IDirect3DDevice9* device,LUID& out)noexcept{
  out={};if(!device)return E_INVALIDARG;D3DDEVICE_CREATION_PARAMETERS creation{};auto hr=device->GetCreationParameters(&creation);if(FAILED(hr))return hr;
@@ -50,7 +52,7 @@ TransferResult D3D9CpuPair::Create(IDirect3DDevice9* d9,ID3D11Device* d11,UINT w
  }catch(...){error_=E_OUTOFMEMORY;return TransferResult::Unavailable;}
 }
 TransferResult D3D9CpuPair::Publish(const std::array<IDirect3DSurface9*,2>& surfaces,const FrameMetadata& frame,PairTicket& ticket)noexcept{
- ticket={};lastMs_=0;if(!state_){error_=E_UNEXPECTED;return TransferResult::Unavailable;}auto& s=*state_;
+ ticket={};lastMs_=0;timing_={};if(!state_){error_=E_UNEXPECTED;return TransferResult::Unavailable;}auto& s=*state_;
  if(s.faulted)return TransferResult::Faulted;if(s.pending)return TransferResult::Busy;
  if(!surfaces[0]||!surfaces[1]||surfaces[0]==surfaces[1]||!frame.frameId||frame.frameId<=s.lastFrame||!frame.spaceGeneration||!frame.trackingGeneration||frame.predictedNs<=0){error_=E_INVALIDARG;return TransferResult::Invalid;}
  std::array<D3DSURFACE_DESC,2> descriptions{};
@@ -59,20 +61,38 @@ TransferResult D3D9CpuPair::Publish(const std::array<IDirect3DSurface9*,2>& surf
  }
  if(!Valid(s.producer.Descriptor())){if(s.epoch==UINT64_MAX){error_=E_UNEXPECTED;return TransferResult::Faulted;}const auto result=s.producer.Create(s.d11.Get(),s.width,s.height,s.destination,++s.epoch);if(result!=TransferResult::Ok){error_=s.producer.LastError();return result;}}
  LARGE_INTEGER begin{},end{},frequency{};QueryPerformanceFrequency(&frequency);QueryPerformanceCounter(&begin);
+ auto measure=[&](LARGE_INTEGER& start){LARGE_INTEGER at{};QueryPerformanceCounter(&at);const double ms=double(at.QuadPart-start.QuadPart)*1000/double(frequency.QuadPart);start=at;return ms;};
+ LARGE_INTEGER stage=begin;
  for(unsigned eye=0;eye<2;++eye){auto* source=surfaces[eye];if(descriptions[eye].MultiSampleType!=D3DMULTISAMPLE_NONE){error_=s.d9->StretchRect(source,nullptr,s.resolve[eye].Get(),nullptr,D3DTEXF_NONE);if(FAILED(error_)){s.faulted=true;return TransferResult::Faulted;}source=s.resolve[eye].Get();}
+  timing_.resolveMs+=measure(stage);
   error_=s.d9->GetRenderTargetData(source,s.staging[eye].Get());if(FAILED(error_)){s.faulted=true;return TransferResult::Faulted;}
   D3DLOCKED_RECT locked{};error_=s.staging[eye]->LockRect(&locked,nullptr,D3DLOCK_READONLY);if(FAILED(error_)){s.faulted=true;return TransferResult::Faulted;}
+  timing_.readbackMs+=measure(stage);
   const bool valid=locked.pBits&&locked.Pitch>=int(s.width*4);if(valid){const bool rgba=s.destination==DXGI_FORMAT_R8G8B8A8_UNORM||s.destination==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
    for(UINT y=0;y<s.height;++y){const auto* row=reinterpret_cast<const std::uint32_t*>(static_cast<const char*>(locked.pBits)+std::size_t(y)*locked.Pitch);auto* target=s.pixels[eye].data()+std::size_t(y)*s.width;
-    for(UINT x=0;x<s.width;++x){auto pixel=row[x];if(s.source==D3DFMT_X8R8G8B8)pixel|=0xff000000;if(rgba)pixel=(pixel&0xff00ff00)|((pixel&255)<<16)|((pixel>>16)&255);target[x]=pixel;}
+    if(!rgba&&s.source==D3DFMT_A8R8G8B8){std::memcpy(target,row,std::size_t(s.width)*4);continue;}
+    // Four packed pixels at a time on the x86 game path. Unaligned loads/stores
+    // and a scalar tail preserve arbitrary D3D pitch and non-multiple widths.
+    const auto alpha=_mm_set1_epi32(s.source==D3DFMT_X8R8G8B8?int(0xff000000u):0);
+    const auto keep=_mm_set1_epi32(int(0xff00ff00u)),blue=_mm_set1_epi32(255);
+    UINT x=0;
+    for(;x+4<=s.width;x+=4){
+     auto pixel=_mm_or_si128(_mm_loadu_si128(reinterpret_cast<const __m128i*>(row+x)),alpha);
+     if(rgba)pixel=_mm_or_si128(_mm_and_si128(pixel,keep),_mm_or_si128(_mm_slli_epi32(_mm_and_si128(pixel,blue),16),_mm_and_si128(_mm_srli_epi32(pixel,16),blue)));
+     _mm_storeu_si128(reinterpret_cast<__m128i*>(target+x),pixel);
+    }
+    for(;x<s.width;++x){auto pixel=row[x];if(s.source==D3DFMT_X8R8G8B8)pixel|=0xff000000;if(rgba)pixel=(pixel&0xff00ff00)|((pixel&255)<<16)|((pixel>>16)&255);target[x]=pixel;}
    }
   }
   const auto unlock=s.staging[eye]->UnlockRect();if(!valid||FAILED(unlock)){error_=valid?unlock:E_INVALIDARG;s.faulted=true;return TransferResult::Faulted;}
+  timing_.convertMs+=measure(stage);
  }
  // No shared eye is published until BOTH readbacks have succeeded. A failed
  // right eye can never submit a new left eye with an old right eye.
  for(unsigned eye=0;eye<2;++eye)s.context->UpdateSubresource(s.upload[eye].Get(),0,nullptr,s.pixels[eye].data(),s.width*4,0);
+ timing_.uploadMs=measure(stage);
  const auto result=s.producer.Publish({TextureSlice{s.upload[0].Get(),0},TextureSlice{s.upload[1].Get(),0}},frame,ticket);error_=s.producer.LastError();
+ timing_.publishMs=measure(stage);
  QueryPerformanceCounter(&end);if(frequency.QuadPart>0)lastMs_=double(end.QuadPart-begin.QuadPart)*1000/double(frequency.QuadPart);
  if(result==TransferResult::Ok){s.pending=true;s.pendingTicket=ticket;s.lastFrame=frame.frameId;}else if(result==TransferResult::Faulted)s.producer.Reset();return result;
 }

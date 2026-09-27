@@ -32,11 +32,12 @@ bool Encode(const runtime::PresentationRequirements& requirements,const runtime:
 }
 bool Begin(FrameSlot& s,const FrameRequest& r,std::int64_t now)noexcept {
     runtime::PresentationRequirements requirements{};runtime::TrackingFrame tracking{};
-    if(s.phase!=Phase::Idle||now<=0||r.deadlineQpc<=now||!Decode(r,requirements,tracking))return false;
-    s={};s.request=r;s.phase=Phase::Requested;return true;
+    if(s.phase!=Phase::Idle||now<=0||r.deadlineQpc<=now||(s.completedId&&r.requestId<=s.completedId)||!Decode(r,requirements,tracking))return false;
+    const auto completed=s.completedId;const auto consumed=s.consumed;
+    s={};s.completedId=completed;s.consumed=consumed;s.request=r;s.phase=Phase::Requested;return true;
 }
 bool Take(FrameSlot& s,std::int64_t now,FrameRequest& out)noexcept {
-    if(s.phase!=Phase::Requested)return false;
+    if(s.phase!=Phase::Requested||s.completedId)return false;
     if(Expired(s,now)){s.phase=Phase::Idle;return false;}
     runtime::PresentationRequirements requirements{};runtime::TrackingFrame tracking{};
     if(!Decode(s.request,requirements,tracking)){s.phase=Phase::Closed;return false;}
@@ -60,17 +61,21 @@ void Cancel(FrameSlot& s,std::uint64_t id)noexcept {
     if(!Match(s,id))return;
     if(s.phase==Phase::Requested)s.phase=Phase::Idle;
     else if(s.phase==Phase::Rendering)s.phase=Phase::Cancelled;
-    else if(s.phase==Phase::Ready){s.phase=Phase::Complete;s.consumed=0;}
+    else if(s.phase==Phase::Ready){s.completedId=id;s.consumed=0;s.phase=Phase::Idle;}
     // Delivered belongs to the GPU consumer until explicit feedback or peer exit.
 }
 void Skip(FrameSlot& s,std::uint64_t id)noexcept {if(Match(s,id)&&(s.phase==Phase::Rendering||s.phase==Phase::Cancelled))s.phase=Phase::Idle;}
 bool Acknowledge(FrameSlot& s,std::uint64_t id,bool consumed)noexcept {
-    if(!Match(s,id)||s.phase!=Phase::Delivered)return false;s.consumed=consumed?1u:0u;s.phase=Phase::Complete;return true;
+    if(!Match(s,id)||s.phase!=Phase::Delivered||s.completedId)return false;s.completedId=id;s.consumed=consumed?1u:0u;s.phase=Phase::Idle;return true;
 }
 Outcome Reap(FrameSlot& s,std::uint64_t id,std::int64_t now)noexcept {
-    if(!Match(s,id)||s.phase==Phase::Idle||s.phase==Phase::Closed)return Outcome::Discarded;
-    if(s.phase==Phase::Ready&&Expired(s,now))Cancel(s,id);
-    if(s.phase!=Phase::Complete)return Outcome::Pending;
-    const auto outcome=s.consumed==1?Outcome::Consumed:Outcome::Discarded;s.phase=Phase::Idle;return outcome;
+    if(s.phase==Phase::Closed)return Outcome::Discarded;
+    if(Match(s,id)&&s.phase==Phase::Ready&&Expired(s,now))Cancel(s,id);
+    if(id&&s.completedId==id){
+        const auto outcome=s.consumed==1?Outcome::Consumed:Outcome::Discarded;
+        s.completedId=0;s.consumed=0;return outcome;
+    }
+    if(!Match(s,id)||s.phase==Phase::Idle)return Outcome::Discarded;
+    return Outcome::Pending;
 }
 }

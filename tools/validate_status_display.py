@@ -43,7 +43,7 @@ def validate(folder,inventory=False,dual=False,belt=False):
   at('visible_with_free_raised_offhand',0,lambda p:not p['bHidden'])
   at('hidden_while_supporting_rifle',16,lambda p:p['bHidden'])
   at('hidden_on_focus_loss',23,lambda p:p['bHidden'])
-  at('visible_again_after_focus_return',25,lambda p:not p['bHidden'])
+  at('visible_again_after_focus_return',24,lambda p:not p['bHidden'])
   reloading=[p for p in phase(4) if p.get('ActionLine')=='RELOADING']
   checks['pistol_count_while_reloading']=bool(reloading) and all(p['DisplayedLoaded']==14 for p in reloading)
   ready=[p for p in phase(4) if p.get('ActionLine')=='READY']

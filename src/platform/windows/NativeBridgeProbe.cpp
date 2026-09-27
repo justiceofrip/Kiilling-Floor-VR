@@ -29,8 +29,8 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false;unsigned width=640,height=480;
- for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false;unsigned width=640,height=480;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
  Require(width>=64&&height>=64&&width<=4096&&height<=4096&&std::uint64_t(width)*height*40<=256*1024*1024,"Receiver dimensions exceed CPU bridge budget");
  const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
  ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level{};const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_0};
@@ -42,7 +42,7 @@ int wmain(int argc,wchar_t** argv){try{
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
  const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
- const unsigned trialMs=grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?54000:inventory?26700:7500;
+ const unsigned trialMs=cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?54000:inventory?26700:7500;
  for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:reload||dual||dualBelt||heal||weld||arms?90000:inventory?60000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
@@ -59,6 +59,7 @@ int wmain(int argc,wchar_t** argv){try{
    if(dual)phase=std::min(47u,unsigned((elapsed<24000?elapsed:elapsed-1000)/1000));
    if(melee)phase=std::min(21u,unsigned(elapsed/1000));
    if(reload)phase=elapsed<3000?51u+unsigned(elapsed/1000):std::min(50u,unsigned((elapsed-3000)/1000));
+   if(cadence)phase=0;
    xr::ControllerFrame input{};input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;input.focused=phase!=4;input.hands[0].gripValid=input.hands[1].gripValid=true;
    if(phase==1||phase==4||phase==5||phase==9)input.hands[0].stickY=.4f;
    if(phase==3)input.hands[0].stickX=.4f;
@@ -295,9 +296,9 @@ int wmain(int argc,wchar_t** argv){try{
    const auto left=Pixels(context.Get(),output.Get(),staging.Get(),0,req.width,req.height);
    Bitmap(folder/(L"weapon-phase-"+std::to_wstring(capturePhase)+L".bmp"),left,req.width,req.height);captured[capturePhase]=true;
   }
-  ++pairs;if(!firstPair)firstPair=GetTickCount64();Sleep(2);
+  ++pairs;if(!firstPair)firstPair=GetTickCount64();if(!cadence)Sleep(2);
  }
  // Leave time for producer to observe the final consumed acknowledgement.
  Sleep(40);channel.Close();double sum=0,max=0;for(double v:latencies){sum+=v;max=std::max(max,v);}
- std::ofstream report(folder/L"receiver.json");report<<"{\"pairs\":"<<pairs<<",\"timeouts_or_busy\":"<<timeouts<<",\"minimum_eye_colors\":"<<minColors<<",\"minimum_differing_eye_pixels\":"<<minDifferences<<",\"width\":"<<req.width<<",\"height\":"<<req.height<<",\"request_to_copy_average_ms\":"<<(pairs?sum/pairs:0)<<",\"request_to_copy_max_ms\":"<<max<<",\"pixel_checked_pairs\":"<<(movement?(pairs?1:0):pairs)<<",\"haptic_events\":"<<hapticEvents<<",\"haptic_pulses\":"<<hapticPulses<<",\"synthetic_tracking\":true,\"headset_presented\":false}\n";report.close();Require(movement?(pairs>=12&&firstPair&&GetTickCount64()-firstPair>=trialMs):pairs==12,"Incomplete bounded native stereo trial");std::cout<<"Received "<<pairs<<" live KF stereo pairs across x86 to x64\n";return 0;
+ std::ofstream report(folder/L"receiver.json");report<<"{\"pairs\":"<<pairs<<",\"trial_elapsed_ms\":"<<(firstPair?GetTickCount64()-firstPair:0)<<",\"timeouts_or_busy\":"<<timeouts<<",\"minimum_eye_colors\":"<<minColors<<",\"minimum_differing_eye_pixels\":"<<minDifferences<<",\"width\":"<<req.width<<",\"height\":"<<req.height<<",\"request_to_copy_average_ms\":"<<(pairs?sum/pairs:0)<<",\"request_to_copy_max_ms\":"<<max<<",\"pixel_checked_pairs\":"<<(movement?(pairs?1:0):pairs)<<",\"haptic_events\":"<<hapticEvents<<",\"haptic_pulses\":"<<hapticPulses<<",\"synthetic_tracking\":true,\"headset_presented\":false}\n";report.close();Require(movement?(pairs>=12&&firstPair&&GetTickCount64()-firstPair>=trialMs):pairs==12,"Incomplete bounded native stereo trial");std::cout<<"Received "<<pairs<<" live KF stereo pairs across x86 to x64\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

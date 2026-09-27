@@ -56,7 +56,7 @@ int wmain(int argc,wchar_t** argv){try{
  Require(host.ReceiveHaptics()[0].milliseconds==0,"Merged haptic replayed");
  Send(host,frame);SetEvent(go.h);Wait(ack.h);feedback=host.ReceiveHaptics();
  Require(feedback[0].milliseconds==0&&feedback[1].amplitude==.4f&&feedback[1].milliseconds==15,"Consumed left haptic was replayed by right event");
- Handle contested{OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,(L"Local\\KFVR.Control.v3."+host.Token()+L".mutex").c_str())};
+ Handle contested{OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,(L"Local\\KFVR.Control.v4."+host.Token()+L".mutex").c_str())};
  Require(contested.h&&WaitForSingleObject(contested.h,100)==WAIT_OBJECT_0,"Hold input mutex for contention test");
  SetEvent(go.h);Wait(ack.h);Require(ReleaseMutex(contested.h),"Release contended input mutex");
  SetEvent(go.h);Wait(ack.h);
