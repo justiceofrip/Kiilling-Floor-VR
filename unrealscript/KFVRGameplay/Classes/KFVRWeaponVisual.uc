@@ -2,7 +2,7 @@
 // the independent stereo world views. Asset coordinates are measured at runtime.
 class KFVRWeaponVisual extends Actor;
 var Weapon SourceWeapon;
-var vector BladeAxis;
+var vector BladeAxis,ToolAxis;
 var bool bOffhandGun;
 var name TipBone;
 var vector PalmLocal, TipLocal, MagazineLocal, SlideLocal;
@@ -24,6 +24,7 @@ simulated function bool Initialize(Weapon Source)
     PlayAnim('Idle',0.0,0.0); SetAnimFrame(0.0); StopAnimating(); BoneRefresh();
     TipBone='tip';
     if (KFVRTrackedKnife(Source)!=None) TipBone='knife';
+    if (KFVRTrackedSyringe(Source)!=None) TipBone='Syringe';
     if (KFVRTrackedDualies(Source)!=None) { if (bOffhandGun) TipBone='Tip_Left'; else TipBone='Tip_Right'; }
     Palm=GetBoneCoords('Hands_RArmPalm'); Tip=GetBoneCoords(TipBone);
     if (bOffhandGun) Palm=GetBoneCoords('Hands_LArmPalm');
@@ -35,6 +36,13 @@ simulated function bool Initialize(Weapon Source)
         // The shipped knife has no independent tip bone; visual/wearer tuning remains.
         TipLocal+=BladeAxis*60.0;
         Log("KFVR_KNIFE_CAL bone=" $ Tip.Origin $ " x=" $ Tip.XAxis $ " y=" $ Tip.YAxis $ " z=" $ Tip.ZAxis);
+    }
+    if (KFVRTrackedSyringe(Source)!=None)
+    {
+        // The installed mesh has no needle-tip bone. This authored endpoint is
+        // provisional until measured against the rendered needle and wearer grip.
+        ToolAxis=Normal(Tip.XAxis); TipLocal+=ToolAxis*45.0;
+        SetBoneScale(3,0.0,'Syringe Capsule');
     }
     Part=GetBoneCoords('Hands_LArmPalm'); SupportLocal=Part.Origin;
     MagazineBone=class'KFVRWeaponProfile'.static.MagazineBone(KFWeapon(Source));

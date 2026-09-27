@@ -4,9 +4,11 @@ param(
  [ValidatePattern('^KF-[A-Za-z0-9_-]+$')][string]$Map='KF-Offices',
  [switch]$Unattended,
  [switch]$MeleeTest,
+ [switch]$HealTest,
  [switch]$DualTest
 )
 $ErrorActionPreference='Stop'
+if($HealTest -and !$Unattended){throw 'HealTest requires explicit Unattended mode.'}
 if($DualTest -and !$Unattended){throw 'DualTest requires explicit Unattended mode.'}
 if($MeleeTest -and !$Unattended){throw 'MeleeTest requires explicit Unattended mode.'}
 $kfExe=[IO.Path]::GetFullPath((Join-Path $Game 'System\KillingFloor.exe'))
@@ -17,6 +19,7 @@ if($LASTEXITCODE -ne 0){throw 'Development package staging failed.'}
 $kfUrl=$Map+'.rom?Game=KFMod.KFGameType?Mutator=KFVRGameplay.KFVRDevMutator?Difficulty=1'
 if($Unattended){$kfUrl+='?KFVRUnattended=1'}
 if($MeleeTest){$kfUrl+='?KFVRMeleeTest=1'}
+if($HealTest){$kfUrl+='?KFVRHealTest=1'}
 if($DualTest){$kfUrl+='?KFVRDualTest=1'}
 $kfSteam=(Get-ItemProperty HKCU:\Software\Valve\Steam).SteamExe
 Start-Process -FilePath $kfSteam -ArgumentList @('-applaunch','1250',$kfUrl,'-windowed') -WindowStyle Hidden

@@ -1,17 +1,17 @@
 """Read-only snapshots of our reflected script rig; never an input/write path."""
 import argparse,ctypes,json,pathlib,struct,time
 from observe_kf import Observer,unpack
-OWNERS={'KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget','KFWeapon'}
+OWNERS={'KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget','KFWeapon'}
 def layout(o):
  fields=[]
  for row in o.rows:
-  if row['class'].endswith('Property') and (row['outer'] in OWNERS or (row['outer']=='Pawn' and row['name'] in ['Health','HealthMax','ShieldStrength','Weapon']) or (row['outer']=='Actor' and row['name'] in ['Location','Rotation','bHidden'])):
+  if row['class'].endswith('Property') and (row['outer'] in OWNERS or (row['outer']=='KFPawn' and row['name']=='healthToGive') or (row['outer']=='Pawn' and row['name'] in ['Health','HealthMax','ShieldStrength','Weapon']) or (row['outer']=='Actor' and row['name'] in ['Location','Rotation','bHidden'])):
    d=o.read(int(row['address'],16),116);off=unpack(d,76);size=unpack(d,60)
    if unpack(d,56)!=1 or size not in [4,12]:continue
    fields.append((row['outer'],row['name'],row['class'],off,size,unpack(d,112)))
  schema=[]
  for row in o.rows:
-  if row['class'] not in ['KFHumanPawn','KFVRWeaponRig','KFVRWeaponVisual','KFVRHandVisual','KFVRTrackedSingle','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget']:continue
+  if row['class'] not in ['KFHumanPawn','KFVRWeaponRig','KFVRWeaponVisual','KFVRHandVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedDeagle','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget']:continue
   address=int(row['address'],16);chain=[];cls=unpack(o.read(address+40,4))
   while cls:
    chain.append(o.object_name(cls));cls=unpack(o.read(cls+44,4))

@@ -16,7 +16,7 @@ def validate(folder):
  preface_draw=preface[0]['SwitchCount']-start['SwitchCount']
  checks['preface_selects_pistol']=preface[0]['Gun'] in single_addresses and not preface[0]['bHolstered']
  checks['one_stock_use_request']=end['UseCount']-start['UseCount']==1
- checks['four_owned_weapons']=start['InventoryCount']==end['InventoryCount']==4
+ checks['five_owned_weapons']=start['InventoryCount']==end['InventoryCount']==5
  checks['three_holster_switches']=end['SwitchCount']-start['SwitchCount']==3+preface_draw and end['Gun'] in {o['address'] for r in rows for o in r['objects'] if o['type']=='KFVRTrackedSingle'}
  checks['three_reload_requests']=end['ReloadCount']-start['ReloadCount']==3
  totalshots=0
@@ -35,7 +35,7 @@ def validate(folder):
  checks['support_hand_grabbed']=end['SupportGrabs']-start['SupportGrabs']==1
  checks['two_hand_aim_alignment']=bool(support) and all(r['bSupportHeld'] and r['SupportDirectionDot']>.999 for r in support)
  checks['support_hand_released']=end['SupportReleases']-start['SupportReleases']==1 and not end['bSupportHeld']
- checks['four_calibrated_models']=len({o['address'] for row in rows for o in row['objects'] if o['type']=='KFVRWeaponVisual' and o['values']['bCalibrated']})==4
+ checks['five_calibrated_models']=len({o['address'] for row in rows for o in row['objects'] if o['type']=='KFVRWeaponVisual' and o['values']['bCalibrated']})==5
  hands=objects('KFVRHandVisual');posed=[h for h in hands if h['PoseFrames']>0]
  checks['both_palms_tracked']={h['bLeftHand'] for h in posed}=={True,False} and max(h['PalmError'] for h in posed)<.05
  checks['clean_input_release']=not end['bTracking'] and not end['bFiring']
