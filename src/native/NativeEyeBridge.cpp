@@ -92,7 +92,7 @@ void EyeBridgeLevel(void* scene,void* ri,IDirect3DDevice9* device,EyeRenderer re
  const auto taken=s.channel.TryTake(s.request);
  if(taken==ipc::ChannelResult::Closed){Close("host_closed");return;}if(taken!=ipc::ChannelResult::Ok)return;
  ++s.requests;
- if(!ipc::Decode(s.request,s.requirements,s.tracking)||s.requirements.width>2048||s.requirements.height>2048){Close("unsupported_request");return;}
+ if(!ipc::Decode(s.request,s.requirements,s.tracking)||s.requirements.width>4096||s.requirements.height>4096||std::uint64_t(s.requirements.width)*s.requirements.height*40>256*1024*1024){Close("unsupported_request");return;}
  if(!s.device)s.device=device;
  if(std::memcmp(&s.requirements,&s.allocated,sizeof(s.allocated))){s.stage=Stage::Prepare;return;}
  if(Now()>=s.request.deadlineQpc){++s.expired;Skip();return;}

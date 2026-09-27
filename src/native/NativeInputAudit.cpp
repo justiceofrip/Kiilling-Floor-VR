@@ -14,8 +14,11 @@ struct Row {std::atomic<bool> ready=false;unsigned thread=0;float dt=0;std::arra
 std::array<Row,240> rows;thread_local Row* pending=nullptr;
 MovementSource movement=nullptr;thread_local bool tickReady=false,applied=false;
 thread_local std::array<float,2> saved{};std::atomic<bool> pendingRestore=false;
-std::atomic<unsigned> writes=0,restores=0,restoreFailures=0;
-struct MovementRow {std::atomic<bool> ready=false;std::uint64_t sequence=0,uptime=0;std::int64_t time=0;bool valid=false,written=false;float forward=0,strafe=0,consumedForward=0,consumedStrafe=0;bool restored=true,finite=true;};
+std::atomic<unsigned> writes=0,restores=0,restoreFailures=0,turnWrites=0,turnRestores=0,turnFailures=0;
+using CallFunction=void(__thiscall*)(void*,void*,void*,void*);
+CallFunction callOriginal=nullptr;void* callTarget=nullptr;unsigned rotationOffset=0,rotationName=0;std::array<unsigned char,16> callBytes{};
+thread_local float tickDelta=0,queuedTurn=0;thread_local bool turning=false;
+struct MovementRow {std::atomic<bool> ready=false;std::uint64_t sequence=0,uptime=0;std::int64_t time=0;bool valid=false,written=false;float forward=0,strafe=0,consumedForward=0,consumedStrafe=0,requestedTurn=0,turnAxis=0;int yawBefore=0,yawAfter=0;bool turnApplied=false,turnRestored=true;bool restored=true,finite=true;};
 std::array<MovementRow,1500> movementRows;unsigned movementCount=0;thread_local MovementRow* movementRow=nullptr;
 
 bool Read(unsigned at,void* out,SIZE_T size){SIZE_T got=0;return at>=0x10000&&ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(at),out,size,&got)&&got==size;}
@@ -25,6 +28,22 @@ bool Restore(){
  if(U32(controller+4)!=controllerIndex)return false;
  const bool base=Write(controller+offsets[1],saved[0]);
  const bool strafe=Write(controller+offsets[7],saved[1]);return base&&strafe;
+}
+void __fastcall CallHook(void* self,void*,void* frame,void* result,void* function){
+ const bool local=reinterpret_cast<unsigned>(self)==controller&&tickOwned&&!turning&&queuedTurn!=0&&U32(reinterpret_cast<unsigned>(function)+0x24)==rotationName;
+ if(!local){callOriginal(self,frame,result,function);return;}
+ const float degrees=queuedTurn;queuedTurn=0;float oldAxis=0;
+ if(!active.load()||!world()||U32(controller+4)!=controllerIndex||!std::isfinite(tickDelta)||tickDelta<.001f||tickDelta>.25f||!Read(controller+offsets[6],&oldAxis,4)||!std::isfinite(oldAxis)){callOriginal(self,frame,result,function);return;}
+ // KF UpdateRotation integrates 32 * DeltaTime * aTurn into integer rotator
+ // units. FOV/weapon sensitivity has already been applied by KFPlayerInput.
+ const float axis=oldAxis+(degrees*(65536.f/360.f))/(32.f*tickDelta);
+ const int yawBefore=static_cast<int>(U32(controller+rotationOffset+4));
+ if(!Write(controller+offsets[6],axis)){++turnFailures;callOriginal(self,frame,result,function);return;}
+ ++turnWrites;turning=true;callOriginal(self,frame,result,function);turning=false;
+ const int yawAfter=static_cast<int>(U32(controller+rotationOffset+4));
+ const bool restored=U32(controller+4)==controllerIndex&&Write(controller+offsets[6],oldAxis);
+ if(restored)++turnRestores;else ++turnFailures;
+ if(movementRow){movementRow->turnApplied=true;movementRow->turnRestored=restored;movementRow->turnAxis=axis;movementRow->yawBefore=yawBefore;movementRow->yawAfter=yawAfter;}
 }
 bool Axes(std::array<float,10>& values){bool okay=true;for(unsigned i=0;i<values.size();++i)okay&=Read(controller+offsets[i],&values[i],4)&&std::isfinite(values[i]);return okay;}
 void __fastcall Hook(void* self,void*,float dt){
@@ -47,6 +66,12 @@ bool StartInputAudit(unsigned view,unsigned pc,const std::array<unsigned,10>& fi
  if(!target||!VirtualQuery(target,&info,sizeof(info))||info.AllocationBase!=engine||!Read(reinterpret_cast<unsigned>(target),bytes.data(),bytes.size())||std::memcmp(expected,bytes.data(),16))return false;
  if(MH_CreateHook(target,reinterpret_cast<void*>(&Hook),reinterpret_cast<void**>(&original))!=MH_OK||MH_EnableHook(target)!=MH_OK)return false;active=true;return true;
 }
+bool StartTurningAudit(unsigned offset,unsigned name,const unsigned char* expected){
+ rotationOffset=offset;rotationName=name;const auto core=GetModuleHandleW(L"Core.dll");
+ callTarget=reinterpret_cast<void*>(GetProcAddress(core,"?CallFunction@UObject@@UAEXAAUFFrame@@QAXPAVUFunction@@@Z"));MEMORY_BASIC_INFORMATION info{};
+ if(!callTarget||!VirtualQuery(callTarget,&info,sizeof(info))||info.AllocationBase!=core||!Read(reinterpret_cast<unsigned>(callTarget),callBytes.data(),16)||std::memcmp(expected,callBytes.data(),16))return false;
+ return MH_CreateHook(callTarget,reinterpret_cast<void*>(&CallHook),reinterpret_cast<void**>(&callOriginal))==MH_OK&&MH_EnableHook(callTarget)==MH_OK;
+}
 void EndInputAuditEvent() noexcept {
  if(pending){pending->finite&=Axes(pending->tickAfter);pending->afterTick=true;pending->ready.store(true,std::memory_order_release);pending=nullptr;}
  if(movementRow){movementRow->finite=Read(controller+offsets[5],&movementRow->consumedForward,4)&&Read(controller+offsets[7],&movementRow->consumedStrafe,4)&&std::isfinite(movementRow->consumedForward)&&std::isfinite(movementRow->consumedStrafe);}
@@ -57,19 +82,20 @@ void EndInputAuditEvent() noexcept {
   applied=false;pendingRestore.store(false,std::memory_order_release);
  }
  if(movementRow){movementRow->ready.store(true,std::memory_order_release);movementRow=nullptr;}
- tickReady=false;tickOwned=false;tickUsers.fetch_sub(1,std::memory_order_release);
+ queuedTurn=0;tickDelta=0;tickReady=false;tickOwned=false;tickUsers.fetch_sub(1,std::memory_order_release);
 }
-bool BeginInputAuditEvent(void* self,void* function) noexcept {
+bool BeginInputAuditEvent(void* self,void* function,void* parameters) noexcept {
  if(reinterpret_cast<unsigned>(self)!=controller||U32(reinterpret_cast<unsigned>(function)+0x24)!=tickName||tickOwned)return false;
  tickUsers.fetch_add(1,std::memory_order_acq_rel);
  if(!active.load(std::memory_order_acquire)||!world()){tickUsers.fetch_sub(1,std::memory_order_release);return false;}
- tickOwned=true;
+ tickOwned=true;tickDelta=0;Read(reinterpret_cast<unsigned>(parameters),&tickDelta,4);
 
  if(pending){pending->finite&=Axes(pending->tickBefore);pending->beforeTick=true;}
- if(!movement||!tickReady||applied||restoreFailures.load())return true;
- float forward=0,strafe=0;std::uint64_t sequence=0;std::int64_t time=0;
- const bool valid=movement(forward,strafe,sequence,time)&&std::isfinite(forward)&&std::isfinite(strafe)&&std::abs(forward)<=1.001f&&std::abs(strafe)<=1.001f;
- if(movementCount<movementRows.size()){movementRow=&movementRows[movementCount++];movementRow->valid=valid;movementRow->uptime=GetTickCount64();movementRow->sequence=sequence;movementRow->time=time;movementRow->forward=valid?forward:0;movementRow->strafe=valid?strafe:0;}
+ if(!movement||!tickReady||applied||restoreFailures.load()||turnFailures.load())return true;
+ const auto demand=movement();const float forward=demand.forward,strafe=demand.strafe;const auto sequence=demand.sequence;const auto time=demand.time;
+ const bool valid=demand.valid&&std::isfinite(forward)&&std::isfinite(strafe)&&std::abs(forward)<=1.001f&&std::abs(strafe)<=1.001f;
+ queuedTurn=demand.turnValid&&std::isfinite(demand.turnDegrees)&&std::abs(demand.turnDegrees)<=90?demand.turnDegrees:0;
+ if(movementCount<movementRows.size()){movementRow=&movementRows[movementCount++];movementRow->requestedTurn=queuedTurn;movementRow->valid=valid;movementRow->uptime=GetTickCount64();movementRow->sequence=sequence;movementRow->time=time;movementRow->forward=valid?forward:0;movementRow->strafe=valid?strafe:0;}
  if(!valid)return true;
  // Exact reflected FloatProperty layout for this hash-gated Engine build.
  for(unsigned i=0;i<offsets.size();++i)if(offsets[i]!=1348+i*4)return true;
@@ -82,15 +108,17 @@ bool BeginInputAuditEvent(void* self,void* function) noexcept {
  return true;
 }
 bool StopInputAudit() noexcept{
- active=false;const auto deadline=GetTickCount64()+1000;while((tickUsers.load(std::memory_order_acquire)||pendingRestore.load(std::memory_order_acquire))&&GetTickCount64()<deadline)Sleep(1);if(tickUsers.load()||pendingRestore.load()||restoreFailures.load())return false;if(!target)return true;const auto result=MH_DisableHook(target);std::array<unsigned char,16> restored{};
- return (result==MH_OK||result==MH_ERROR_DISABLED)&&Read(reinterpret_cast<unsigned>(target),restored.data(),restored.size())&&restored==bytes;
+ active=false;const auto deadline=GetTickCount64()+1000;while((tickUsers.load(std::memory_order_acquire)||pendingRestore.load(std::memory_order_acquire))&&GetTickCount64()<deadline)Sleep(1);
+ if(tickUsers.load()||pendingRestore.load()||restoreFailures.load()||turnFailures.load())return false;
+ auto disable=[](void* address,const std::array<unsigned char,16>& before){if(!address)return true;const auto result=MH_DisableHook(address);std::array<unsigned char,16> after{};return (result==MH_OK||result==MH_ERROR_DISABLED)&&Read(reinterpret_cast<unsigned>(address),after.data(),16)&&after==before;};
+ const bool inputStopped=disable(target,bytes),turnStopped=disable(callTarget,callBytes);return inputStopped&&turnStopped;
 }
 void WriteInputAudit(const std::filesystem::path& folder){
- std::ofstream out(folder/L"native-input.json");out<<std::boolalpha<<"{\"input_values_written\":"<<(writes.load()>0)<<",\"movement_writes\":"<<writes.load()<<",\"movement_restores\":"<<restores.load()<<",\"restore_failures\":"<<restoreFailures.load()<<",\"hook_address\":"<<reinterpret_cast<unsigned>(target)<<",\"samples\":[";bool first=true;
+ std::ofstream out(folder/L"native-input.json");out<<std::boolalpha<<"{\"input_values_written\":"<<(writes.load()>0)<<",\"movement_writes\":"<<writes.load()<<",\"movement_restores\":"<<restores.load()<<",\"restore_failures\":"<<restoreFailures.load()<<",\"turn_writes\":"<<turnWrites.load()<<",\"turn_restores\":"<<turnRestores.load()<<",\"turn_failures\":"<<turnFailures.load()<<",\"hook_address\":"<<reinterpret_cast<unsigned>(target)<<",\"samples\":[";bool first=true;
  for(const auto& row:rows){if(!row.ready.load(std::memory_order_acquire))continue;if(!first)out<<',';first=false;
  out<<std::boolalpha<<"{\"thread\":"<<row.thread<<",\"dt\":"<<row.dt<<",\"finite\":"<<row.finite<<",\"before_tick_observed\":"<<row.beforeTick<<",\"after_tick_observed\":"<<row.afterTick;
  for(unsigned phase=0;phase<4;++phase){const char* labels[]={"before_read","after_read","before_tick","after_tick"};const auto& values=phase==0?row.before:phase==1?row.after:phase==2?row.tickBefore:row.tickAfter;out<<",\""<<labels[phase]<<"\":[";for(unsigned i=0;i<values.size();++i){if(i)out<<',';if(std::isfinite(values[i]))out<<values[i];else out<<"null";}out<<']';}out<<'}';
  }out<<"],\"movement\":[";first=true;
- for(const auto& row:movementRows){if(!row.ready.load(std::memory_order_acquire))continue;if(!first)out<<',';first=false;out<<"{\"uptime_ms\":"<<row.uptime<<",\"valid\":"<<row.valid<<",\"written\":"<<row.written<<",\"finite\":"<<row.finite<<",\"sequence\":"<<row.sequence<<",\"time_ns\":"<<row.time<<",\"forward\":"<<row.forward<<",\"strafe\":"<<row.strafe<<",\"consumed_forward\":"<<(row.finite?row.consumedForward:0)<<",\"consumed_strafe\":"<<(row.finite?row.consumedStrafe:0)<<",\"restored\":"<<row.restored<<'}';}out<<"]}\n";
+ for(const auto& row:movementRows){if(!row.ready.load(std::memory_order_acquire))continue;if(!first)out<<',';first=false;out<<"{\"uptime_ms\":"<<row.uptime<<",\"valid\":"<<row.valid<<",\"written\":"<<row.written<<",\"finite\":"<<row.finite<<",\"sequence\":"<<row.sequence<<",\"time_ns\":"<<row.time<<",\"forward\":"<<row.forward<<",\"strafe\":"<<row.strafe<<",\"consumed_forward\":"<<(row.finite?row.consumedForward:0)<<",\"consumed_strafe\":"<<(row.finite?row.consumedStrafe:0)<<",\"requested_turn\":"<<row.requestedTurn<<",\"turn_applied\":"<<row.turnApplied<<",\"turn_restored\":"<<row.turnRestored<<",\"turn_axis\":"<<row.turnAxis<<",\"yaw_before\":"<<row.yawBefore<<",\"yaw_after\":"<<row.yawAfter<<",\"restored\":"<<row.restored<<'}';}out<<"]}\n";
 }
 }

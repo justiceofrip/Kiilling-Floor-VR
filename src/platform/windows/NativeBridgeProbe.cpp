@@ -28,11 +28,14 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc==2||(argc==3&&!std::wcscmp(argv[2],L"--movement")),"Usage: KFVRNativeBridgeProbe output-directory [--movement]");const bool movement=argc==3;const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false;unsigned width=640,height=480;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(width>=64&&height>=64&&width<=4096&&height<=4096&&std::uint64_t(width)*height*40<=256*1024*1024,"Receiver dimensions exceed CPU bridge budget");
+ const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
  ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level{};const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_0};
  Hr(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,levels,1,D3D11_SDK_VERSION,&device,&level,&context),"Create native receiving device");
  ComPtr<IDXGIDevice> dxgi;Hr(device.As(&dxgi),"DXGI device");ComPtr<IDXGIAdapter> adapter;Hr(dxgi->GetAdapter(&adapter),"Adapter");DXGI_ADAPTER_DESC ad{};Hr(adapter->GetDesc(&ad),"Adapter descriptor");
- const runtime::PresentationRequirements req{640,480,29,ad.AdapterLuid.LowPart,ad.AdapterLuid.HighPart};
+ const runtime::PresentationRequirements req{width,height,29,ad.AdapterLuid.LowPart,ad.AdapterLuid.HighPart};
  D3D11_TEXTURE2D_DESC desc{};desc.Width=req.width;desc.Height=req.height;desc.MipLevels=1;desc.ArraySize=2;desc.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;desc.SampleDesc.Count=1;desc.BindFlags=D3D11_BIND_RENDER_TARGET;
  ComPtr<ID3D11Texture2D> output,staging;Hr(device->CreateTexture2D(&desc,nullptr,&output),"Create receiving stereo targets");desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;desc.BindFlags=0;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;Hr(device->CreateTexture2D(&desc,nullptr,&staging),"Create receiving readback");
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
@@ -47,6 +50,8 @@ int wmain(int argc,wchar_t** argv){try{
    if(phase==1||phase==4||phase==5||phase==9)input.hands[0].stickY=.4f;
    if(phase==3)input.hands[0].stickX=.4f;
    if(phase==7)input.hands[0].stickY=-.4f;
+   if(turning&&(phase==1||phase==7))input.hands[1].stickX=1;
+   if(turning&&(phase==3||phase==4||phase==5||phase==9))input.hands[1].stickX=-1;
    const auto sent=phase==8?ipc::ChannelResult::Timeout:channel.SendInput(input);
    controls<<"{\"uptime_ms\":"<<now<<",\"phase\":"<<phase<<",\"sent\":"<<(sent==ipc::ChannelResult::Ok?"true":"false")<<"}\n";
   }

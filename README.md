@@ -2,7 +2,7 @@
 
 Native VR mod development for the original Killing Floor. Source/builds live in `G:\KFVR`; the installed game is `F:\SteamLibrary\steamapps\common\KillingFloor`. This does not use the unrelated Unity workspace.
 
-**Development checkpoint: native stereo and head tracking work in the headset; left-stick movement passes its first live engine test.** The user confirmed visible KF world rendering, stable head tracking and removal of the initial flicker. The upright camera correction passes a subsequent native receiver test but still needs physical acceptance. The bounded left-stick adapter now passes live movement/stop/rearm checks with corresponding pawn travel. Physical headset movement, sustained operation and the complete mod remain unfinished. Resolution and frame cadence are still diagnostic.
+**Development checkpoint: native KF stereo, head tracking and left-stick movement are accepted in the headset.** Right-stick snap turns and full 2064 x 2208 images per eye now pass a combined live-game receiver trial. The launcher uses the runtime's recommended resolution (100%) and a 120-second session by default. Controller weapon aiming, physical reload integration, sustained rendering and the complete mod remain unfinished. Full-resolution CPU transport still limits fresh frame cadence.
 
 Implemented and verified:
 
@@ -18,8 +18,16 @@ Implemented and verified:
 - Conserved magazine/chamber/hand-magazine/reserve accounting, tactical and empty reloads, manual cycling, tube shells, replay rejection, mechanical timings and interrupted-action handling.
 - Physical melee eligibility with travel, speed, retraction and cooldown; 58-byte quantized tracked-pose packets with validation.
 - Portable comfort, recenter, weapon/UI math, rig topology checks and exact previous-write restoration retained from the 2142/BC2 work.
-- x64 OpenXR lifecycle, headset/eye poses and projection swapchains. Added grip/aim poses, trigger/grip/stick/menu actions and bounded haptics for standard controller profiles. Controller/haptic IPC also passes a real x64/x86 process test, including lost-focus/stale-input release. The physical diagnostic now verifies headset presentation and both controllers' triggers, grips, sticks and haptics. The bounded native left-stick binding passes a live engine movement/release trial; physical headset movement acceptance remains pending. See [headset testing](docs/HEADSET_TESTING.md).
+- x64 OpenXR lifecycle, headset/eye poses and projection swapchains. Added grip/aim poses, trigger/grip/stick/menu actions and bounded haptics for standard controller profiles. Controller/haptic IPC also passes a real x64/x86 process test, including lost-focus/stale-input release. The physical diagnostic now verifies headset presentation and both controllers' triggers, grips, sticks and haptics. The bounded native left-stick binding passes a live engine movement/release trial; the wearer accepted left-stick movement. See [headset testing](docs/HEADSET_TESTING.md).
 
 Start with [BUILDING](BUILDING.md), [TESTING](TESTING.md), [ARCHITECTURE](ARCHITECTURE.md), [feasibility](docs/FEASIBILITY.md), [weapon coverage](docs/WEAPONS.md), and [WORKLOG](WORKLOG.md).
+
+For the current development build, start a solo match with a living player, connect the headset and close the SteamVR dashboard, then run:
+
+```powershell
+& G:\KFVR\Play-KFVR.ps1
+```
+
+Optional `-Scale 75`, `-Seconds 120` and `-SnapDegrees 30` control resolution, session length and right-stick angle. This remains an explicitly launched, bounded development session; map travel requires a new launch. No headset test is needed during the owner's current unattended session.
 
 Original game binaries, maps, settings and assets have not been changed by this project. Probe DLLs are copied into private report directories and remain inert in the tested game process until it exits. Nothing auto-loads on a later game launch. Do not copy this diagnostic DLL into System as a mod installer.

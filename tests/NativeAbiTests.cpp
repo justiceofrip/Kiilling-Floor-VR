@@ -13,6 +13,10 @@ void __fastcall EventHook(void* self,void*,void* function,void* params,void* res
 Draw draw=nullptr;Tick tick=nullptr;int draws=0,ticks=0;
 void __fastcall DrawHook(void* self,void*,void* viewport,int blit,unsigned char* hit,int* size){++draws;draw(self,viewport,blit,hit,size);}
 void __fastcall TickHook(void* self,void*,float dt){++ticks;tick(self,dt);}
+// UObject::CallFunction has three stack arguments, with Function last.
+struct CallTarget {int calls=0;__declspec(noinline) void Invoke(void* stack,void* result,void* function){if(function==this&&stack&&result)*static_cast<int*>(result)=*static_cast<int*>(stack)+11;++calls;}};
+using FunctionCall=void(__thiscall*)(void*,void*,void*,void*);FunctionCall functionOriginal=nullptr;unsigned functionCalls=0;
+void __fastcall FunctionDetour(void* self,void*,void* stack,void* result,void* function){++functionCalls;functionOriginal(self,stack,result,function);}
 using ResetCall=HRESULT(WINAPI*)(void*,unsigned*);
 ResetCall resetOriginal=nullptr;unsigned resets=0;
 __declspec(noinline) HRESULT WINAPI ResetTarget(void* self,unsigned* args){if(!self||!args)return E_POINTER;*args+=*static_cast<unsigned*>(self);return HRESULT(0x8876086c);}
@@ -29,4 +33,8 @@ auto reset=reinterpret_cast<void*>(&ResetTarget);unsigned char beforeReset[16]{}
 CHECK(MH_CreateHook(reset,reinterpret_cast<void*>(&ResetDetour),reinterpret_cast<void**>(&resetOriginal))==MH_OK);CHECK(MH_EnableHook(reset)==MH_OK);
 auto volatile callReset=reinterpret_cast<ResetCall>(reset);unsigned deviceValue=9,parameters=13;CHECK(callReset(&deviceValue,&parameters)==HRESULT(0x8876086c)&&parameters==22&&resets==1);
 CHECK(MH_DisableHook(reset)==MH_OK);std::memcpy(afterReset,reset,16);CHECK(!std::memcmp(beforeReset,afterReset,16));CHECK(callReset(&deviceValue,&parameters)==HRESULT(0x8876086c)&&parameters==31&&resets==1);
+CallTarget callObject;auto functionAddress=Address(&CallTarget::Invoke);unsigned char beforeFunction[16]{},afterFunction[16]{};std::memcpy(beforeFunction,functionAddress,16);
+CHECK(MH_CreateHook(functionAddress,reinterpret_cast<void*>(&FunctionDetour),reinterpret_cast<void**>(&functionOriginal))==MH_OK&&MH_EnableHook(functionAddress)==MH_OK);
+auto volatile invoke=reinterpret_cast<FunctionCall>(functionAddress);int argument=23,callResult=0;invoke(&callObject,&argument,&callResult,&callObject);CHECK(callResult==34&&functionCalls==1&&callObject.calls==1);
+CHECK(MH_DisableHook(functionAddress)==MH_OK);std::memcpy(afterFunction,functionAddress,16);CHECK(!std::memcmp(beforeFunction,afterFunction,16));invoke(&callObject,&argument,&callResult,&callObject);CHECK(callResult==34&&functionCalls==1&&callObject.calls==2);
 CHECK(MH_Uninitialize()==MH_OK);std::cout<<"x86 thiscall/fastcall native Draw, Tick, animation, GetFrame and ProcessEvent trampoline ABI/restoration passed\n";return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -1,7 +1,7 @@
 """Validate the bounded synthetic movement sequence; no game writes here."""
 import json,pathlib
 
-def validate(native_path,controls_path,result_path):
+def validate(native_path,controls_path,result_path,turning=False):
  native=json.loads(pathlib.Path(native_path).read_text())
  controls=[json.loads(line) for line in pathlib.Path(controls_path).read_text().splitlines()]
  checks={};details={}
@@ -17,6 +17,11 @@ def validate(native_path,controls_path,result_path):
   checks[str(phase)]=len(rows)>=3 and (matching>=3 if phase in (1,3,7) else matching==len(rows))
   details[str(phase)]={'samples':len(rows),'matching_consumed_axes':matching,'expected':expected}
  checks['restoration']=native['movement_writes']>0 and native['movement_writes']==native['movement_restores'] and native['restore_failures']==0 and all(r['finite'] and r['restored'] for r in native['movement'])
+ if turning:
+  turns=[row for row in native['movement'] if row.get('turn_applied')]
+  checks['snap_turn_count']=len(turns)==3 and native.get('turn_writes')==native.get('turn_restores')==3 and native.get('turn_failures')==0
+  checks['snap_turn_angles']=bool(turns) and all(abs(((row['yaw_after']-row['yaw_before']+32768)%65536-32768)-row['requested_turn']*65536/360)<3 and row['turn_restored'] for row in turns)
+  details['turns']=[{k:row[k] for k in ('requested_turn','yaw_before','yaw_after','turn_restored')} for row in turns]
  result={'passed':all(checks.values()),'checks':checks,'phases':details,'avatar_motion_accepted':False,'headset_accepted':False}
  pathlib.Path(result_path).write_text(json.dumps(result,indent=2))
  if not result['passed']:raise RuntimeError('Movement consumption/release trial failed: '+str(result_path))

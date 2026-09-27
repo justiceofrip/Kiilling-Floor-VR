@@ -48,13 +48,13 @@ std::uint32_t U32(std::uint32_t at){std::uint32_t value=0;Read(at,&value,4);retu
 bool LocalWorld(){unsigned char mode=255;return U32(config.controller+4)==config.controllerIndex&&U32(config.level+4)==config.levelIndex&&U32(config.controller+config.levelOffset)==config.level&&U32(config.controller+config.playerOffset)==config.viewport&&Read(config.level+config.netModeOffset,&mode,1)&&mode==0;}
 bool InputWorld(){return sampling.load(std::memory_order_acquire)&&LocalWorld();}
 kfvr::interaction::ControllerLocomotion movementPolicy;
-bool MovementInput(float& forward,float& strafe,std::uint64_t& sequence,std::int64_t& sampleTime){
- kfvr::xr::ControllerFrame controls{};
+kfvr::native::MovementDemand MovementInput(){
+ kfvr::xr::ControllerFrame controls{};std::uint64_t sequence=0;
  const auto pawn=U32(config.controller+config.pawnOffset);int health=0;
  const bool playing=InputWorld()&&pawn&&U32(pawn+config.pawnControllerOffset)==config.controller&&U32(pawn+config.levelOffset)==config.level&&Read(pawn+config.healthOffset,&health,4)&&health>0&&!U32(config.level+config.pauserOffset);
  const bool received=playing&&kfvr::native::ReadEyeBridgeControls(controls,sequence);
- const auto output=movementPolicy.Update(received?&controls:nullptr,sequence,(std::uint64_t(pawn)<<32)|U32(pawn+4),playing);
- forward=output.forward;strafe=output.strafe;sampleTime=controls.predictedNs;return output.valid;
+ const auto output=movementPolicy.Update(received?&controls:nullptr,sequence,(std::uint64_t(pawn)<<32)|U32(pawn+4),playing,config.snapDegrees);
+ return {output.valid,config.turningTrial&&output.turnValid,output.forward,output.strafe,config.turningTrial?output.turnDegrees:0,sequence,controls.predictedNs};
 }
 long long Qpc(){LARGE_INTEGER q;QueryPerformanceCounter(&q);return q.QuadPart;}
 void __fastcall DrawHook(void* self,void*,void* viewport,int blit,unsigned char* hit,int* size){
@@ -84,7 +84,7 @@ void __fastcall ProcessEventHook(void* self,void*,void* function,void* params,vo
  if(current){auto& row=*current;++row.scriptEvents;const auto at=reinterpret_cast<std::uint32_t>(function);const auto name=U32(at+0x24),owner=U32(U32(at+0x1c)+0x24);const unsigned phase=privateEye?3:levelDepth?2:playerDepth?1:0;bool recorded=false;
   for(auto& entry:row.scripts){if(!entry.calls||(entry.name==name&&entry.ownerName==owner&&entry.phase==phase)){entry.name=name;entry.ownerName=owner;entry.phase=phase;++entry.calls;recorded=true;break;}}
   if(!recorded)++row.scriptOverflow;
- }const bool inputEvent=config.inputTrial&&kfvr::native::BeginInputAuditEvent(self,function);processEventOriginal(self,function,params,result);if(inputEvent)kfvr::native::EndInputAuditEvent();
+ }const bool inputEvent=config.inputTrial&&kfvr::native::BeginInputAuditEvent(self,function,params);processEventOriginal(self,function,params,result);if(inputEvent)kfvr::native::EndInputAuditEvent();
 }
 
 struct ColorCapture {std::atomic<bool> ready=false;bool attempted=false,isEx=false,exKnown=false;unsigned width=0,height=0,format=0,samples=0;long result=0;std::vector<unsigned char> pixels;};
@@ -269,7 +269,7 @@ void WriteStereo(const std::filesystem::path& folder){
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=8||config.movementTrial>1||(config.movementTrial&&(!config.inputTrial||!config.bridgeTrial))||config.inputTrial>1||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>15000||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=9||config.turningTrial>1||(config.turningTrial&&(!config.movementTrial||config.rotationOffset<44||config.rotationOffset>8192||config.snapDegrees<15||config.snapDegrees>90))||config.movementTrial>1||(config.movementTrial&&(!config.inputTrial||!config.bridgeTrial))||config.inputTrial>1||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>(config.bridgeTrial?180000u:15000u)||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
@@ -291,6 +291,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(config.bridgeTrial&&!kfvr::native::StartEyeBridge(config.channelToken))return 23;
  if(config.movementTrial)kfvr::native::SetMovementSource(MovementInput);
  if(config.inputTrial){std::array<unsigned,10> fields{};std::copy(std::begin(config.inputOffsets),std::end(config.inputOffsets),fields.begin());if(!kfvr::native::StartInputAudit(config.viewport,config.controller,fields,config.playerTickName,config.inputPrologue,InputWorld))return 24;}
+ if(config.turningTrial&&!kfvr::native::StartTurningAudit(config.rotationOffset,config.rotationName,config.callPrologue)){kfvr::native::StopInputAudit();return 26;}
  void* detours[]={reinterpret_cast<void*>(&DrawHook),reinterpret_cast<void*>(&TickHook),reinterpret_cast<void*>(&RenderHook),reinterpret_cast<void*>(&PresentHook),reinterpret_cast<void*>(&LevelHook),reinterpret_cast<void*>(&ActorAnimationHook),reinterpret_cast<void*>(&SkeletalAnimationHook),reinterpret_cast<void*>(&GetFrameHook),reinterpret_cast<void*>(&ProcessEventHook)};
  void** originals[]={reinterpret_cast<void**>(&drawOriginal),reinterpret_cast<void**>(&tickOriginal),reinterpret_cast<void**>(&renderOriginal),reinterpret_cast<void**>(&presentOriginal),reinterpret_cast<void**>(&levelOriginal),reinterpret_cast<void**>(&actorAnimationOriginal),reinterpret_cast<void**>(&skeletalAnimationOriginal),reinterpret_cast<void**>(&getFrameOriginal),reinterpret_cast<void**>(&processEventOriginal)};
  unsigned installed=0;bool enabled=false;DWORD status=0;
