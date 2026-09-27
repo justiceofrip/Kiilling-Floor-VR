@@ -30,7 +30,7 @@ def build(game):
  for name in ['KFVRMake.ini','Default.ini','KillingFloor.ini']:(system/name).write_text(configuration)
  shutil.copy2(source/'defuser.ini',system/'User.ini')
  for p in (ROOT/'unrealscript').rglob('*'):
-  if not p.is_file() or p.suffix.lower() not in ['.uc','.lwo']:continue
+  if not p.is_file() or p.suffix.lower() not in ['.uc','.lwo','.psk','.psa']:continue
   dest=work/p.relative_to(ROOT/'unrealscript');dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,dest)
  package=system/'KFVRGameplay.u'
  # A single generated file in the checked isolated directory; no game deletion.

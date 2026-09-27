@@ -37,7 +37,7 @@ def validate(folder):
   dot=sum(a*b for a,b in zip(first[-1]['LastTraceDirection'],second[-1]['LastTraceDirection']))
  else:dot=1
  check('aim_changes_with_controller',dot<.98)
- report=dict(passed=all(checks.values()),checks=checks,shots=shots,applied_frames=end['AppliedFrames']-start['AppliedFrames'],max_palm_error_uu=max(h['PalmError'] for h in activehands),synthetic_controllers=True,live_game=True,headset_presented=False,aim_direction_dot=dot)
+ report=dict(passed=all(checks.values()),checks=checks,shots=shots,applied_frames=end['AppliedFrames']-start['AppliedFrames'],max_palm_error_uu=max((h['PalmError'] for h in activehands),default=None),synthetic_controllers=True,live_game=True,headset_presented=False,aim_direction_dot=dot)
  (folder/'weapon-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Live weapon checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

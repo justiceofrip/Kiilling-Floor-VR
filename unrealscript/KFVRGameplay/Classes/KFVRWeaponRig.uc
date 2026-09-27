@@ -38,7 +38,7 @@ var KFVRHandVisual LeftHand, RightHand;
 var KFVRStatusDisplay StatusDisplay;
 var KFVRTraderPanel Trader;
 var KFVRGrenadeControl GrenadeControl;
-var bool bStatusFailed;
+var bool bStatusFailed,bLeftHandFailed,bRightHandFailed;
 var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
 var bool bManualArmed,bManualPrevious,bUseArmed,bUsePrevious;
@@ -122,6 +122,7 @@ function RegisterWeapon(KFWeapon W, int Slot)
         if (ManualReload!=None) { ManualReload.Destroy(); ManualReload=None; }
         if (LeftHand!=None) { LeftHand.Destroy(); LeftHand=None; }
         if (RightHand!=None) { RightHand.Destroy(); RightHand=None; }
+        bLeftHandFailed=False; bRightHandFailed=False;
         InventoryCount=0; Gun=None; Visual=None; HandSource=None;
         BoundPawn=Pawn(W.Owner);
     }
@@ -358,15 +359,15 @@ function Tick(float Delta)
         for (I=0;I<InventoryCount;I++) if (InventoryVisuals[I]!=None) { SelectInventoryWeapon(I); break; }
         if (Visual==None) { ReleaseInput(); return; }
     }
-    if (LeftHand==None)
+    if (LeftHand==None && !bLeftHandFailed)
     {
         LeftHand=Spawn(class'KFVRHandVisual',self);
-        if (LeftHand!=None && !LeftHand.InitializeHand(HandSource,True)) { LeftHand.Destroy(); LeftHand=None; }
+        if (LeftHand!=None && !LeftHand.InitializeHand(HandSource,True)) { LeftHand.Destroy(); LeftHand=None; bLeftHandFailed=True; }
     }
-    if (RightHand==None)
+    if (RightHand==None && !bRightHandFailed)
     {
         RightHand=Spawn(class'KFVRHandVisual',self);
-        if (RightHand!=None && !RightHand.InitializeHand(HandSource,False)) { RightHand.Destroy(); RightHand=None; }
+        if (RightHand!=None && !RightHand.InitializeHand(HandSource,False)) { RightHand.Destroy(); RightHand=None; bRightHandFailed=True; }
     }
     if (LeftHand!=None)
     {

@@ -9,6 +9,17 @@ def layout(o):
    d=o.read(int(row['address'],16),116);off=unpack(d,76);size=unpack(d,60)
    if unpack(d,56)!=1 or size not in [4,12]:continue
    fields.append((row['outer'],row['name'],row['class'],off,size,unpack(d,112)))
+ # Expand the reflected TrackingPacket members instead of trusting a copied
+ # byte layout. This lets independent checks compare actual bones to both
+ # the delivered head pose and body heading in the same object snapshot.
+ tracking=[r for r in o.rows if r['outer']=='KFVRWeaponRig' and r['name']=='Tracking' and r['class']=='StructProperty']
+ if len(tracking)==1:
+  d=o.read(int(tracking[0]['address'],16),116);base=unpack(d,76);packet_size=unpack(d,60)
+  for row in o.rows:
+   if row['outer']!='TrackingPacket' or not row['class'].endswith('Property'):continue
+   d=o.read(int(row['address'],16),116);off=unpack(d,76);size=unpack(d,60)
+   if unpack(d,56)==1 and size in [4,12] and 0<=off and off+size<=packet_size:
+    fields.append(('KFVRWeaponRig','Tracking.'+row['name'],row['class'],base+off,size,unpack(d,112)))
  o.vr_fields=fields
  schema=[]
  for row in o.rows:

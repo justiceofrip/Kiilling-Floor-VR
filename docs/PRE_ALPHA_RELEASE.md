@@ -17,3 +17,5 @@ At 2072 x 2216 per eye the user confirmed native VR was visible but reported bad
 Corrective candidate: startup captures position and yaw only, once headset focus is active. Initial head pitch/roll no longer tilt the tracking reference. Bounded incremental head/controller pose logs survive early exits. The launcher reports actual dimensions and fits oversized runtime recommendations to the bridge budget before injection. Early game exit produces a specific error instead of a missing-file traceback. These changes need a wearer retest; they do not establish that all placement/art issues are solved.
 
 Corrective build checks: 24/24 x86 and 23/23 x64, including 48 tilted-startup camera/controller cases. No corrective wearer pass yet.
+
+Subsequent corrective work replaces normal legacy arm-based hand actors with original sleeve-free gloves and explicit controller-aligned palm/finger axes. The camera no longer rejects straight-up/down gaze. These changes are still private development work pending wearer review; the earlier rc1 archive does not contain them.

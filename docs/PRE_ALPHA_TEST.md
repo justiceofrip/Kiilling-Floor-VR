@@ -52,7 +52,7 @@ Syringe: draw from left chest, touch the needle to the chest and squeeze right t
 - Three-minute sessions, development launch flow, and incomplete VR menus/pickup/drop coverage.
 - CPU texture transfer still limits fresh frame delivery. Full resolution is not a claim of headset-rate fresh rendering. Current native receiver measurements are roughly 45-50 pairs/sec at 2064 x 2208 per eye; headset presentation is a separate measurement.
 - Supported weapons are 9mm, dual 9mm, Deagle, Bullpup, knife, syringe, welder and stock frag grenades. Bullpup reload is timed. Full weapon/perk/server coverage is unfinished.
-- Legacy hands/sleeves are provisional; experimental arm IK is off. World scale, palm/needle alignment and holster ergonomics need wearer feedback.
+- Original sleeve-free glove art is provisional; experimental arm IK is off. World scale, palm/needle alignment and holster ergonomics need wearer feedback.
 - Trader is an initial supported-firearm panel. It requires being at an actually open shop. Full catalog and general inventory/drop continuity are unfinished.
 
 Only `System/KFVRGameplay.u` is staged into the game. Normal launches do not auto-load VR. Close KF to remove the inactive native probe modules. To remove the staged mod, close KF and remove that KFVRGameplay.u file; original game files are not replaced. Keep the extracted folder's `reports/dev-install.json` with the package when reusing the same installation.

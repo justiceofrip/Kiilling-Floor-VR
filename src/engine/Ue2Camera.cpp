@@ -17,7 +17,10 @@ std::optional<math::Matrix4> CameraWorld(math::Vec3 p,Rotator r) noexcept {
 std::optional<Rotator> CameraRotation(const math::Matrix4& m) noexcept {
  if(!interaction::InverseRigid(m))return {};
  const auto& f=m.values[2];const double horizontal=std::hypot(f[0],f[1]);
- if(horizontal<.0001)return {}; // Caller retains last yaw at the vertical singularity.
+ // At a vertical gaze, yaw and roll are coupled. Preserve the actual right
+ // axis with an equivalent zero-roll rotator instead of dropping the eye pair.
+ // The caller still supplies the full quaternion-derived camera matrices.
+ if(horizontal<.0001)return Rotator{f[2]>=0?16384:-16384,Units(std::atan2(-m.values[0][0],m.values[0][1])),0};
  return Rotator{Units(std::atan2(f[2],horizontal)),Units(std::atan2(f[1],f[0])),Units(std::atan2(-m.values[0][2],m.values[1][2]))};
 }
 std::optional<EyeMatrices> BuildEye(const math::Matrix4& body,const math::Pose& reference,const math::Pose& eye,const math::FovTangents& fov,float units,float nearZ,float farZ) noexcept {

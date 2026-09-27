@@ -131,3 +131,10 @@ Pre-alpha candidate: see docs/PRE_ALPHA_TEST.md for the three-minute wearer chec
 
 
 Wearer session205619 failed head/hand alignment acceptance. Corrective startup reference tests cover 48 tilted starts with vertical-motion and controller-alignment invariants. Runtime resolution selection checks the real 2528 x 2704 recommendation (99% fits) and the tested 82% selection. No corrective wearer acceptance yet; publication stays on hold.
+
+
+## Sleeve-free hands and vertical head poses
+
+Normal gameplay now uses original glove meshes. Run `tools/native_bridge_trial.py --pid <current> --game <KF> --hands --width 1280 --height 960` in an unattended private match. No headset is required. The 36-second sequence includes a translated/rotated OpenXR reference, head-independent palm positions, exact up/down gaze, open/contact/fist poses, wrist rotations, snap turning, focus loss and single-hand loss. `hand-validation.json` compares actual bone axes to independently computed input expectations; `hand-eye-pairs.json` requires fresh stereo frames at both vertical poses. Final evidence 213108 passes 60 checks and native cleanup. Visually inspect captures separately; this is not wearer acceptance. Existing x86 24/24 and x64 23/23 suites now include 210 camera roundtrips at and around the vertical singularities. Full-resolution inventory regression 212843 passes 25 gameplay plus 22 HUD/grasp checks.
+
+Physical-pistol regression after the glove and vertical-gaze corrections: native-bridge-20260927-213209 passes 24 reload + ten HUD/grasp checks, five stock shots and clean teardown. No corrective wearer acceptance is claimed.

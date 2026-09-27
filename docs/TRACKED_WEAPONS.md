@@ -1,6 +1,6 @@
 # Tracked weapon and hand development
 
-This increment enables the **9mm, dual 9mm, Deagle, Bullpup and knife** in an explicitly loaded standalone mutator. Both controllers drive separate KF hand/forearm actors with six-degree-of-freedom poses. Oculus Touch capacitance supplies index/thumb contact, with trigger/grip analog values and fallback on profiles without capacitance. This is controller-driven hand animation, not optical bare-hand tracking.
+This increment enables the **9mm, dual 9mm, Deagle, Bullpup and knife** in an explicitly loaded standalone mutator. Both controllers drive separate original glove actors with six-degree-of-freedom poses. Oculus Touch capacitance supplies index/thumb contact, with trigger/grip analog values and fallback on profiles without capacitance. This is controller-driven hand animation, not optical bare-hand tracking.
 
 ## Run
 
@@ -12,7 +12,7 @@ Close an existing KF process before staging a changed package:
 & G:\KFVR\Play-KFVR.ps1 -Weapons
 ```
 
-The normal launcher retains runtime-recommended eye resolution, left-stick locomotion, right-stick snap turns and the bounded 120-second session. Weapon mode requires the installed package to match this build. No wearer test was performed during unattended development.
+The normal launcher retains runtime-recommended eye resolution, left-stick locomotion, right-stick snap turns and the bounded 120-second session. Weapon mode requires the installed package to match this build. The integrated pre-alpha failed wearer acceptance for head/hand placement. Corrective glove/reference changes have not yet had a wearer retest.
 
 - Move/rotate the right controller to aim the pistol independently of the head and desktop camera. Right trigger fires. The pistol starts in hand.
 - Hip/shoulder slots follow body heading: 9mm at the right waist, Deagle at the left waist, Bullpup over the right shoulder, knife over the left shoulder, syringe on the left chest, welder on the right chest. Squeeze the right grip near a slot to draw that owned weapon. Release it near the active slot to stow. Stowed weapons cannot fire. Left X cycles supported inventory weapons.
@@ -23,7 +23,7 @@ The normal launcher retains runtime-recommended eye resolution, left-stick locom
 - With the Bullpup, squeeze the left grip near the foregrip to support the rifle. Both hand positions then determine its aim, with dominant-hand roll retained. Release the left grip to return to one-hand aiming.
 - A free offhand near you shows a native-world status card with health, armor, loaded/spare rounds, and reload prompts. It follows the hand, faces your head position, and hides while that hand grips/fires or tracking is lost. Dual pistols show separate left/right loaded counts. Its size/placement remain provisional until wearer review.
 - Held weapons retain a resting finger grasp after the grip button is released. A free hand can open; capacitive thumb/index input still layers onto the weapon grasp. Support-hand and held-magazine poses use their own grasp role.
-- Moving the left controller moves the offhand independently. Capacitive index/thumb contact and analog grip animate the real KF finger bones.
+- Moving the left controller moves the offhand independently. Capacitive index/thumb contact and analog grip animate the original glove skeletons.
 - Focus/tracking loss stops firing and hides the affected presentation. Return the trigger and grip to neutral before continuing. Mouse movement is not used to aim the tracked pistol.
 - With the 9mm or Deagle selected, left Y toggles physical reload mode. The mode has its own haptic confirmation. Toggle it off only with a magazine seated, the offhand empty and the slide closed. While enabled, timed/keyboard reload callbacks are blocked.
 - In physical mode, hold the left grip beneath the pistol and press right B to catch the magazine. Ejecting without catching discards its remaining rounds. A chambered round remains usable.
@@ -36,7 +36,9 @@ The normal launcher retains runtime-recommended eye resolution, left-stick locom
 
 Native request ABI v12 validates the installed gameplay package, current private player, rig ownership, every member of the 124-byte tracking structure and 28-byte feedback structure. The publisher writes only its own tracking field at the existing game-thread rig Tick. No additional simulation tick is invoked. Body yaw, the camera reference and current pawn displacement align both hands with the native stereo world.
 
-Separate world presentation actors are necessary because the stereo cameras do not run KF's ordinary first-person overlay. The installed weapon meshes are linked at runtime; the 9mm supplies the separate hands; the gun and opposing hand branches are hidden on the appropriate instances. The authored palm offset is measured, rotated and subtracted so the actual palm bone follows the controller. The first-person mesh's provisional scale is 300 asset units/metre, separate from the explicit world scale; hand ergonomics and visual polish still need wearer review.
+Separate world presentation actors are necessary because the stereo cameras do not run KF's ordinary first-person overlay. Installed weapon meshes are linked at runtime, with their arm branches hidden. Their provisional presentation scale remains 300 asset units/metre. Normal hand actors now use original, generated PSK/PSA glove meshes with 16 bones and no sleeve/shoulder geometry. The palm origin coincides with the controller grip origin, at 100 model units/metre; palm axes follow the OpenXR grip basis. Finger targets derive from the current controller rotation, avoiding cached legacy palm axes. Full curl closes into a fist, mirrored between hands. The optional ArmTest alone retains the legacy first-person arm experiment. Grip art, weapon-to-hand placement and ergonomics remain provisional.
+
+Regenerate the authored glove sources with `py -3.12 tools/generate_hand_mesh.py`, then build through the official compiler. The generator contains no game geometry or exported game data. A failed hand import is latched for that pawn rather than spawning/destroying a replacement each Tick. A new pawn clears that latch.
 
 The derived Single, Deagle and Bullpup weapons/fire modes retain normal native WeaponFire ticking, cadence, perk-modified spread/damage and ammunition consumption. Only the shot origin/direction and VR recoil presentation are replaced. The native AWeapon tick normally releases fire when desktop bFire is zero; the derived ClientStopFire defers that release only while a fresh, armed VR trigger demands fire. Focus loss/holstering invokes the normal StopFire. No persistent writes to desktop fire input are used.
 
@@ -85,3 +87,6 @@ The stock frag grenade occupies the right rear waist: squeeze right grip near th
 Explicit private fixture: `Start-KFVRDev.ps1 -Unattended -GrenadeTest`, then `tools/native_bridge_trial.py --pid <current> --game <KF> --grenade`. It supplies five actual grenades and a damage-counting target. Normal play gets no fixture ammo or target.
 
 The trader's bottom row fills grenades at KF's actual price. Selling dual 9mms through this panel preserves the shared ammo total and the remaining right pistol's loaded count; other loaded rounds become reserve. Close with A or B. Desktop sale/drop compatibility remains separate.
+
+
+The private `--hands` trial checks actual palm and index-bone axes, independently compares OpenXR inputs with the game bones, and measures head-relative hand positions under a translated/rotated reference. It includes open/fist/contact poses, 90-degree wrist rotations, head lean, snap turning, individual hand loss and focus recovery. Straight-up/down gaze must continue receiving fresh eye pairs. Receiver captures must also be visually inspected: numerical attachment does not establish glove art or wearer comfort.

@@ -10,6 +10,16 @@ int main(){
  for(int i=0;i<3;++i)for(int j=0;j<3;++j){if(!Near(camera->values[i][j],live[i][j],.000003f))std::fprintf(stderr,"matrix %d,%d actual %.9f native %.9f\n",i,j,camera->values[i][j],live[i][j]);CHECK(Near(camera->values[i][j],live[i][j],.000003f));}
  auto inverse=interaction::InverseRigid(*camera);CHECK(inverse);auto origin=math::TransformRowVector({3066.85986f,-1373.27832f,-4563.15088f,1},*inverse);CHECK(std::abs(origin.x)<.001&&std::abs(origin.y)<.001&&std::abs(origin.z)<.001);
  for(int yaw:{0,4096,-1851,16384,32768})for(int pitch:{-8000,0,6000})for(int roll:{0,3000,-2000}){auto m=ue2::CameraWorld({}, {pitch,yaw,roll});CHECK(m);auto r=ue2::CameraRotation(*m);CHECK(r);auto roundtrip=ue2::CameraWorld({},*r);CHECK(roundtrip);for(int i=0;i<3;++i)for(int j=0;j<3;++j)CHECK(Near(m->values[i][j],roundtrip->values[i][j],.0004f));}
+ // Exact and near-vertical gaze must produce a usable native constructor
+ // rotation, including wrist/head roll, either side of the Euler singularity.
+ for(int pitch:{-16388,-16384,-16380,16380,16384,16388})
+  for(int yaw:{-32768,-23457,-8192,0,8192,23457,32767})
+   for(int roll:{-24576,-8192,0,8192,24576}){
+    auto m=ue2::CameraWorld({}, {pitch,yaw,roll});CHECK(m);
+    auto rotation=ue2::CameraRotation(*m);CHECK(rotation);
+    auto reconstructed=ue2::CameraWorld({},*rotation);CHECK(reconstructed);
+    for(int i=0;i<3;++i)for(int j=0;j<3;++j)CHECK(Near(m->values[i][j],reconstructed->values[i][j],.001f));
+   }
  auto neutral=ue2::CameraWorld({},{});CHECK(neutral);math::Pose left,right;left.position.x=-.032f;right.position.x=.032f;
  auto l=ue2::BuildEye(*neutral,{},left,{-.8f,1.1f,1,-1},50,5,65536);auto r=ue2::BuildEye(*neutral,{},right,{-1.1f,.8f,1,-1},50,5,65536);CHECK(l&&r);CHECK(Near(r->camera.values[3][1]-l->camera.values[3][1],3.2f));CHECK(!Near(l->projection.values[2][0],r->projection.values[2][0]));
  math::Pose forward;forward.position.z=-1;auto moved=ue2::BuildEye(*neutral,{},forward,{-1,1,1,-1},50,5,65536);CHECK(moved&&Near(moved->camera.values[3][0],50));
