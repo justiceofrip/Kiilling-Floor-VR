@@ -12,15 +12,15 @@ add_library(KFVRCore STATIC
  src/math/StereoMath.cpp src/math/StereoCulling.cpp src/math/WeaponPoseMath.cpp
  src/math/UiPointerMath.cpp src/math/UiPointerSmoothing.cpp src/math/ArmPoleVectorMath.cpp
  src/interaction/TrackingMath.cpp src/interaction/ComfortCamera.cpp
- src/interaction/ComfortControls.cpp src/interaction/WeaponGrip.cpp
+ src/interaction/ComfortControls.cpp src/interaction/WeaponGrip.cpp src/interaction/ReloadGestures.cpp src/interaction/BeltReloadSession.cpp src/interaction/TrackedWeapon.cpp
  src/interaction/ActionPolicy.cpp src/interaction/ControllerLocomotion.cpp src/interaction/RigPose.cpp
  src/runtime/FrameCoordinator.cpp src/ipc/FrameProtocol.cpp src/ipc/InputProtocol.cpp
- src/engine/Ue2Camera.cpp src/gameplay/AmmoMachine.cpp src/gameplay/MeleeGate.cpp src/gameplay/PoseWire.cpp)
+ src/engine/Ue2Camera.cpp src/gameplay/AmmoMachine.cpp src/gameplay/PhysicalReload.cpp src/gameplay/MeleeGate.cpp src/gameplay/PoseWire.cpp)
 target_include_directories(KFVRCore PUBLIC include include/kfvr/interaction include/kfvr/math)
 add_executable(KFVRAmmoParity tools/AmmoParityMain.cpp)
 target_link_libraries(KFVRAmmoParity PRIVATE KFVRCore)
 if(BUILD_TESTING)
- foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy ControllerLocomotion RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine MeleeGate PoseWire Ue2Camera InputProtocol)
+ foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy ControllerLocomotion RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine PhysicalReload ReloadGestures BeltReloadSession TrackedWeapon MeleeGate PoseWire Ue2Camera InputProtocol)
   add_executable(${name}Tests tests/${name}Tests.cpp)
   target_link_libraries(${name}Tests PRIVATE KFVRCore)
   add_test(NAME ${name} COMMAND ${name}Tests)

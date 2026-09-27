@@ -24,7 +24,7 @@ Real GPU verification: eight x86-to-x64 D3D11 pairs with all pixels checked; fou
 
 Latest native capture/trace evidence: reports/native-trace-20260925-112424-593706. Earlier successful trace: reports/native-trace-20260925-100652-186480. Intermediate capture failures are retained. Original game files/settings/assets were not modified by this project.
 
-## Current remaining work
+## Initial remaining work (historical snapshot)
 
 Native stereo is not enabled. Need to audit render-side animation, culling/LOD/occlusion, temporal and first-person weapon state; prove separate eye targets/restoration; bridge non-Ex D3D9 eye textures; wire controller samples into KF; compile the gameplay package with a compatible SDK compiler; then validate headset and multiplayer behavior. Full body IK, all reload families, scopes, VR UI and a reversible player installer remain future integration work.
 
@@ -103,3 +103,17 @@ Combined native-bridge-20260927-131134 / native-trace-20260927-131134-427935 pas
 The previous bridge dimension limit of 2048 blocked the runtime's recommended size. It is now 4096 per dimension with the existing 256 MiB aggregate transport cap. The XR launcher defaults to 100% of runtime recommendations, not hardcoded Quest dimensions. Full-size CPU transfer averaged about 16.7 ms per rendered pair in this test; the receiver consumed about 23 fresh pairs/sec and 18 pairs missed their deadline. This is working full-resolution transport, not accepted shipping performance. GPU transport and rendering cadence still need work.
 
 Play-KFVR.ps1 combines movement, snap turning and recommended resolution with a default 120-second session (15..180 configurable). Longer duration support compiles, but this checkpoint exercised the 15-second native window, not a two-minute HMD session. PE parsing is cached per module during preflight while retaining every binary/prologue check, reducing measured startup from roughly 20 seconds to roughly two. x86 18/18 and x64 17/17 pass. No original game files/settings changed.
+
+## 2026-09-27: physical weapon and reload foundation
+
+Implemented PhysicalReload for one/two detachable-magazine guns: persistent magazine identities/locations, one shared reserve, independent chambers/slides, tactical reloads, retained/discarded partial magazines, partial extraction vs full-cycle feeding, slide release, cadence, ownership epochs and replay rejection. Every transition conserves the initial round budget. This is a new native physical ledger; the older timed/tube AmmoMachine and its script parity tests remain separate.
+
+InsertionGesture and ActionStrokeGesture use actual relative poses, approach/alignment, continuous travel and action grip travel. Tracking loss cancels the grasp without completing the action. Re-grabbing uses the existing mechanical position. Sample order remains protected through focus loss. BeltReloadSession integrates both gun/dock interactions with the same ledger and sequencer: downward intentional release, two independent presented magazines, seating and lift clearance. It produces visual/haptic events; no hardware haptic binding is claimed. Simultaneous 20-round supply test yields 15/5 with no duplication; tactical dual tests retain both chambers and partial magazines.
+
+TrackedWeapon maps controller-grip/model/muzzle transforms into the same native body/reference space as the eye camera, without depending on the current eye or head. Unit cases verify KF axes, body turning, model calibration and head independence. The belt follows body heading and estimated waist position without pitching when looking down.
+
+Added KFVRReloadPoseProfile and KFVRReloadVisual using the actual installed Actor animation API. The visual is an optional standalone actor without weapon/ammo callbacks and has no automatic spawn/installation. It samples four authored ranges from mechanical progress. Initial UE2 compilation rejected bool arrays; changed the profile's readiness flags to supported byte fields. The official compiler and commandlet pass 25 pose-mapping checks, alongside unchanged 30,059 ammo checks and 20 native/script parity checkpoints. Animation ranges in these tests are synthetic; actual model markers remain uncalibrated.
+
+Read-only reload asset audit of PID 60776 passes exact installed Core/Engine hashes and class-default accessor checks in the current standalone world. Corrected FName package case (KFmod) and deferred MeshRef loading. All six pistol/dual profiles have actual mesh references, Reload names and mechanical defaults recorded under reports/reload-assets-20260927.json. No profiles were activated and no original game settings/binaries were modified.
+
+Final validation: x86 22/22 and x64 21/21; tests include 30,000 randomized physical actions plus integrated single reload and simultaneous dual-belt sequences, stale/focus/ownership cases and storage bounds. New native mechanics/presentation remain unbound to KF weapon rendering, damage or authoritative script inventory. Next work is the Single model's calibrated first-person presentation and muzzle/fire binding, then physical magazine/action visuals and dual independent models. No wearer input was requested during this unattended batch.

@@ -47,7 +47,12 @@ def build(game):
  actual=re.findall(pattern,output);expected=re.findall(pattern,reference)
  if len(actual)!=20 or actual!=expected:raise RuntimeError('UnrealScript/C++ ammo behavior diverged: '+str(dict(actual=actual,expected=expected)))
  print('UnrealScript/C++ parity: 20 matched checkpoints across 20000 actions, two feed/cycle families and ownership changes')
+ pose_result=subprocess.run([str(system/'ucc.exe'),'KFVRGameplay.KFVRReloadPoseTests','ini=KFVRMake.ini'],cwd=system,capture_output=True,timeout=90)
+ pose_output=(pose_result.stdout+pose_result.stderr).decode('utf-8',errors='replace');(reports/'unrealscript-pose-tests.log').write_text(pose_output)
+ pose_match=re.search(r'KFVR_POSE_TEST_RESULT checks=(\d+) failures=0',pose_output)
+ if pose_result.returncode or not pose_match:raise RuntimeError('Reload pose tests failed; see saved compiler log')
+ print('UnrealScript physical reload pose mapping: '+pose_match.group(1)+' checks passed')
  out=ROOT/'build/unrealscript';out.mkdir(parents=True,exist_ok=True);shutil.copy2(package,out/package.name)
- (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),inputs=manifest),indent=2))
+ (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),reload_pose_checks=int(pose_match.group(1)),inputs=manifest),indent=2))
 if __name__=='__main__':
  parser=argparse.ArgumentParser();parser.add_argument('--game',type=pathlib.Path,required=True);build(parser.parse_args().game.resolve())

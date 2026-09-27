@@ -4,7 +4,7 @@ Build.ps1 runs CTest for each architecture. Current deterministic coverage inclu
 
 New ammo tests exercise tactical full-mag-plus-chamber behavior, empty reload/charging, racking a live round, fire cadence, remove/stow/discard/partial magazines, switching/death/drop cancellation, stale ownership, replay/high-latency rejection, correction validation, tube feeding, manual cycling and 100,000 randomized actions with conservation checks. Melee tests include 10,000 wrist-waggle samples, retraction, cooldown, invalid tracking, teleports and range limits. Pose tests include all truncated packet lengths, invalid quaternions, quantization overflow, sequence wrap and server-clock gates.
 
-OpenXR controller tests use a fake API to cover bindings, predicted timing, focus/tracking loss, invalid samples, haptic limits, runtime errors and cleanup after partial initialization. Latest CTest results: x86 18/18, x64 17/17, including controller locomotion interruption and neutral-rearm coverage.
+OpenXR controller tests use a fake API to cover bindings, predicted timing, focus/tracking loss, invalid samples, haptic limits, runtime errors and cleanup after partial initialization. Latest CTest results: x86 22/22, x64 21/21, including controller locomotion interruption and neutral-rearm coverage.
 
 Hardware checks are separate from unit tests:
 
@@ -73,3 +73,11 @@ Combined native-bridge-20260927-131134 / native-trace-20260927-131134-427935 pas
 The previous bridge dimension limit of 2048 blocked the runtime's recommended size. It is now 4096 per dimension with the existing 256 MiB aggregate transport cap. The XR launcher defaults to 100% of runtime recommendations, not hardcoded Quest dimensions. Full-size CPU transfer averaged about 16.7 ms per rendered pair in this test; the receiver consumed about 23 fresh pairs/sec and 18 pairs missed their deadline. This is working full-resolution transport, not accepted shipping performance. GPU transport and rendering cadence still need work.
 
 Play-KFVR.ps1 combines movement, snap turning and recommended resolution with a default 120-second session (15..180 configurable). Longer duration support compiles, but this checkpoint exercised the 15-second native window, not a two-minute HMD session. PE parsing is cached per module during preflight while retaining every binary/prologue check, reducing measured startup from roughly 20 seconds to roughly two. x86 18/18 and x64 17/17 pass. No original game files/settings changed.
+
+## Physical reload and weapon pose foundation
+
+Both architecture suites include PhysicalReload, ReloadGestures, BeltReloadSession and TrackedWeapon. Coverage includes persistent partial magazine contents, shared dual reserve, independent chambers, short/full action strokes, slide assist, 30,000 randomized conserved operations, cadence/replay/ownership, geometry alignment and withdrawal, stale/focus-loss recovery, head-independent weapon rays and upright belt placement. Integrated tests drive real ledger changes from synthetic physical pose sequences.
+
+The isolated official KF script compiler builds KFVRReloadVisual/KFVRReloadPoseProfile and runs 25 four-stage mapping checks. Existing 30,059 ammo-policy checks and 20 cross-language checkpoints remain passing. These prove script compatibility and profile arithmetic; the visual actor has not been rendered in a live game and the new physical ledger is not yet an UnrealScript authority.
+
+Read-only reload-assets-20260927.json contains actual default asset references for Single/Dualies, Deagle/DualDeagle and MK23Pistol/DualMK23Pistol. Neither a resolved mesh name nor a successful build establishes grip/magwell/action calibration. No physical headset test was requested in this batch.

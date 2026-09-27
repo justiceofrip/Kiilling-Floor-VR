@@ -15,6 +15,7 @@ Implemented and verified:
 - Prototype non-Ex D3D9-to-D3D11 CPU pair bridge with MSAA resolve and real x86-to-x64 pixel verification. High-resolution transfer cost still needs improvement.
 - x86-to-x64 D3D11 stereo texture/pose transport, actual GPU pixel checks, resource generations, partial-pair cancellation and peer-loss recovery.
 - A compiled KFVRGameplay UnrealScript package, with 30,059 engine-run checks and C++/script action-stream comparison. Weapon integration remains pending.
+- Physical detachable-magazine pipeline for single/dual guns: magazine identities, shared belt supply, continuous insertion/action travel and independent chambers. Controller weapon/muzzle transforms and a four-stage UE2 pose driver also compile and pass headless tests; live weapon integration is next. See [manual reloads](docs/MANUAL_RELOAD_INTERACTIONS.md).
 - Conserved magazine/chamber/hand-magazine/reserve accounting, tactical and empty reloads, manual cycling, tube shells, replay rejection, mechanical timings and interrupted-action handling.
 - Physical melee eligibility with travel, speed, retraction and cooldown; 58-byte quantized tracked-pose packets with validation.
 - Portable comfort, recenter, weapon/UI math, rig topology checks and exact previous-write restoration retained from the 2142/BC2 work.
