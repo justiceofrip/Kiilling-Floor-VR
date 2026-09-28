@@ -282,7 +282,7 @@ function ParkForTrader()
         if (KFVRTrackedSyringe(InventoryWeapons[I])!=None) KFVRTrackedSyringe(InventoryWeapons[I]).ResetInput();
         if (KFVRTrackedKnife(InventoryWeapons[I])!=None) KFVRTrackedKnife(InventoryWeapons[I]).ResetMotion();
     }
-    if (StatusDisplay!=None) StatusDisplay.bHidden=True;
+    if (StatusDisplay!=None) StatusDisplay.HideDisplay();
 }
 function ReleaseInput()
 {
@@ -305,7 +305,7 @@ function ReleaseInput()
     if (Visual!=None) Visual.bHidden=True;
     if (LeftHand!=None) LeftHand.bHidden=True;
     if (RightHand!=None) RightHand.bHidden=True;
-    if (StatusDisplay!=None) StatusDisplay.bHidden=True;
+    if (StatusDisplay!=None) StatusDisplay.HideDisplay();
 }
 function int HandGripRole(bool Left)
 {

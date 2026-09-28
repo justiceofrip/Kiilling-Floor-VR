@@ -34,7 +34,7 @@ If Windows blocks local PowerShell scripts, launch the command in a new process 
 | 0:30-1:00 | Move with left stick, snap with right stick | Direction and turn comfort |
 | 1:00-1:45 | Aim the pistol independently of your head; shoot; press right B | Gun alignment, haptics, reload |
 | 1:45-2:30 | Open/close hands, touch/release trigger and thumb controls; draw at hip/shoulder slots | Finger response and reachable holsters |
-| 2:30-3:00 | Raise the free left hand; try the Bullpup support grip | HUD readability and two-hand aiming |
+| 2:30-3:00 | Turn the free left palm toward your face and hold briefly; try the Bullpup support grip | HUD readability and two-hand aiming |
 
 Quick controls: right trigger fires, right B reloads, left X cycles available weapons, right A uses a nearby door or opens a currently available trader. Squeeze right grip at a holster to draw; release at the slot to stow. Holsters follow body heading. Right hip holds single/dual 9mm, left hip Deagle, right shoulder Bullpup, left shoulder knife, left chest syringe, right chest welder, rear-right waist grenades.
 

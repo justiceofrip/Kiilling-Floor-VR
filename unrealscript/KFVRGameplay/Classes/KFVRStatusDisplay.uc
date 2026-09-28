@@ -12,6 +12,9 @@ var int TextureUpdates,RenderCalls;
 var bool bDual,bMelee;
 var float HealthFraction,AttachmentError;
 var vector ExpectedPosition;
+var bool bWristRequested;
+var float WristRevealTime,PalmFacing,HeadDistanceMetres,HeightFromHeadMetres;
+var float DisplayWidthMetres;
 var string WeaponLine,VitalLine,AmmoLine,ActionLine,PreviousText;
 simulated function bool Initialize(KFVRWeaponRig R)
 {
@@ -32,25 +35,51 @@ simulated function color MakeColor(byte R,byte G,byte B)
     local color C;
     C.R=R; C.G=G; C.B=B; C.A=255; return C;
 }
+simulated function HideDisplay()
+{
+    bHidden=True; bWristRequested=False; WristRevealTime=-1.0;
+}
 simulated function UpdateDisplay()
 {
-    local vector X,Y,Z,Front,Right,Up;
+    local vector X,Y,Z,Front,Right,Up,PalmX,PalmY,PalmZ,ToHead;
+    local bool Allowed;
     local KFVRTrackedDualies D;
     local string Combined;
     if (Rig==None || Surface==None || !Rig.Active() || (Rig.Tracking.Flags & 1)==0)
-    { bHidden=True; return; }
+    { HideDisplay(); return; }
     GetAxes(Rig.Tracking.BodyRotation,X,Y,Z);
-    ExpectedPosition=Rig.Tracking.LeftPosition+(Z*0.12-X*0.03)*Rig.Tracking.UnitsPerMetre;
-    SetLocation(ExpectedPosition); SetDrawScale(Rig.Tracking.UnitsPerMetre*0.28/100.0);
+    ExpectedPosition=Rig.Tracking.LeftPosition+(Z*0.09-X*0.03)*Rig.Tracking.UnitsPerMetre;
+    SetLocation(ExpectedPosition); SetDrawScale(Rig.Tracking.UnitsPerMetre*DisplayWidthMetres/100.0);
     Front=Normal(Rig.Tracking.HeadPosition-ExpectedPosition);
     Right=Normal(Z cross Front); Up=Normal(Front cross Right);
     if (VSize(Right)>0.1) SetRotation(OrthoRotation(Front,Right,Up));
     AttachmentError=VSize(Location-ExpectedPosition);
-    // A free, raised offhand exposes the card; grabbing/firing or lowering it hides it.
-    bHidden=Rig.Tracking.LeftGrip>0.2 || Rig.Tracking.LeftTrigger>0.2
-        || VSize(Rig.Tracking.LeftPosition-Rig.Tracking.HeadPosition)>0.75*Rig.Tracking.UnitsPerMetre;
+    // Deliberately turn the free left palm toward the eyes to read the card.
+    // A smaller card stays hidden during ordinary aiming, gripping or reaching.
+    GetAxes(Rig.Tracking.LeftRotation,PalmX,PalmY,PalmZ);
+    ToHead=Rig.Tracking.HeadPosition-Rig.Tracking.LeftPosition;
+    HeadDistanceMetres=VSize(ToHead)/Rig.Tracking.UnitsPerMetre;
+    HeightFromHeadMetres=(-ToHead dot Z)/Rig.Tracking.UnitsPerMetre;
+    PalmFacing=PalmY dot Normal(ToHead);
+    Allowed=Rig.Tracking.LeftGrip<=0.2 && Rig.Tracking.LeftTrigger<=0.2
+        && Rig.HandGripRole(True)==0 && HeadDistanceMetres>=0.25 && HeadDistanceMetres<=0.70
+        && HeightFromHeadMetres>=-0.42 && HeightFromHeadMetres<=0.28
+        && (-ToHead dot X)>0.12*Rig.Tracking.UnitsPerMetre;
+    // Separate enter/exit thresholds prevent flicker near the wrist angle.
+    // The short deliberate hold prevents a passing gesture flashing the panel.
+    if (!Allowed || PalmFacing<0.45) HideDisplay();
+    else if (!bWristRequested)
+    {
+        if (PalmFacing>=0.65)
+        {
+            if (WristRevealTime<0) WristRevealTime=Level.TimeSeconds;
+            if (Level.TimeSeconds-WristRevealTime>=0.15) bWristRequested=True;
+        }
+        else WristRevealTime=-1.0;
+    }
+    bHidden=!bWristRequested;
     DisplayedGun=Rig.Gun;
-    if (DisplayedGun==None || Rig.PC.Pawn==None) { bHidden=True; return; }
+    if (DisplayedGun==None || Rig.PC.Pawn==None) { HideDisplay(); return; }
     DisplayedHealth=Max(0,Rig.PC.Pawn.Health); DisplayedArmor=Max(0,int(Rig.PC.Pawn.ShieldStrength));
     HealthFraction=FClamp(float(DisplayedHealth)/FMax(1,Rig.PC.Pawn.HealthMax),0,1);
     DisplayedLoaded=Max(0,DisplayedGun.MagAmmoRemaining);
@@ -119,6 +148,8 @@ simulated function Destroyed()
 }
 defaultproperties
 {
+    DisplayWidthMetres=0.20
+    WristRevealTime=-1.0
     DrawType=DT_StaticMesh
     StaticMesh=StaticMesh'KFVRStatusPanel'
     Style=STY_Normal

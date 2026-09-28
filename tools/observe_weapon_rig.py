@@ -5,7 +5,7 @@ OWNERS={'KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle',
 def layout(o):
  fields=[]
  for row in o.rows:
-  if row['class'].endswith('Property') and (row['outer'] in OWNERS or (row['outer']=='KFPawn' and row['name']=='healthToGive') or (row['outer']=='Pawn' and row['name'] in ['Health','HealthMax','ShieldStrength','Weapon']) or (row['outer']=='Actor' and row['name'] in ['Location','Rotation','Velocity','bHidden','bDeleteMe','LifeSpan'])):
+  if row['class'].endswith('Property') and (row['outer'] in OWNERS or (row['outer']=='KFPawn' and row['name']=='healthToGive') or (row['outer']=='Pawn' and row['name'] in ['Health','HealthMax','ShieldStrength','Weapon']) or (row['outer']=='Actor' and row['name'] in ['Location','Rotation','Velocity','DrawScale','bHidden','bDeleteMe','LifeSpan'])):
    d=o.read(int(row['address'],16),116);off=unpack(d,76);size=unpack(d,60)
    if unpack(d,56)!=1 or size not in [4,12]:continue
    fields.append((row['outer'],row['name'],row['class'],off,size,unpack(d,112)))

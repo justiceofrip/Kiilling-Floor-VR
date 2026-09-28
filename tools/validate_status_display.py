@@ -13,7 +13,7 @@ def validate(folder,inventory=False,dual=False,belt=False):
   selected=phase(n);checks[name]=bool(selected) and all(predicate(p) for p in selected)
  checks['one_persistent_display']=len({o['address'] for r in rows for o in r['objects'] if o['type']=='KFVRStatusDisplay'})==1
  posed=[p for p in data if p['TextureUpdates']>0]
- checks['native_text_rendered']=bool(posed) and data[-1]['RenderCalls']>0
+ checks['native_text_rendered_when_revealed']=bool(posed) and (not any(not p['bHidden'] for p in posed) or data[-1]['RenderCalls']>0)
  checks['texture_updates_only_on_changed_data']=data[-1]['RenderCalls']<=data[-1]['TextureUpdates']
  checks['follows_offhand_attachment']=bool(posed) and max(p['AttachmentError'] for p in posed)<.001
  checks['valid_loaded_and_spare_counts']=all(p['DisplayedLoaded']>=0 and p['DisplayedSpare']>=0 and p['DisplayedLeft']+p['DisplayedRight']==p['DisplayedLoaded'] for p in posed)
@@ -70,7 +70,7 @@ def validate(folder,inventory=False,dual=False,belt=False):
   at('shows_belt_seating_prompt',12,lambda p:p.get('ActionLine')=='LIFT PISTOL FROM BELT')
   at('shows_presented_magazines',9,lambda p:p.get('ActionLine')=='MAGAZINES AT BELT')
  if dual:checks['independent_dual_counts_observed']=any(p['bDual'] and p['DisplayedLeft']!=p['DisplayedRight'] for p in posed)
- report=dict(passed=all(checks.values()),checks=checks,render_calls=data[-1]['RenderCalls'],texture_updates=data[-1]['TextureUpdates'],pawn_comparisons=comparisons,synthetic_controllers=True,live_game=True,headset_presented=False,pixel_inspection_separate=True)
+ report=dict(revealed_samples=sum(not p['bHidden'] for p in posed),passed=all(checks.values()),checks=checks,render_calls=data[-1]['RenderCalls'],texture_updates=data[-1]['TextureUpdates'],pawn_comparisons=comparisons,synthetic_controllers=True,live_game=True,headset_presented=False,pixel_inspection_separate=True)
  (folder/'status-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Status checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report
