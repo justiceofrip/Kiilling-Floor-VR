@@ -457,8 +457,8 @@ function Tick(float Delta)
     if (ManualReload!=None) ManualReload.Update(Delta);
     Visual.BoneRefresh(); Muzzle=Visual.GetBoneCoords(Visual.TipBone);
     MuzzleLocation=Muzzle.Origin; AimRotation=GunRotation;
-    if (KFVRTrackedKnife(Gun)!=None || KFVRTrackedSyringe(Gun)!=None || KFVRTrackedWelder(Gun)!=None) MuzzleLocation=Visual.Location+((Visual.TipLocal*Visual.DrawScale)>>GunRotation);
-    if (KFVRTrackedSyringe(Gun)!=None || KFVRTrackedWelder(Gun)!=None) AimRotation=rotator(Visual.ToolAxis>>GunRotation);
+    if (KFVRTrackedKnife(Gun)!=None || KFVRTrackedSyringe(Gun)!=None || KFVRTrackedWelder(Gun)!=None) MuzzleLocation=Visual.Location+((Visual.TipLocal*Visual.DrawScale)>>Visual.Rotation);
+    if (KFVRTrackedSyringe(Gun)!=None || KFVRTrackedWelder(Gun)!=None) AimRotation=rotator(Visual.ToolAxis>>Visual.Rotation);
     // A missing tip must not silently turn an invalid origin into a shot.
     if (VSize(MuzzleLocation-Position)>1.4*Tracking.UnitsPerMetre) { ReleaseInput(); return; }
     AppliedFrames++; Recoil=FMax(0.0,Recoil-Delta*0.25);

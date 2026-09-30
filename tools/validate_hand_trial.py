@@ -22,7 +22,9 @@ def validate(folder):
         checks[f'pose_{n}_palm_orientation']=bool(data) and all(h['PalmAxisError']<.005 for h in data)
         checks[f'pose_{n}_finger_orientation']=bool(data) and all(h['IndexAxisError']<.005 for h in data)
     # Independent OpenXR-to-UE basis and head-relative position comparison.
-    # These expectations use the sent local poses, not the script's error fields.
+    # Aim uses these orientations; grip is independently tilted 60 degrees.
+    # Position expectations use grip, not the deliberately offset aim origin.
+    # These expectations do not use the script's target/error fields.
     def rotate(q,v):
         x,y,z,w=q;vx,vy,vz=v
         tx,ty,tz=2*(y*vz-z*vy),2*(z*vx-x*vz),2*(x*vy-y*vx)
@@ -47,8 +49,8 @@ def validate(folder):
                 expected=world(tuple(a-b for a,b in zip((side*.18,-.18,-.38),head_local)),yaw)
                 actual=tuple((a-b)/units for a,b in zip(h['PalmWorld'],head))
                 relative_errors.append(math.dist(expected,actual))
-    checks['actual_palm_axes_match_sent_openxr_grips']=bool(axis_errors) and max(axis_errors)<.005
-    checks['head_and_palms_share_reference_and_body_heading']=bool(relative_errors) and max(relative_errors)<.001
+    checks['actual_palm_axes_follow_aim_despite_grip_tilt']=bool(axis_errors) and max(axis_errors)<.005
+    checks['palms_keep_grip_position_despite_offset_aim_origin']=bool(relative_errors) and max(relative_errors)<.001
     opened=phase(3);closed=phase(5)
     checks['free_hands_can_fully_open']=bool(opened) and all(h['GripRole']==0 and h['IndexCurl']==0 and h['GripCurl']==0 and dot(h['IndexDirection'],h['PalmForward'])>.995 for h in opened)
     checks['fists_curl_in_opposite_palm_directions']=bool(closed) and all(h['GripRole']==0 and h['IndexCurl']>.99 and h['GripCurl']>.99 and dot(h['IndexDirection'],h['PalmRight'])*(-1 if h['bLeftHand'] else 1)>.5 and dot(h['IndexDirection'],h['PalmForward'])<-.8 for h in closed)

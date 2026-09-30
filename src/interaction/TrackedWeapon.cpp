@@ -5,6 +5,11 @@ namespace kfvr::interaction {
 namespace {
 std::optional<math::Matrix4> Attachment(const math::Pose& p,float scale){const auto view=math::MakeLhViewFromOpenXRPose(p);if(!view)return {};auto world=InverseRigid(*view);if(!world)return {};for(unsigned i=0;i<3;++i)world->values[3][i]*=scale;return world;}
 }
+std::optional<math::Pose> ControllerPresentationPose(const math::Pose& grip,const math::Pose& aim) noexcept {
+    const auto validGrip=math::MakeRelativePose({},grip),validAim=math::MakeRelativePose({},aim);
+    if(!validGrip||!validAim)return {};
+    return math::Pose{validGrip->position,validAim->orientation};
+}
 std::optional<TrackedWeaponPose> SolveTrackedWeapon(const math::Matrix4& body,const math::Pose& reference,const math::Pose& grip,const TrackedWeaponProfile& profile,float units)noexcept {
     if(!std::isfinite(units)||units<=0||units>10000)return {};
     const auto hand=math::ComposeRuntimeHeadWithLhCamera(body,reference,grip,units);

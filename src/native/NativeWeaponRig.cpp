@@ -55,8 +55,9 @@ void UpdateWeaponRig(void* actor,void* function,bool active)noexcept {
   const auto body=ue2::CameraWorld(adjusted,packet.bodyRotation);
   if(body){
    const auto head=interaction::SolveTrackedWeapon(*body,tracking.referenceHead,tracking.head,{},config.unitsPerMetre);if(head)packet.headPosition=head->fireOrigin;
-   for(unsigned i=0;i<2;++i){const auto& hand=controls.hands[i];if(!hand.gripValid)continue;
-    const auto pose=interaction::SolveTrackedWeapon(*body,tracking.referenceHead,hand.gripPose,{},config.unitsPerMetre);if(!pose)continue;const auto rotation=Rotation(pose->weaponWorld);if(!rotation)continue;
+   for(unsigned i=0;i<2;++i){const auto& hand=controls.hands[i];if(!hand.gripValid||!hand.aimValid)continue;
+    const auto presentation=interaction::ControllerPresentationPose(hand.gripPose,hand.aimPose);if(!presentation)continue;
+    const auto pose=interaction::SolveTrackedWeapon(*body,tracking.referenceHead,*presentation,{},config.unitsPerMetre);if(!pose)continue;const auto rotation=Rotation(pose->weaponWorld);if(!rotation)continue;
     const auto relative=math::MakeRelativePose(tracking.referenceHead,hand.gripPose);if(!relative||std::hypot(relative->position.x,relative->position.y,relative->position.z)>3)continue;
     const auto curl=interaction::ControllerFingerCurls(hand);packet.flags|=1<<i;if(hand.primary)packet.flags|=4<<i;if(hand.secondary)packet.flags|=16<<i;
     if(i){packet.rightPosition=pose->fireOrigin;packet.rightRotation=*rotation;packet.rightTrigger=hand.trigger;packet.rightGrip=hand.squeeze;packet.rightThumb=curl[0];packet.rightIndex=curl[1];packet.rightCurl=curl[2];}

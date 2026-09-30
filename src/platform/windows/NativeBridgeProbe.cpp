@@ -31,6 +31,14 @@ math::Pose InHandAuditSpace(math::Pose p){
  const float c=.70710678f,s=.70710678f;const auto v=p.position;
  p.position={reference.position.x+c*v.x+s*v.z,reference.position.y+v.y,reference.position.z-s*v.x+c*v.z};return p;
 }
+// Preserve the existing measured tool-contact fixture after authored working-axis
+// alignment. This is the installed syringe/welder idle frame, not a runtime
+// controller offset. The final phase separately tests plain forward aim.
+void PointToolFixture(math::Pose& pose){
+ const auto a=pose.orientation;
+ constexpr float x=.39934945f,y=.04667560f,z=.02036291f,w=.91538339f;
+ pose.orientation={a.w*x+a.x*w+a.y*z-a.z*y,a.w*y-a.x*z+a.y*w+a.z*x,a.w*z+a.x*y-a.y*x+a.z*w,a.w*w-a.x*x-a.y*y-a.z*z};
+}
 void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixels,unsigned width,unsigned height){
  auto bgra=pixels;for(auto& p:bgra)p=(p&0xff00ff00)|((p&0xff)<<16)|((p>>16)&0xff);
  BITMAPFILEHEADER f{};BITMAPINFOHEADER i{};f.bfType=0x4d42;f.bfOffBits=sizeof(f)+sizeof(i);f.bfSize=f.bfOffBits+DWORD(bgra.size()*4);i.biSize=sizeof(i);i.biWidth=LONG(width);i.biHeight=-LONG(height);i.biPlanes=1;i.biBitCount=32;i.biCompression=BI_RGB;
@@ -260,6 +268,7 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase==8||phase==17||phase==18)lh.trigger=1;
      if(phase==14)rh.gripValid=rh.aimValid=false;
      if(phase==20||phase==21||phase==22||phase==24)rh.primary=true;
+     if(phase!=35)PointToolFixture(rh.gripPose);
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(heal){
@@ -274,6 +283,7 @@ int wmain(int argc,wchar_t** argv){try{
      }
      if(phase==3||phase==5||phase==6||phase==8||phase==10||phase==11||phase==13||phase==15||phase==16||phase==22||phase==26)rh.trigger=1;
      if(phase==15)rh.gripValid=rh.aimValid=false;
+     if(phase!=27)PointToolFixture(rh.gripPose);
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(hands){
@@ -289,9 +299,16 @@ int wmain(int argc,wchar_t** argv){try{
       if(phase==7)hand.gripPose.orientation={side*.70710678f,0,0,.70710678f};
       if(phase==8)hand.gripPose.orientation={0,0,side*.70710678f,.70710678f};
       if(phase==9)hand.gripPose.orientation={side*.3535534f,.3535534f,side*.1464466f,.8535534f};
-      if(phase==13&&h==0||phase==14&&h==1)hand.gripValid=hand.aimValid=false;
+      if(phase==13&&h==0)hand.gripValid=false;
+      if(phase==14&&h==1)hand.aimValid=false;
       if(phase==16&&h==1)hand.stickX=1.f;
-      hand.gripPose=InHandAuditSpace(hand.gripPose);hand.aimPose=hand.gripPose;
+      // Deliberately separate the runtime grip and aim: earlier diagnostics
+      // made them identical and could not expose the real 60-degree offset.
+      hand.aimPose=hand.gripPose;
+      hand.aimPose.position.x+=.12f;hand.aimPose.position.y+=.04f;hand.aimPose.position.z-=.07f;
+      const auto q=hand.gripPose.orientation;constexpr float c=.8660254f,s=.5f;
+      hand.gripPose.orientation={q.x*c+q.w*s,q.y*c+q.z*s,q.z*c-q.y*s,q.w*c-q.x*s};
+      hand.gripPose=InHandAuditSpace(hand.gripPose);hand.aimPose=InHandAuditSpace(hand.aimPose);
      }
     }
     if(hud){
@@ -308,7 +325,7 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase==13||phase==15)left.gripPose.orientation={0,-.13052619f,0,.99144486f};
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
-    right.aimPose=right.gripPose;
+    if(!hands)right.aimPose=right.gripPose;
     if(capturePhase!=phase||!capturePhaseStart){capturePhase=phase;capturePhaseStart=now;}
    }
    const auto sent=phase==8&&!weapon?ipc::ChannelResult::Timeout:channel.SendInput(input);

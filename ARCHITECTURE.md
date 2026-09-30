@@ -111,3 +111,10 @@ KFVRGrenadeControl retains the exact installed Frag inventory object so the pawn
 
 
 Frame-channel mapping v4 retains a completed request ID/outcome while permitting the host to queue its next request. The producer reaps and releases the preceding GPU pair before taking that request; cancellation or late writes cannot erase a newer queued request. The slot/mapping remain 416/784 bytes; versioned names prevent mixing old peers. This removes an extra host/render-thread scheduling cycle while retaining single-pair GPU backpressure. Native D3D9 CPU conversion now uses SSE2 packed pixels (with exact tails/alpha behavior), and the bridge reports separate copy stages and idle callback counts. Full-resolution receiver throughput improved in a controlled live comparison; headset cadence remains unaccepted.
+
+
+## Runtime controller presentation frame
+
+The September 30 physical pose capture measured a stable approximately 60-degree orientation difference between grip and aim on the active controller profile, plus approximately 10 cm between their origins. NativeWeaponRig now constructs presentation from validated grip position and runtime aim orientation before applying the common reference/body transform. Both validity bits are required; no fixed controller angle or aim-origin translation is applied. Raw controller data, wire layouts and head/eye transforms retain their previous definitions. The hand diagnostic deliberately separates grip and aim in a translated/yawed tracking space.
+
+Installed syringe/welder meshes have upward-pointing idle working axes. KFVRWeaponVisual measures an orthonormal working frame and applies its inverse before the controller presentation frame, keeping the measured palm anchored. The rig transforms contact endpoints and trace direction through that actual model rotation. Rendered bone direction is observed independently for regression checks. The bounded external observer builds fresh object inventories on a separate read-only handle while continuing pose samples, avoiding discovery-sized gaps in short interaction phases.

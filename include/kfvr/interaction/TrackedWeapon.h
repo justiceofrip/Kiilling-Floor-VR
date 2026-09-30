@@ -7,6 +7,11 @@ struct TrackedWeaponProfile {
     math::Pose gripToWeapon{},weaponToMuzzle{};
 };
 struct TrackedWeaponPose {math::Matrix4 weaponWorld{},muzzleWorld{};math::Vec3 fireOrigin{},fireDirection{};};
+// Keep the physical grasp centre while aligning the presentation frame with
+// the runtime pointer orientation. Grip and aim may differ by a large fixed
+// rotation and translation; the aim origin must not move the virtual palm.
+std::optional<math::Pose> ControllerPresentationPose(const math::Pose& grip,
+    const math::Pose& aim) noexcept;
 // Body/reference are identical to the eye-camera anchor, but no current eye/head
 // pose is involved. Looking around cannot drag the held gun or its shot ray.
 std::optional<TrackedWeaponPose> SolveTrackedWeapon(const math::Matrix4& body,

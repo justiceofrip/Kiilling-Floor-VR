@@ -220,7 +220,13 @@ struct Host {
                     auto pose=[](const math::Pose& p){std::cerr<<'['<<p.position.x<<','<<p.position.y<<','<<p.position.z<<','<<p.orientation.x<<','<<p.orientation.y<<','<<p.orientation.z<<','<<p.orientation.w<<']';};
                     std::cerr<<"tracking_pose={\"generation\":"<<tracking.generation<<",\"space\":"<<tracking.spaceGeneration<<",\"reference\":";pose(tracking.referenceHead);
                     std::cerr<<",\"head\":";pose(tracking.head);
-                    for(unsigned hand=0;hand<2;++hand){std::cerr<<(hand?",\"right_valid\":":",\"left_valid\":")<<(controls.hands[hand].gripValid?"true":"false");std::cerr<<(hand?",\"right_grip\":":",\"left_grip\":");pose(controls.hands[hand].gripPose);}
+                    for(unsigned hand=0;hand<2;++hand){
+                        const auto& input=controls.hands[hand];
+                        std::cerr<<(hand?",\"right_valid\":":",\"left_valid\":")<<(input.gripValid?"true":"false");
+                        std::cerr<<(hand?",\"right_grip\":":",\"left_grip\":");pose(input.gripPose);
+                        std::cerr<<(hand?",\"right_aim_valid\":":",\"left_aim_valid\":")<<(input.aimValid?"true":"false");
+                        std::cerr<<(hand?",\"right_aim\":":",\"left_aim\":");pose(input.aimPose);
+                    }
                     std::cerr<<'}'<<std::endl;++poseLogSamples;
                 }
                 graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};

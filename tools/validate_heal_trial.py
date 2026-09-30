@@ -29,7 +29,10 @@ def validate(folder):
  checks['stop_cancels_owned_input']=not end['bHealFiring'] and not end['bPendingHeal'] and not end['bVRControlled'] and not rigs[-1]['bTracking']
  panels=objects('KFVRStatusDisplay');checks['status_reports_charge']=any(p.get('AmmoLine','').startswith('CHARGE ') for p in panels)
  pulses=json.loads((folder/'receiver.json').read_text())['haptic_pulses'];checks['completion_and_holster_feedback']=pulses==4
- report=dict(passed=all(checks.values()),checks=checks,self_heals=end['SelfHeals']-start['SelfHeals'],cancelled=end['CancelledHeals']-start['CancelledHeals'],charge_spent=end['ChargeSpent']-start['ChargeSpent'],final_charge=end['VRTotalAmmo'],initial_health=pawns[0]['Health'],final_health=pawns[-1]['Health'],haptic_pulses=pulses,live_game=True,synthetic_controllers=True,headset_presented=False,other_player_healing_tested=False)
+ from validate_tool_attachment import attachment_checks
+ tool_checks,tool_report=attachment_checks(rows,controls,'KFVRTrackedSyringe',[3, 4, 7, 9, 12, 17, 27],27)
+ checks.update(tool_checks)
+ report=dict(passed=all(checks.values()),checks=checks,tool_attachment=tool_report,self_heals=end['SelfHeals']-start['SelfHeals'],cancelled=end['CancelledHeals']-start['CancelledHeals'],charge_spent=end['ChargeSpent']-start['ChargeSpent'],final_charge=end['VRTotalAmmo'],initial_health=pawns[0]['Health'],final_health=pawns[-1]['Health'],haptic_pulses=pulses,live_game=True,synthetic_controllers=True,headset_presented=False,other_player_healing_tested=False)
  (folder/'heal-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Healing checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

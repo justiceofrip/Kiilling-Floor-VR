@@ -31,7 +31,10 @@ def validate(folder):
  checks['no_gunshot_traces']=rigs[-1]['TraceCount']==rigs[0]['TraceCount']
  checks['draw_stow_redraw']=rigs[-1]['DrawCount']-rigs[0]['DrawCount']==2 and rigs[-1]['HolsterCount']-rigs[0]['HolsterCount']==1
  checks['stop_releases_owned_input']=not end['bVRControlled'] and not end['bWeldFiring'] and not rigs[-1]['bTracking']
- report=dict(passed=all(checks.values()),checks=checks,weld_hits=end['WeldHits']-start['WeldHits'],unweld_hits=end['UnweldHits']-start['UnweldHits'],charge_spent=end['ChargeSpent']-start['ChargeSpent'],final_charge=end['VRTotalAmmo'],final_strength=doors[-1]['CurrentStrength'],door_uses=rigs[-1]['DoorUseCount']-rigs[0]['DoorUseCount'],live_map_door=True,synthetic_controllers=True,headset_presented=False)
+ from validate_tool_attachment import attachment_checks
+ tool_checks,tool_report=attachment_checks(rows,controls,'KFVRTrackedWelder',[2, 3, 4, 7, 9, 12, 19, 25, 35],35)
+ checks.update(tool_checks)
+ report=dict(passed=all(checks.values()),checks=checks,tool_attachment=tool_report,weld_hits=end['WeldHits']-start['WeldHits'],unweld_hits=end['UnweldHits']-start['UnweldHits'],charge_spent=end['ChargeSpent']-start['ChargeSpent'],final_charge=end['VRTotalAmmo'],final_strength=doors[-1]['CurrentStrength'],door_uses=rigs[-1]['DoorUseCount']-rigs[0]['DoorUseCount'],live_map_door=True,synthetic_controllers=True,headset_presented=False)
  (folder/'weld-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Welder checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

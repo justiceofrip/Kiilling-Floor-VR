@@ -72,37 +72,50 @@ def sample(o):
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--seconds',type=float,default=20);a=p.parse_args()
  tick=ctypes.WinDLL('kernel32').GetTickCount64;tick.restype=ctypes.c_ulonglong
- with a.output.open('w') as f:
-  end=time.monotonic()+a.seconds
-  stop=a.output.with_suffix('.stop')
-  consecutive_errors=0
-  while time.monotonic()<end and not stop.exists():
-   o=None
-   try:
-    o=Observer(a.pid,a.game)
-    o.snapshot()
-    # Refresh object discovery once/second: visuals are created on first tracking.
-    for i in range(10):
-     if stop.exists():break
-     f.write(json.dumps(dict(uptime_ms=tick(),objects=sample(o)))+'\n');f.flush();time.sleep(.1)
-    consecutive_errors=0
-   except (OSError,ValueError) as error:
-    # Object/name arrays can grow while our presentation actors are first created.
-    # Retry only transient read snapshots; never weaken the installed ABI checks.
-    transient=isinstance(error,OSError) or 'Array changed during snapshot' in str(error) or 'FName index mismatch' in str(error)
-    if not transient:raise
-    consecutive_errors+=1
-    print('Observer snapshot retry: '+str(error),flush=True)
-    if consecutive_errors>=5:raise
-    time.sleep(.05)
-   finally:
-    if o is not None:o.close()
+ # Build full object inventories on a separate reader so discovery cannot
+ # leave one-second holes in the live pose/contact samples. Each reader owns
+ # its own process handle and caches; only completed snapshots are transferred.
+ from concurrent.futures import ThreadPoolExecutor
+ def discover():
+  fresh=Observer(a.pid,a.game)
+  try:
+   fresh.snapshot();fresh.vr_schema=layout(fresh);return fresh
+  except BaseException:
+   fresh.close();raise
+ def transient(error):
+  return isinstance(error,OSError) or 'Array changed during snapshot' in str(error) or 'FName index mismatch' in str(error)
+ with a.output.open('w') as f, ThreadPoolExecutor(max_workers=1) as discovery:
+  end=time.monotonic()+a.seconds;stop=a.output.with_suffix('.stop')
+  o=None;pending=discovery.submit(discover);next_discovery=0;consecutive_errors=0
+  try:
+   while time.monotonic()<end and not stop.exists():
+    try:
+     if pending is not None and pending.done():
+      completed=pending;pending=None;fresh=completed.result()
+      if o is not None:o.close()
+      o=fresh;next_discovery=time.monotonic()+1;consecutive_errors=0
+     if pending is None and time.monotonic()>=next_discovery:pending=discovery.submit(discover)
+     if o is not None:
+      f.write(json.dumps(dict(uptime_ms=tick(),objects=sample(o)))+'\n');f.flush()
+    except (OSError,ValueError) as error:
+     if not transient(error):raise
+     consecutive_errors+=1
+     print('Observer snapshot retry: '+str(error),flush=True)
+     if consecutive_errors>=5:raise
+     if o is not None:o.close();o=None
+     next_discovery=0
+    time.sleep(.1)
+  finally:
+   if o is not None:o.close()
+   if pending is not None:
+    try:pending.result().close()
+    except (OSError,ValueError):pass
 
   if stop.exists():
    # Native publishing has stopped; let the rig's existing 100 ms heartbeat
    # release its presentation, then independently record the final state.
    time.sleep(.15)
-   o=Observer(a.pid,a.game)
+   final=discover()
    try:
-    o.snapshot();f.write(json.dumps(dict(uptime_ms=tick(),objects=sample(o)))+'\n');f.flush()
-   finally:o.close()
+    f.write(json.dumps(dict(uptime_ms=tick(),objects=sample(final)))+'\n');f.flush()
+   finally:final.close()

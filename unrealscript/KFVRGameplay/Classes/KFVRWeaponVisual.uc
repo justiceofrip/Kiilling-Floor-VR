@@ -3,6 +3,8 @@
 class KFVRWeaponVisual extends Actor;
 var Weapon SourceWeapon;
 var vector BladeAxis,ToolAxis;
+var bool bToolAligned;
+var vector ToolFrameX,ToolFrameY,ToolFrameZ,MeasuredToolAxis;
 var bool bOffhandGun;
 var name TipBone;
 var vector PalmLocal, TipLocal, MagazineLocal, SlideLocal;
@@ -56,6 +58,15 @@ simulated function bool Initialize(Weapon Source)
     }
     if (KFVRTrackedWelder(Source)!=None)
     { Part=GetBoneCoords('flame_base'); ToolAxis=Normal(Tip.Origin-Part.Origin); }
+    if (KFVRTrackedSyringe(Source)!=None || KFVRTrackedWelder(Source)!=None)
+    {
+        // These tools were authored pointing up in the first-person idle pose.
+        // Measure their working frame, then attach that frame to controller aim.
+        ToolFrameX=Normal(ToolAxis);
+        ToolFrameY=Normal(vect(0,1,0)-ToolFrameX*ToolFrameX.Y);
+        if (VSize(ToolFrameX)<0.9 || VSize(ToolFrameY)<0.9) return False;
+        ToolFrameZ=Normal(ToolFrameX cross ToolFrameY); bToolAligned=True;
+    }
     Part=GetBoneCoords('Hands_LArmPalm'); SupportLocal=Part.Origin;
     MagazineBone=class'KFVRWeaponProfile'.static.MagazineBone(KFWeapon(Source));
     ActionBone=class'KFVRWeaponProfile'.static.ActionBone(KFWeapon(Source));
@@ -84,12 +95,31 @@ simulated function bool Initialize(Weapon Source)
 }
 simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units)
 {
-    local coords Part;
+    local coords Part,Base;
     local float Measured;
+    local vector X,Y,Z;
+    local rotator ModelRotation;
+    ModelRotation=GripRotation;
+    if (bToolAligned)
+    {
+        GetAxes(GripRotation,X,Y,Z);
+        // Inverse authored working frame followed by the current controller
+        // frame. Rotate around the measured model grip, not the actor origin.
+        ModelRotation=OrthoRotation(X*ToolFrameX.X+Y*ToolFrameY.X+Z*ToolFrameZ.X,
+            X*ToolFrameX.Y+Y*ToolFrameY.Y+Z*ToolFrameZ.Y,
+            X*ToolFrameX.Z+Y*ToolFrameY.Z+Z*ToolFrameZ.Z);
+    }
     SetDrawScale(Units/ModelUnitsPerMetre);
-    SetRotation(GripRotation);
-    SetLocation(GripPosition-((PalmLocal*DrawScale)>>GripRotation));
+    SetRotation(ModelRotation);
+    SetLocation(GripPosition-((PalmLocal*DrawScale)>>ModelRotation));
     bHidden=False; BoneRefresh();
+    if (bToolAligned)
+    {
+        Part=GetBoneCoords(TipBone);
+        if (KFVRTrackedWelder(SourceWeapon)!=None)
+        { Base=GetBoneCoords('flame_base'); MeasuredToolAxis=Normal(Part.Origin-Base.Origin); }
+        else MeasuredToolAxis=Normal(Part.XAxis);
+    }
     // BoneRefresh does not invalidate the same-frame animation cache. Measure
     // a unit translation on the following ordinary Tick, after it has rendered.
     if (bPhysicalProfile && KFVRHandVisual(self)==None && !bTranslationCalibrated)
