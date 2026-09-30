@@ -19,3 +19,5 @@ Corrective candidate: startup captures position and yaw only, once headset focus
 Corrective build checks: 24/24 x86 and 23/23 x64, including 48 tilted-startup camera/controller cases. No corrective wearer pass yet.
 
 Subsequent corrective work replaces normal legacy arm-based hand actors with original sleeve-free gloves and explicit controller-aligned palm/finger axes. The camera no longer rejects straight-up/down gaze. These changes are still private development work pending wearer review; the earlier rc1 archive does not contain them.
+
+September 30 wearer feedback on aea9063: hand position was close, hand orientation was about 90 degrees wrong, and bullet impacts followed the displayed gun. The user closed the game; its log has a normal exit. A subsequent private correction reauthors the placeholder glove anatomy in the KF weapon frame and updates curls. It passes 63 hand checks plus inventory/HUD regressions, but has no wearer acceptance yet. These are original KFVR prototype gloves, not KF or Battlefield artwork.

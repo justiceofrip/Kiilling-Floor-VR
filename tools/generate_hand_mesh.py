@@ -1,8 +1,10 @@
 """Author original, sleeve-free glove meshes in classic ActorX PSK/PSA.
 
-Centimetres; UE grip axes: X forward through the grasp, Y right, Z up.
-The palm is the origin. Right palm faces -Y, left palm faces +Y. Finger
-chains extend +Z in bind pose; runtime curl rotates them about local X.
+Centimetres; weapon presentation axes: X forward, Y right, Z up.
+The palm is the origin. Right palm faces -Y, left palm faces +Y. Fingers
+extend +X and the thumb/index side is +Z, matching KF's authored pistol
+hand rather than treating the raw OpenXR grip basis as a hand-mesh bind pose.
+This is presentation geometry, not a change to tracked controller axes.
 Format reference (layout only, no exporter code/assets copied):
 https://github.com/gildor2/UEViewer/blob/master/Exporters/Psk.h
 PSK reverses Y and triangle winding when imported into UE2.
@@ -72,13 +74,19 @@ def author(left):
             loft([(z+.15,x,y+.64*r,.62*r,.16*r),(z+.4,x,y+.74*r,.68*r,.27*r),
                   (z+length*.65,x,y+.69*r,.57*r,.20*r)],bone,1,8)
             parent=bone;z+=length
-    # UE import mirrors PSK Y; cancel it here. Also reverse triangles for
-    # left-hand authoring and for the format conversion, independently.
+    # The loft helper authors fingers along Z. Re-express that geometry in
+    # the native weapon frame: fingers +X, thumb side +Z. Swapping X/Z is
+    # a reflection, so flip winding too; do not reflect actor/controller poses.
+    points=[(z,y,x) for x,y,z in points]
+    bones=[(name,parent,(z,y,x)) for name,parent,(x,y,z) in bones]
+    # UE import mirrors PSK Y; cancel it here. Reverse triangles for the
+    # left-hand authoring, anatomical X/Z swap, and format conversion.
     ps_points=[(x,-y,z) for x,y,z in points]
     wedges=[];triangles=[]
     for a,b,c,material in faces:
         if left:a,b=b,a
-        a,b=b,a
+        a,b=b,a  # Anatomical X/Z reflection.
+        a,b=b,a  # PSK Y reflection.
         first=len(wedges)
         for index in (a,b,c):
             wedges.append(pack('IffBBH',index,0.5,0.5,material,0,0))

@@ -50,8 +50,14 @@ def validate(folder):
     checks['actual_palm_axes_match_sent_openxr_grips']=bool(axis_errors) and max(axis_errors)<.005
     checks['head_and_palms_share_reference_and_body_heading']=bool(relative_errors) and max(relative_errors)<.001
     opened=phase(3);closed=phase(5)
-    checks['free_hands_can_fully_open']=bool(opened) and all(h['GripRole']==0 and h['IndexCurl']==0 and h['GripCurl']==0 and dot(h['IndexDirection'],h['PalmUp'])>.995 for h in opened)
-    checks['fists_curl_in_opposite_palm_directions']=bool(closed) and all(h['GripRole']==0 and h['IndexCurl']>.99 and h['GripCurl']>.99 and dot(h['IndexDirection'],h['PalmRight'])*(-1 if h['bLeftHand'] else 1)>.5 and dot(h['IndexDirection'],h['PalmUp'])<-.8 for h in closed)
+    checks['free_hands_can_fully_open']=bool(opened) and all(h['GripRole']==0 and h['IndexCurl']==0 and h['GripCurl']==0 and dot(h['IndexDirection'],h['PalmForward'])>.995 for h in opened)
+    checks['fists_curl_in_opposite_palm_directions']=bool(closed) and all(h['GripRole']==0 and h['IndexCurl']>.99 and h['GripCurl']>.99 and dot(h['IndexDirection'],h['PalmRight'])*(-1 if h['bLeftHand'] else 1)>.5 and dot(h['IndexDirection'],h['PalmForward'])<-.8 for h in closed)
+    # Anatomical landmarks are independent of the script's target/error fields.
+    # Native KF's pistol index points along actor-forward, with the thumb side up.
+    def delta(a,b):return tuple(x-y for x,y in zip(a,b))
+    checks['open_index_extends_forward_from_knuckle']=bool(opened) and all(dot(delta(h['IndexTipWorld'],h['IndexBaseWorld']),h['PalmForward'])>1 for h in opened)
+    checks['knuckles_are_forward_of_palm']=bool(settled) and all(dot(delta(h['IndexBaseWorld'],h['PalmWorld']),h['PalmForward'])>1 for h in settled)
+    checks['thumb_and_index_side_is_above_little_finger']=bool(settled) and all(dot(delta(h['ThumbBaseWorld'],h['LittleBaseWorld']),h['PalmUp'])>2 and dot(delta(h['IndexBaseWorld'],h['LittleBaseWorld']),h['PalmUp'])>2 for h in settled)
     checks['finger_positions_remain_hand_sized']=bool(settled) and all(.2<math.dist(h['PalmWorld'],h['IndexTipWorld'])<10 for h in settled)
     for n,side in [(13,True),(14,False)]:
         data=phase(n)

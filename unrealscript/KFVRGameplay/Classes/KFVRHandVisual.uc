@@ -17,6 +17,7 @@ var ConstantColor GloveMaterial,PadMaterial;
 var vector PalmForward,PalmRight,PalmUp,IndexDirection;
 var float PalmAxisError,IndexAxisError;
 var vector ExpectedIndexDirection;
+var vector IndexBaseWorld,ThumbBaseWorld,LittleBaseWorld;
 var bool bLeftHand;
 var name PalmBone;
 var name FingerBones[15];
@@ -154,25 +155,30 @@ simulated function PoseGlove(vector Position,rotator HandRotation,float Units)
             if (Joint==0) Angle=1.3*Curl;
             else if (Joint==1) Angle=2.8*Curl;
             else Angle=3.7*Curl;
-            DesiredX=X; DesiredY=Y*Cos(Angle)+Z*(Sign*Sin(Angle));
-            DesiredZ=Z*Cos(Angle)-Y*(Sign*Sin(Angle));
+            // Mesh fingers extend along weapon-forward X, thumb side is Z.
+            // Bend toward the palm while retaining the controller origin.
+            DesiredX=X*Cos(Angle)-Y*(Sign*Sin(Angle));
+            DesiredY=Y*Cos(Angle)+X*(Sign*Sin(Angle)); DesiredZ=Z;
             if (Finger==0)
             {
                 // Oppose the thumb across the top of the grasp, progressively.
-                DesiredZ=Normal(X*(0.85-0.95*Curl)+Z*(0.50-0.10*Curl)-Y*Sign*(0.15+0.65*Curl));
-                DesiredY=Normal(Y-DesiredZ*(Y dot DesiredZ));
-                DesiredX=Normal(DesiredY cross DesiredZ);
+                DesiredX=Normal(Z*(0.85-0.95*Curl)+X*(0.50-0.10*Curl)-Y*Sign*(0.15+0.65*Curl));
+                DesiredY=Normal(Y-DesiredX*(Y dot DesiredX));
+                DesiredZ=Normal(DesiredX cross DesiredY);
             }
             SetBoneDirection(FingerBones[Finger*3+Joint],OrthoRotation(DesiredX,DesiredY,DesiredZ),,1.0,1);
-            if (Finger==1 && Joint==2) ExpectedIndexDirection=DesiredZ;
+            if (Finger==1 && Joint==2) ExpectedIndexDirection=DesiredX;
         }
     }
     BoneRefresh(); C=GetBoneCoords(PalmBone);
     PalmWorld=C.Origin; PalmError=VSize(PalmWorld-Position);
     PalmForward=C.XAxis; PalmRight=C.YAxis; PalmUp=C.ZAxis;
     PalmAxisError=FMax(VSize(C.XAxis-X),FMax(VSize(C.YAxis-Y),VSize(C.ZAxis-Z)));
-    C=GetBoneCoords(FingerBones[5]); IndexTipWorld=C.Origin; IndexDirection=C.ZAxis;
-    IndexAxisError=VSize(C.ZAxis-ExpectedIndexDirection); PoseFrames++;
+    C=GetBoneCoords(FingerBones[3]); IndexBaseWorld=C.Origin;
+    C=GetBoneCoords(FingerBones[0]); ThumbBaseWorld=C.Origin;
+    C=GetBoneCoords(FingerBones[12]); LittleBaseWorld=C.Origin;
+    C=GetBoneCoords(FingerBones[5]); IndexTipWorld=C.Origin; IndexDirection=C.XAxis;
+    IndexAxisError=VSize(C.XAxis-ExpectedIndexDirection); PoseFrames++;
 }
 simulated function ClearArmPose()
 {
