@@ -7,7 +7,7 @@ def validate(folder,weapon="single"):
  rows=[json.loads(x) for x in (folder/'weapon-observations.jsonl').read_text().splitlines()]
  gun_type={'single':'KFVRTrackedSingle','deagle':'KFVRTrackedDeagle'}[weapon]
  gun_addresses={o['address'] for row in rows for o in row['objects'] if o['type']==gun_type}
- def objects(typ,selected=rows):return [o['values'] for row in selected for o in row['objects'] if o['type']==typ and (typ!='KFVRManualReload' or o['values']['Gun'] in gun_addresses)]
+ def objects(typ,selected=rows):return [o['values'] for row in selected for o in row['objects'] if o['type']==typ and not o['values'].get('bDeleteMe') and (typ!='KFVRManualReload' or o['values']['Gun'] in gun_addresses)]
  def phase(n,typ='KFVRManualReload'):
   times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
   return objects(typ,[r for r in rows if times and min(times)+120<=r['uptime_ms']<=max(times)])
@@ -43,10 +43,30 @@ def validate(folder,weapon="single"):
  other_states={}
  for row in rows:
   for obj in row['objects']:
-   if obj['type']=='KFVRManualReload' and obj['values']['Gun'] not in gun_addresses:
+   if obj['type']=='KFVRManualReload' and not obj['values'].get('bDeleteMe') and obj['values']['Gun'] not in gun_addresses:
     m=obj['values'];other_states.setdefault(m['Gun'],[]).append(tuple(m[k] for k in ['OwnedRounds','LoadedRounds','SpentRounds','DiscardedRounds','HeldMagazine','InsertedMagazine','Revision']))
  checks['other_physical_weapon_states_unchanged']=all(len(set(states))==1 for states in other_states.values())
  checks['input_released_at_stop']=not rigs[-1]['bTracking'] and not rigs[-1]['bFiring']
+ # A magazine seated in the gun must retain its full bone frame when physical
+ # mode is toggled off and the controller subsequently turns on several axes.
+ from validate_grip_pose import rotate
+ rest_metrics={}
+ for n in (53,55,57,58,59):
+  times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
+  position_errors=[];axis_errors=[]
+  for row in rows:
+   if not times or not min(times)+120<=row['uptime_ms']<=max(times) or not row.get('rig_sample_consistent'):continue
+   objs={o['address']:o for o in row['objects'] if not o['values'].get('bDeleteMe')}
+   rig=next((o['values'] for o in objs.values() if o['type']=='KFVRWeaponRig'),None)
+   if not rig or rig['Gun'] not in gun_addresses or not rig['bTracking'] or rig['bHolstered']:continue
+   visual=objs.get(rig['Visual'],{}).get('values')
+   if not visual:continue
+   expected=[a+b for a,b in zip(visual['Location'],rotate([x*visual['DrawScale'] for x in visual['MagazineLocal']],visual['Rotation']))]
+   position_errors.append(math.dist(expected,visual['MeasuredMagazinePosition']))
+   for axis in ('X','Y','Z'):
+    axis_errors.append(math.dist(rotate(visual['Magazine'+axis],visual['Rotation']),visual['MeasuredMagazine'+axis]))
+  rest_metrics[str(n)]=dict(samples=len(position_errors),max_position_error_uu=max(position_errors,default=None),max_axis_error=max(axis_errors,default=None))
+  checks['inserted_magazine_frame_phase_'+str(n)]=len(position_errors)>=3 and max(position_errors)<.05 and max(axis_errors)<.002
  # Independent actual magazine-bone to actual hand-palm comparison, including
  # sharp transitions. Only completed, coherent rig updates can establish this.
  native=any(r.get('bNativeHandTest') for r in rigs);mag_palm_errors=[];palm_tracking_errors=[];native_grip_samples=0;missing_native_profiles=0
@@ -73,7 +93,7 @@ def validate(folder,weapon="single"):
     palm_tracking_errors.append(math.dist(hand['PalmWorld'],rig['Tracking.LeftPosition']))
   checks['native_magazine_grasp_is_measured_and_attached']=native_grip_samples>=5 and not missing_native_profiles and bool(mag_palm_errors) and max(mag_palm_errors)<.05
   checks['magazine_grasp_keeps_controller_palm']=bool(palm_tracking_errors) and max(palm_tracking_errors)<.005
- report=dict(missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
+ report=dict(inserted_magazine_frames=rest_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
  (folder/'reload-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Reload checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

@@ -102,3 +102,8 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.BullpupDM | MagazineFed | ? | ? | Pending interaction/asset validation |
 | KFStoryGame.Dummy_JoggingWeapon | StoryTool | ? | ? | Pending interaction/asset validation |
 | KFStoryGame.KF_PawnWelder | Tool | ? | ? | Pending interaction/asset validation |
+
+
+## Deferred VR surface inspection
+
+October 1 wearer feedback: the assault rifle's rear surface is missing when viewed from angles unavailable in flat play. The pistol and other inspected items did not show the same obvious issue to the wearer; coverage across the catalog is unknown. Audit each model from all sides and distinguish absent geometry, backface culling, material flags and missing textures before choosing a repair. Keep repairs separate from the accepted rifle grip/aim transform. No blanket two-sided-material change or mesh repair has been made.

@@ -73,7 +73,7 @@ function ToggleManualReload()
     if (ManualReload!=None)
     {
         if (!ManualReload.CanDisable()) return;
-        if (Visual!=None) Visual.PoseMagazine(True,False,vect(0,0,0),0);
+        if (Visual!=None) Visual.ClearMechanicalPose();
         ManualReload.Destroy(); ManualReload=None; InventoryManuals[ActiveIndex]=None;
     }
     else
@@ -496,7 +496,7 @@ function UpdateRig(float Delta)
     }
     Visual.PoseAt(Position,GunRotation,Tracking.UnitsPerMetre);
     if (ManualReload!=None) ManualReload.Update(Delta);
-    Visual.BoneRefresh(); Muzzle=Visual.GetBoneCoords(Visual.TipBone);
+    Visual.BoneRefresh(); Visual.SampleMagazinePose(); Muzzle=Visual.GetBoneCoords(Visual.TipBone);
     MuzzleLocation=Muzzle.Origin; AimRotation=GunRotation;
     if (KFVRTrackedKnife(Gun)!=None || KFVRTrackedSyringe(Gun)!=None || KFVRTrackedWelder(Gun)!=None) MuzzleLocation=Visual.Location+((Visual.TipLocal*Visual.DrawScale)>>Visual.Rotation);
     if (KFVRTrackedSyringe(Gun)!=None || KFVRTrackedWelder(Gun)!=None) AimRotation=rotator(Visual.ToolAxis>>Visual.Rotation);

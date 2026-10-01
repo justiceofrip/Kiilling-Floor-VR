@@ -59,7 +59,7 @@ int wmain(int argc,wchar_t** argv){try{
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
  const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::array<unsigned,64> phasePairs{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
- const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?54000:inventory?26700:7500;
+ const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?61000:inventory?26700:7500;
  for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:reload||dual||dualBelt||heal||weld||arms||hands||hud?90000:inventory?60000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
@@ -75,7 +75,7 @@ int wmain(int argc,wchar_t** argv){try{
    if(dualBelt)phase=std::min(61u,unsigned(elapsed/1000));
    if(dual)phase=std::min(47u,unsigned((elapsed<24000?elapsed:elapsed-1000)/1000));
    if(melee)phase=std::min(21u,unsigned(elapsed/1000));
-   if(reload)phase=elapsed<3000?51u+unsigned(elapsed/1000):std::min(50u,unsigned((elapsed-3000)/1000));
+   if(reload)phase=elapsed<10000?51u+unsigned(elapsed/1000):std::min(50u,unsigned((elapsed-10000)/1000));
    if(hands)phase=std::min(17u,unsigned(elapsed/2000));
    if(hud)phase=std::min(17u,unsigned(elapsed/1500));
    if(cadence)phase=0;
@@ -116,7 +116,12 @@ int wmain(int argc,wchar_t** argv){try{
      input={};input.focused=phase!=35;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
      auto& lh=input.hands[0];auto& rh=input.hands[1];
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.2f,-.25f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
-     if(phase==1)lh.secondary=true;
+     if(phase==1||phase==54||phase==56)lh.secondary=true;
+     // Rotate the inserted magazine both during and after physical mode. A
+     // world-space bone override must not survive returning to normal mode.
+     if(phase==55||phase==56)rh.gripPose.orientation={.18257419f,.36514837f,.18257419f,.91287093f};
+     if(phase==57)rh.gripPose.orientation={-.35355339f,.35355339f,-.14644661f,.85355339f};
+     if(phase==58)rh.gripPose.orientation={.5f,-.5f,.5f,.5f};
      if(phase>=3&&phase<=9){lh.squeeze=1;lh.gripPose.position=phase<=4?math::Vec3{.2f,-.36f,-.5f}:math::Vec3{0,-.28f,-.45f};}
      if(phase==4)rh.secondary=true;
      if(phase==5||phase==6||phase==7)lh.gripPose.orientation={0,0,.3826834f,.9238795f};

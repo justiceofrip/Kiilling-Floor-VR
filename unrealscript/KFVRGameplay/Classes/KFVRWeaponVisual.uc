@@ -13,6 +13,7 @@ var name TipBone;
 var vector PalmLocal, TipLocal, MagazineLocal, SlideLocal;
 var float ModelUnitsPerMetre, BoneTranslationScale;
 var vector MagazineX,MagazineY,MagazineZ,SupportLocal;
+var vector MeasuredMagazinePosition,MeasuredMagazineX,MeasuredMagazineY,MeasuredMagazineZ;
 var bool bCalibrated,bTranslationCalibrated,bTranslationProbe,bPhysicalProfile;
 var name MagazineBone,ActionBone;
 var float ActionTravelMetres;
@@ -171,6 +172,15 @@ simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units
         { SetBoneLocation(MagazineBone,vect(1,0,0),1.0); bTranslationProbe=True; }
     }
 }
+// Observe the completed mechanical pose, including inserted/rest states.
+simulated function SampleMagazinePose()
+{
+    local coords Part;
+    if (!bPhysicalProfile) return;
+    Part=GetBoneCoords(MagazineBone);
+    MeasuredMagazinePosition=Part.Origin;
+    MeasuredMagazineX=Part.XAxis; MeasuredMagazineY=Part.YAxis; MeasuredMagazineZ=Part.ZAxis;
+}
 simulated function vector MagazineRest() { return Location+((MagazineLocal*DrawScale)>>Rotation); }
 simulated function vector SlideRest() { return Location+((SlideLocal*DrawScale)>>Rotation); }
 simulated function vector HeldMagazinePosition(vector HandPosition,rotator HandRotation)
@@ -184,6 +194,18 @@ simulated function Destroyed()
     if (MagazineGrip!=None) MagazineGrip.Destroy();
     Super.Destroyed();
 }
+// Queue removal of every mechanical override before the next evaluation.
+// Leaving an absolute magazine direction active would lock it to world space
+// after physical mode exits, even as the gun follows subsequent wrist turns.
+simulated function ClearMechanicalPose()
+{
+    if (!bPhysicalProfile) return;
+    if (MagazineGrip!=None) MagazineGrip.bHidden=True;
+    SetBoneScale(2,1.0,MagazineBone);
+    SetBoneDirection(MagazineBone,rot(0,0,0),,0.0,1);
+    SetBoneLocation(MagazineBone,vect(0,0,0),1.0);
+    SetBoneLocation(ActionBone,vect(0,0,0),1.0);
+}
 simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, float SlideTravel, optional rotator HandRotation)
 {
     local vector Offset;
@@ -196,9 +218,14 @@ simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, f
     }
     if (Held) HandPosition=HeldMagazinePosition(HandPosition,HandRotation);
     if (Held) Offset=((HandPosition-Location)<<Rotation)/DrawScale-MagazineLocal;
-    if (!Held) HandRotation=Rotation;
-    Desired=OrthoRotation(MagazineX>>HandRotation,MagazineY>>HandRotation,MagazineZ>>HandRotation);
-    SetBoneDirection(MagazineBone,Desired,vect(0,0,0),1.0,1);
+    // Only a detached, held magazine needs an absolute world rotation. A
+    // seated magazine inherits the installed skeleton's frame with the gun.
+    if (Held)
+    {
+        Desired=OrthoRotation(MagazineX>>HandRotation,MagazineY>>HandRotation,MagazineZ>>HandRotation);
+        SetBoneDirection(MagazineBone,Desired,vect(0,0,0),1.0,1);
+    }
+    else SetBoneDirection(MagazineBone,rot(0,0,0),,0.0,1);
     SetBoneLocation(MagazineBone,Offset/BoneTranslationScale,1.0);
     SetBoneLocation(ActionBone,vect(-1,0,0)*ModelUnitsPerMetre*ActionTravelMetres*SlideTravel/BoneTranslationScale,1.0);
     BoneRefresh();

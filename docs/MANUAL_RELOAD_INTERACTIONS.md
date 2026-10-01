@@ -54,3 +54,6 @@ The live dual belt gate requires a fresh aligned approach and continuous movemen
 
 
 Native-hand presentation now has a measured detached-magazine grasp for 9mm and Deagle. It samples the installed reload pose at runtime and anchors its palm at the controller; catch/insertion proximity follows the resulting magazine root. This is independent of the optional four-stage whole-weapon animation scrubber above. The active gun remains in its tracked idle presentation, and physical state continues to come from the live script ledger. The magazine-specific pose has no wearer acceptance yet.
+
+
+October 1 headset retest rejected magazine clipping/attachment; it did not establish a successful physical catch. Repeated mode toggles exposed a shared presentation bug: an inserted magazine retained an absolute world rotation after physical mode was disabled. The corrected visual path clears that override for seated magazines and clears all mechanical overrides on mode exit. This applies through the common weapon visual rather than per-pistol offset patches. Updated wearer acceptance remains pending.
