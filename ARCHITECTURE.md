@@ -28,6 +28,7 @@ The native device is non-Ex D3D9 with 8x MSAA in the captured session. A future 
 - KF's inverse-rotation constructor negates rotator units before its 14-bit lookup. The camera adapter matches this quantization and the captured native basis.
 - Scale is explicit, never borrowed from Battlefield. Physical calibration remains pending.
 - Keep head, body heading, locomotion, weapon aim and recoil separate. Do not teleport the server pawn to follow room-scale movement.
+- Eyes and controllers share a living-pawn anchor: reflected Actor.Location plus Pawn.EyeHeight, with PlayerController yaw only. Do not reuse the desktop scene origin: KF adds WalkBob (including through EyePosition) and camera shake there. The existing EyeHeight smoothing is retained, including its native landing behavior; this is not complete landing-comfort work. ViewTarget must still be the local pawn. Bounded probe request v13 carries verified EyeHeight/ViewTarget offsets; no game camera or bob settings are written.
 - Persistent stereo capability remains disabled. A bounded native-to-OpenXR bridge now repeatedly renders fresh private targets/cameras with exact RHI restoration and real HMD poses/FOVs. Temporal resources, image stability and map/device lifecycle acceptance remain pending.
 
 ## Gameplay and ammunition

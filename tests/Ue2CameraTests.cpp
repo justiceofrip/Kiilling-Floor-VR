@@ -2,6 +2,7 @@
 #include "kfvr/engine/Ue2Camera.h"
 #include "kfvr/interaction/TrackingMath.h"
 #include <limits>
+#include "kfvr/interaction/TrackedWeapon.h"
 using namespace kfvr;
 int main(){
  auto camera=ue2::CameraWorld({3066.85986f,-1373.27832f,-4563.15088f},{-72,-1851,0});CHECK(camera);
@@ -55,6 +56,22 @@ int main(){
  invalid=l->projection;invalid.values[0][1]=.01f;CHECK(!ue2::MakeSceneView(l->camera,invalid,512,384));
  invalid=l->projection;invalid.values[2][0]=std::numeric_limits<float>::infinity();CHECK(!ue2::MakeSceneView(l->camera,invalid,512,384));
  invalid=l->projection;invalid.values[0][0]=std::numeric_limits<float>::denorm_min();CHECK(!ue2::MakeSceneView(l->camera,invalid,512,384));
+ // Walking, crouch/stair eye-height changes and desktop pitch/roll all use
+ // the same origin for actual eye matrices and controller weapon transforms.
+ // For a +90-degree body yaw these independently known offsets are constant.
+ for(float travel:{0.f,10.f,137.f})for(float eyeHeight:{-10.f,18.f,34.f})for(int pitch:{-14000,0,9000}){
+  const math::Vec3 pawn{100+travel,-70+travel,12+travel};
+  const auto body=ue2::TrackedBodyWorld(pawn,eyeHeight,{pitch,16384,5000});CHECK(body);
+  math::Pose h;h.position={.1f,.15f,-.2f};math::Pose grip;grip.position={.2f,-.25f,-.5f};
+  const auto e=ue2::BuildEye(*body,{},h,{-1,1,1,-1},50,5,65536);
+  const auto w=interaction::SolveTrackedWeapon(*body,{},grip,{},50);CHECK(e&&w);
+  const auto& eye=e->camera.values[3];
+  CHECK(Near(eye[0],pawn.x-5)&&Near(eye[1],pawn.y+10)&&Near(eye[2],pawn.z+eyeHeight+7.5f));
+  CHECK(Near(w->fireOrigin.x-eye[0],-5)&&Near(w->fireOrigin.y-eye[1],15)&&Near(w->fireOrigin.z-eye[2],-20));
+  CHECK(Near(w->fireDirection.x,0)&&Near(w->fireDirection.y,1)&&Near(w->fireDirection.z,0));
+ }
+ CHECK(!ue2::TrackedBodyWorld({},std::numeric_limits<float>::quiet_NaN(),{}));
+ CHECK(!ue2::TrackedBodyWorld({0,0,std::numeric_limits<float>::infinity()},34,{}));
  return 0;
 }
 

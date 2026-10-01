@@ -5,7 +5,7 @@ OWNERS={'KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle',
 def layout(o):
  fields=[]
  for row in o.rows:
-  if row['class'].endswith('Property') and (row['outer'] in OWNERS or (row['outer']=='KFPawn' and row['name']=='healthToGive') or (row['outer']=='Pawn' and row['name'] in ['Health','HealthMax','ShieldStrength','Weapon']) or (row['outer']=='Actor' and row['name'] in ['Location','Rotation','Velocity','DrawScale','bHidden','bDeleteMe','LifeSpan'])):
+  if row['class'].endswith('Property') and (row['outer'] in OWNERS or (row['outer']=='KFPawn' and row['name']=='healthToGive') or (row['outer']=='Pawn' and row['name'] in ['Health','HealthMax','ShieldStrength','Weapon','EyeHeight','BaseEyeHeight','WalkBob']) or (row['outer']=='Actor' and row['name'] in ['Location','Rotation','Velocity','DrawScale','bHidden','bDeleteMe','LifeSpan'])):
    d=o.read(int(row['address'],16),116);off=unpack(d,76);size=unpack(d,60)
    if unpack(d,56)!=1 or size not in [4,12]:continue
    fields.append((row['outer'],row['name'],row['class'],off,size,unpack(d,112)))
@@ -37,6 +37,15 @@ def object_layout(o,row):
 
 def sample(o):
  if not hasattr(o,'vr_schema'):o.vr_schema=layout(o)
+ # Bracket multi-object reads with the rig's packet and completion counters.
+ # A walking pawn may advance several UU between reads; crossed-Tick samples
+ # are useful logs but cannot establish relative hand/weapon attachment.
+ guards=[]
+ for row,fields,size_needed in o.vr_schema:
+  if row['class']=='KFVRWeaponRig':
+   for owner,name,typ,off,size,mask in fields:
+    if name in ['Tracking.Serial','LastSerial','AppliedFrames']:
+     at=int(row['address'],16)+off;guards.append((at,o.read(at,size)))
  out=[]
  for row,fields,size_needed in o.vr_schema:
   address=int(row['address'],16);buffer=o.read(address,size_needed);values={}
@@ -68,6 +77,7 @@ def sample(o):
     cls=o.object_name(unpack(h,40))
     if cls in ['Nade','MedicNade','FlameNade']:
      o.vr_schema.append(object_layout(o,dict(address=hex(ptr),index=index,**{'class':cls})))
+ o.rig_sample_consistent=bool(guards) and all(o.read(at,len(before))==before for at,before in guards)
  return out
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--seconds',type=float,default=20);a=p.parse_args()
@@ -96,7 +106,7 @@ if __name__=='__main__':
       o=fresh;next_discovery=time.monotonic()+1;consecutive_errors=0
      if pending is None and time.monotonic()>=next_discovery:pending=discovery.submit(discover)
      if o is not None:
-      f.write(json.dumps(dict(uptime_ms=tick(),objects=sample(o)))+'\n');f.flush()
+      f.write(json.dumps(dict(uptime_ms=tick(),objects=sample(o),rig_sample_consistent=o.rig_sample_consistent))+'\n');f.flush()
     except (OSError,ValueError) as error:
      if not transient(error):raise
      consecutive_errors+=1

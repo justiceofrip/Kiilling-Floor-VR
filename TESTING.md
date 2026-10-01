@@ -180,3 +180,16 @@ Final corrected native-hand runs 033143, 033344 and 033451 pass 64 hand, 25 inve
 Geometry checks are not visual acceptance: initial triangle-expanded assets passed some full bone/interaction trials while palms visibly tore. The final shared-point/descending-influence exports remove that defect in inspected pistol, free-hand, rifle and magazine captures. Earlier failures and temporary bind/material isolation reports remain saved. No headset acceptance is claimed.
 
 Twelve final local-asset checks verify deterministic mesh/animation output, compiled input matches, normalized ordered skin weights, rigid caps, finite hand-only geometry, source/package hashes and release exclusion. Seven staging fixture checks independently verify preservation of unowned packages and that an invalid optional install cannot first update the main package. Both native architectures and official SDK/script suites pass. Runtime game logs close normally without script errors.
+
+
+## Fixed-controller walking regression
+
+Start a fresh standalone match with `Start-KFVRDev.ps1 -Unattended -NativeHands`, wait until the pawn is alive, then run:
+
+```powershell
+py -3.12 G:\KFVR\tools\native_bridge_trial.py --pid GAME_PID --game 'F:\SteamLibrary\steamapps\common\KillingFloor' --walking-aim --width 1280 --height 960
+```
+
+The 22.5-second desktop receiver holds head/controllers fixed, selects the single pistol then Bullpup, walks forward/backward and strafes both ways without firing, then drops focus. It validates real pawn displacement, measured muzzle bones, weapon-to-palm attachment, head-relative hand position, aim direction and release. The read-only observer brackets its multi-object snapshots with rig packet/completion counters and excludes crossed-Tick reads from attachment assertions. Native camera samples independently record the desktop and clean pawn/eye-height origins. Reports remain local; no headset is presented. Existing `--hands` and `--inventory` suites cover tracking-space transforms, focus loss, holsters, firing and rifle support after anchor changes.
+
+This verifies pose correspondence in the engine, not wearable comfort, complete render-cache behavior, anatomical grip fit, or the cause of every wearer-reported visual movement. Crouch/stair heights and desktop pitch/roll isolation have deterministic math coverage; walking in the private map supplies the live check. Physical crouch/stair/landing comfort is not newly accepted.

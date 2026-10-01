@@ -13,6 +13,9 @@ namespace kfvr::native {
 namespace {
 using Constructor=void(__thiscall*)(void*,void*,void*,void*,math::Vec3,ue2::Rotator,float);
 using Destructor=void(__thiscall*)(void*);
+NativeProbeConfig bodyConfig{};
+struct BodyRow {TrackedBody body;math::Vec3 desktopOrigin;};
+std::array<BodyRow,2000> bodyRows{};unsigned bodyCount=0;
 Constructor construct=nullptr;Destructor destroy=nullptr;using Renderer=void(__thiscall*)(void*,void*);Renderer render=nullptr;
 struct CameraCase {math::Vec3 origin{};ue2::Rotator rotation{};float fov=0,derivedError=0,cameraError=0,viewError=0,inverseError=0,productError=0;std::array<math::Matrix4,6> matrices{};bool finite=true,canary=true,fields=false;};
 struct Trial {std::atomic<bool> ready=false;bool attempted=false,originalUnchanged=false,prerequisites=false;std::array<CameraCase,5> cases{};} trial;
@@ -20,6 +23,17 @@ bool Read(unsigned at,void* out,unsigned bytes){SIZE_T got=0;return at>=0x10000&
 unsigned U32(unsigned at){unsigned v=0;Read(at,&v,4);return v;}
 template<class T>T Field(const void* at,unsigned offset){T result{};std::memcpy(&result,static_cast<const unsigned char*>(at)+offset,sizeof(result));return result;}
 float Error(const math::Matrix4& a,const math::Matrix4& b){float e=0;for(unsigned i=0;i<4;++i)for(unsigned j=0;j<4;++j)e=std::max(e,std::abs(a.values[i][j]-b.values[i][j]));return e;}
+}
+void ConfigureTrackedBody(const NativeProbeConfig& c){bodyConfig=c;}
+std::optional<TrackedBody> ReadTrackedBody(){
+ const auto& c=bodyConfig;if(!c.bridgeTrial)return {};
+ const auto pawn=U32(c.controller+c.pawnOffset);int health=0;TrackedBody result;ue2::Rotator rotation{};
+ if(!pawn||U32(c.controller+4)!=c.controllerIndex||U32(c.controller+c.levelOffset)!=c.level||U32(c.controller+c.playerOffset)!=c.viewport||U32(c.controller+c.viewTargetOffset)!=pawn||U32(pawn+c.levelOffset)!=c.level||U32(pawn+c.pawnControllerOffset)!=c.controller||!Read(pawn+c.healthOffset,&health,4)||health<=0||U32(c.level+c.pauserOffset)||!Read(pawn+c.locationOffset,&result.pawnLocation,12)||!Read(pawn+c.eyeHeightOffset,&result.eyeHeight,4)||!std::isfinite(result.eyeHeight)||std::abs(result.eyeHeight)>200||!Read(c.controller+c.rotationOffset,&rotation,12))return {};
+ // EyeHeight retains native stair/crouch smoothing. WalkBob, camera shake,
+ // desktop pitch and roll never enter the common eye/controller reference.
+ result.heading={0,rotation.yaw,0};
+ auto camera=ue2::TrackedBodyWorld(result.pawnLocation,result.eyeHeight,rotation);if(!camera)return {};
+ result.camera=*camera;return result;
 }
 void SetCameraMethods(void* constructor,void* destructor,void* renderer){construct=reinterpret_cast<Constructor>(constructor);destroy=reinterpret_cast<Destructor>(destructor);render=reinterpret_cast<Renderer>(renderer);}
 void ProbeCameras(void* original,void* target){
@@ -106,12 +120,9 @@ bool RenderTrackedCamera(void* original,void* target,void* ri,const runtime::Tra
  if(!viewport||!actor||!level||!model||!U32(model+0xe0)||!U32(level+0x1154)||U32(U32(viewport+0x34)+0x9c)!=level)return false;
  const auto nativeProjection=Field<math::Matrix4>(before.data(),0x94);
  const float nearZ=-nativeProjection.values[3][2]/nativeProjection.values[2][2],farZ=-nativeProjection.values[3][2]/(nativeProjection.values[2][2]-1);
- // The desktop camera provides body position and heading only. Mouse pitch,
- // roll and pitch recoil must not tilt the headset's tracking space.
- const auto bodyRotation=Field<ue2::Rotator>(before.data(),0x1d4);
- auto bodyCamera=ue2::CameraWorld(Field<math::Vec3>(before.data(),0x194),{0,bodyRotation.yaw,0});
- if(!bodyCamera)return false;
- auto eyeMatrices=ue2::BuildEye(*bodyCamera,tracking.referenceHead,tracking.eyes[eye],tracking.fov[eye],units,nearZ,farZ);
+ const auto body=ReadTrackedBody();if(!body)return false;
+ if(eye==0&&bodyCount<bodyRows.size())bodyRows[bodyCount++]={*body,Field<math::Vec3>(before.data(),0x194)};
+ auto eyeMatrices=ue2::BuildEye(body->camera,tracking.referenceHead,tracking.eyes[eye],tracking.fov[eye],units,nearZ,farZ);
  if(!eyeMatrices)return false;auto rotation=ue2::CameraRotation(eyeMatrices->camera);auto complete=ue2::MakeSceneView(eyeMatrices->camera,eyeMatrices->projection,width,height);if(!rotation||!complete)return false;
  alignas(16) std::array<unsigned char,0x240> storage;storage.fill(0xcd);auto* scene=storage.data()+16;
  // Native construction establishes the correct point/zone before all private
@@ -123,6 +134,12 @@ bool RenderTrackedCamera(void* original,void* target,void* ri,const runtime::Tra
  return intact;
 }
 void WriteCameraReport(const std::filesystem::path& folder){
+ if(bodyConfig.bridgeTrial){
+  std::ofstream audit(folder/L"native-body-camera.json");audit.precision(9);audit<<"{\"source\":\"pawn_location_plus_eye_height_controller_yaw\",\"samples\":[";
+  for(unsigned i=0;i<bodyCount;++i){const auto& r=bodyRows[i];const auto& p=r.body.pawnLocation;const auto& b=r.body.camera.values[3];if(i)audit<<',';
+   audit<<"{\"pawn\":["<<p.x<<','<<p.y<<','<<p.z<<"],\"eye_height\":"<<r.body.eyeHeight<<",\"origin\":["<<b[0]<<','<<b[1]<<','<<b[2]<<"],\"desktop_origin\":["<<r.desktopOrigin.x<<','<<r.desktopOrigin.y<<','<<r.desktopOrigin.z<<"],\"yaw\":"<<r.body.heading.yaw<<'}';
+  }audit<<"]}\n";
+ }
  std::ofstream out(folder/L"native-camera-trial.json");if(!trial.ready.load(std::memory_order_acquire)){out<<"{\"ready\":false}\n";return;}
  out<<std::boolalpha<<"{\"ready\":true,\"prerequisites\":"<<trial.prerequisites<<",\"original_scene_unchanged\":"<<trial.originalUnchanged<<",\"render_replayed\":false,\"world_scale_calibrated\":false,\"cases\":[";
  bool first=true;for(const auto& row:trial.cases){if(!first)out<<',';first=false;out.precision(9);out<<"{\"fields_match\":"<<row.fields<<",\"canaries_intact\":"<<row.canary<<",\"finite\":"<<row.finite<<",\"derived_max_error\":"<<row.derivedError<<",\"camera_max_error\":"<<row.cameraError<<",\"view_max_error\":"<<row.viewError<<",\"projection_inverse_max_error\":"<<row.inverseError<<",\"view_projection_max_error\":"<<row.productError<<",\"origin\":["<<row.origin.x<<','<<row.origin.y<<','<<row.origin.z<<"],\"rotation\":["<<row.rotation.pitch<<','<<row.rotation.yaw<<','<<row.rotation.roll<<"],\"fov\":"<<row.fov<<",\"matrices\":[";

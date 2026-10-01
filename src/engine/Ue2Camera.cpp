@@ -14,6 +14,10 @@ std::optional<math::Matrix4> CameraWorld(math::Vec3 p,Rotator r) noexcept {
  m.values[1]={float(-cr*sp*cy-sr*sy),float(sr*cy-cr*sp*sy),float(cr*cp),0};
  m.values[2]={float(cp*cy),float(cp*sy),float(sp),0};m.values[3]={p.x,p.y,p.z,1};return m;
 }
+std::optional<math::Matrix4> TrackedBodyWorld(math::Vec3 p,float eyeHeight,Rotator rotation) noexcept {
+ if(!std::isfinite(eyeHeight))return {};
+ p.z+=eyeHeight;return CameraWorld(p,{0,rotation.yaw,0});
+}
 std::optional<Rotator> CameraRotation(const math::Matrix4& m) noexcept {
  if(!interaction::InverseRigid(m))return {};
  const auto& f=m.values[2];const double horizontal=std::hypot(f[0],f[1]);

@@ -167,7 +167,7 @@ void ReadTarget(){
 
 
 bool RenderBridgePair(void* scene,void* ri,const kfvr::runtime::PresentationRequirements& requirements,const kfvr::runtime::TrackingFrame& tracking,kfvr::native::NativeSurfaces& surfaces){
- kfvr::native::CaptureWeaponAnchor(scene,tracking);
+ kfvr::native::CaptureWeaponAnchor(tracking);
  using Microsoft::WRL::ComPtr;
  const auto address=reinterpret_cast<unsigned>(ri),renderer=U32(address+4);auto* device=reinterpret_cast<IDirect3DDevice9*>(U32(renderer+0x495c));
  const auto stack=U32(address+0x59870),cache=U32(address+0x5940c);std::array<unsigned char,0x594> before{},after{};
@@ -271,7 +271,7 @@ void WriteStereo(const std::filesystem::path& folder){
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=12||config.weaponTrial>1||(config.weaponTrial&&(!config.bridgeTrial||!config.movementTrial||config.rig<0x10000||config.rigTrackingOffset<44||config.rigTrackingOffset>8192||config.rigFeedbackOffset<44||config.rigFeedbackOffset>8192))||config.turningTrial>1||(config.turningTrial&&(!config.movementTrial||config.rotationOffset<44||config.rotationOffset>8192||config.snapDegrees<15||config.snapDegrees>90))||config.movementTrial>1||(config.movementTrial&&(!config.inputTrial||!config.bridgeTrial))||config.inputTrial>1||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>(config.bridgeTrial?180000u:15000u)||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=13||config.weaponTrial>1||(config.weaponTrial&&(!config.bridgeTrial||!config.movementTrial||config.rig<0x10000||config.rigTrackingOffset<44||config.rigTrackingOffset>8192||config.rigFeedbackOffset<44||config.rigFeedbackOffset>8192))||config.turningTrial>1||(config.turningTrial&&(!config.movementTrial||config.rotationOffset<44||config.rotationOffset>8192||config.snapDegrees<15||config.snapDegrees>90))||config.movementTrial>1||(config.movementTrial&&(!config.inputTrial||!config.bridgeTrial))||config.inputTrial>1||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>(config.bridgeTrial?180000u:15000u)||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
@@ -289,7 +289,11 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
   kfvr::native::SetCameraMethods(methods[0],methods[1],methods[2]);
  }
  if(config.movementTrial)for(auto offset:{config.pawnOffset,config.healthOffset,config.pawnControllerOffset,config.pauserOffset,config.locationOffset})if(offset<44||offset>8192)return 25;
+ if(config.bridgeTrial){
+  for(auto offset:{config.pawnOffset,config.healthOffset,config.pawnControllerOffset,config.pauserOffset,config.locationOffset,config.rotationOffset,config.eyeHeightOffset,config.viewTargetOffset})if(offset<44||offset>8192)return 11;
+ }
  if(MH_Initialize()!=MH_OK)return 14;
+ kfvr::native::ConfigureTrackedBody(config);
  kfvr::native::ConfigureWeaponRig(config);
  if(config.bridgeTrial&&!kfvr::native::StartEyeBridge(config.channelToken))return 23;
  if(config.movementTrial)kfvr::native::SetMovementSource(MovementInput);

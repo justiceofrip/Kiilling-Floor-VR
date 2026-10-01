@@ -1,4 +1,5 @@
 #include "NativeWeaponRig.h"
+#include "NativeCameraTrial.h"
 #include "NativeEyeBridge.h"
 #include "kfvr/interaction/TrackedWeapon.h"
 #include "kfvr/interaction/FingerPose.h"
@@ -23,7 +24,7 @@ struct Packet {
 static_assert(sizeof(Packet)==124&&offsetof(Packet,headPosition)==88&&offsetof(Packet,serial)==120);
 std::atomic<bool> stopped=false;std::atomic<unsigned> users=0;
 struct Use {Use(){users.fetch_add(1);}~Use(){users.fetch_sub(1);}};
-NativeProbeConfig config{};runtime::TrackingFrame tracking{};math::Vec3 origin{},pawnOrigin{};
+NativeProbeConfig config{};runtime::TrackingFrame tracking{};
 unsigned feedbackSerial=0,leftFeedbackSerial=0,rightFeedbackSerial=0,haptics=0;
 DWORD thread=0;bool anchor=false;unsigned updates=0,valid=0,invalid=0,failed=0;int serial=0;
 struct Row {Packet packet;};std::array<Row,1000> rows{};unsigned count=0;
@@ -37,9 +38,8 @@ std::optional<ue2::Rotator> Rotation(const math::Matrix4& m){
 }
 }
 void ConfigureWeaponRig(const NativeProbeConfig& c){config=c;if(c.weaponTrial){feedbackSerial=U32(c.rig+c.rigFeedbackOffset);leftFeedbackSerial=U32(c.rig+c.rigFeedbackOffset+20);rightFeedbackSerial=U32(c.rig+c.rigFeedbackOffset+24);}}
-void CaptureWeaponAnchor(void* scene,const runtime::TrackingFrame& frame){
- if(!config.weaponTrial)return;const auto at=reinterpret_cast<unsigned>(scene),pawn=U32(config.controller+config.pawnOffset);
- if(!pawn||!Read(at+0x194,&origin,12)||!Read(pawn+config.locationOffset,&pawnOrigin,12)){anchor=false;return;}
+void CaptureWeaponAnchor(const runtime::TrackingFrame& frame){
+ if(!config.weaponTrial)return;
  tracking=frame;thread=GetCurrentThreadId();anchor=frame.headValid&&frame.focused;
 }
 void UpdateWeaponRig(void* actor,void* function,bool active)noexcept {
@@ -51,9 +51,9 @@ void UpdateWeaponRig(void* actor,void* function,bool active)noexcept {
  xr::ControllerFrame controls{};std::uint64_t sequence=0;
  const bool playing=active&&anchor&&thread==GetCurrentThreadId()&&pawn&&U32(pawn+config.pawnControllerOffset)==config.controller&&Read(pawn+config.healthOffset,&health,4)&&health>0&&!U32(config.level+config.pauserOffset)&&Read(pawn+config.locationOffset,&location,12)&&Read(config.controller+config.rotationOffset,&heading,12);
  if(playing&&ReadEyeBridgeControls(controls,sequence)&&controls.focused&&controls.spaceGeneration==tracking.spaceGeneration){
-  packet.bodyRotation={0,heading.yaw,0};const math::Vec3 adjusted{origin.x+location.x-pawnOrigin.x,origin.y+location.y-pawnOrigin.y,origin.z+location.z-pawnOrigin.z};
-  const auto body=ue2::CameraWorld(adjusted,packet.bodyRotation);
-  if(body){
+  const auto currentBody=ReadTrackedBody();
+  if(currentBody){
+   packet.bodyRotation=currentBody->heading;const auto* body=&currentBody->camera;
    const auto head=interaction::SolveTrackedWeapon(*body,tracking.referenceHead,tracking.head,{},config.unitsPerMetre);if(head)packet.headPosition=head->fireOrigin;
    for(unsigned i=0;i<2;++i){const auto& hand=controls.hands[i];if(!hand.gripValid||!hand.aimValid)continue;
     const auto presentation=interaction::ControllerPresentationPose(hand.gripPose,hand.aimPose);if(!presentation)continue;

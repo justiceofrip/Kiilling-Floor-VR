@@ -100,3 +100,6 @@ The installed syringe and welder idle working axes are about 47 degrees above th
 
 
 The optional [native KF hand pipeline](NATIVE_HANDS.md) replaces only the glove visuals when explicitly launched with `-NativeHands`. It retains actual KF geometry/UVs and character material in a separate locally generated package, with controller-driven fingers. Default gloves remain available. Wrist caps, exact grips and comfort still need wearer review; this is not arm IK or optical hand tracking.
+
+
+October 1 wearer feedback accepts the improved actual-KF hands and basic locomotion as a proof of concept. Thumb-touch poses, per-weapon grip contact and orientation still need tuning. Walking-induced weapon motion was reported, with gun motion relative to hands tentative. The common eye/controller anchor now excludes desktop camera bob/shake and keeps native pawn eye-height handling. Desktop walking/strafe measurements verify pistol/rifle attachment; this correction still needs wearer confirmation.

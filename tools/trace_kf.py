@@ -33,14 +33,14 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
  observer=Observer(pid,game)
  try:
   input_names=['aBaseX','aBaseY','aBaseZ','aMouseX','aMouseY','aForward','aTurn','aStrafe','aUp','aLookUp']
-  snapshot=observer.snapshot({'PlayerController':set(input_names),'Pawn':{'Controller'}}) if input_trial else observer.snapshot();(directory/'before.json').write_text(json.dumps(snapshot,indent=2))
+  snapshot=observer.snapshot({'Pawn':{'Controller','EyeHeight'},'PlayerController':set(input_names)|{'ViewTarget'}}) if input_trial or channel_token else observer.snapshot();(directory/'before.json').write_text(json.dumps(snapshot,indent=2))
   controllers=[r for r in snapshot['observations'] if r['class']=='KFPlayerController' and r['values'].get('PlayerController.Player')]
   if channel_token and stereo_trial:raise ValueError('Bridge and one-shot stereo trials are separate modes')
   if len(controllers)!=1:raise ValueError('Need exactly one local KF controller')
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<15I',1112,12,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
+  p=snapshot['properties'];config=struct.pack('<15I',1120,13,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
   images={}
   def installed_image(file):
    if file not in images:
@@ -88,7 +88,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    input_evidence.append(dict(address=base+rva,expected=input_expected.hex()))
   config+=struct.pack('<12I',int(input_trial),*input_offsets,tick_name)+input_expected
   movement_offsets=[0]*5
-  if movement_trial:
+  if movement_trial or channel_token:
    for i,(name,typ,size) in enumerate([('Controller.Pawn','ObjectProperty',4),('Pawn.Health','IntProperty',4),('Pawn.Controller','ObjectProperty',4),('LevelInfo.Pauser','ObjectProperty',4),('Actor.Location','StructProperty',12)]):
     prop=p[name]
     if prop['type']!=typ or prop['size']!=size or not 44<=prop['offset']<=8192:raise ValueError('Invalid movement property: '+name)
@@ -140,9 +140,20 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    rotation_offset=p['Actor.Rotation']['offset']
    if p['Actor.Rotation']['type']!='StructProperty' or p['Actor.Rotation']['size']!=12:raise ValueError('Invalid rotation field')
    rig_data=[address,rig['index'],cls,offset,tick_name_rig,p['Actor.Owner']['offset'],feedback_offset]
+  if channel_token:
+   rotation_offset=p['Actor.Rotation']['offset']
+   if p['Actor.Rotation']['type']!='StructProperty' or p['Actor.Rotation']['size']!=12:raise ValueError('Invalid body rotation property')
   config+=struct.pack('<3If',int(turning_trial),rotation_offset,rotation_name,snap_degrees)+call_expected
   config+=struct.pack('<8I',int(weapon_trial),*rig_data)
-  assert len(config)==1112
+  body_offsets=[0,0]
+  if channel_token:
+   for i,(name,typ) in enumerate([('Pawn.EyeHeight','FloatProperty'),('PlayerController.ViewTarget','ObjectProperty')]):
+    prop=p[name]
+    if prop['type']!=typ or prop['size']!=4 or not 44<=prop['offset']<=8192:raise ValueError('Invalid body anchor property: '+name)
+    body_offsets[i]=prop['offset']
+   if controller['values'].get('PlayerController.ViewTarget')!=controller['values'].get('Controller.Pawn'):raise ValueError('Tracked view must belong to the living local pawn')
+  config+=struct.pack('<2I',*body_offsets)
+  assert len(config)==1120
   request_path=directory/'request.bin';request_path.write_bytes(config)
   source=root/'build/x86/KFVRNativeProbe.dll';dll=directory/'KFVRNativeProbe.dll';dll.write_bytes(source.read_bytes())
   launcher=root/'build/x86/KFVRNativeTrace.exe'
@@ -206,7 +217,10 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   if channel_token:
    bridge_path=directory/'native-bridge.json';bridge=json.loads(bridge_path.read_text()) if bridge_path.exists() else {}
    bridge_passed=all(bridge.get(k) is True for k in ['closed','reset_hook_restored','resources_released']) and bridge.get('consumed_pairs',0)>0 and bridge.get('reason') in ['duration_finished','host_closed']
-   summary.update(bridge_trial_passed=bridge_passed,bridge=bridge)
+   body_path=directory/'native-body-camera.json';body=json.loads(body_path.read_text()) if body_path.exists() else {};body_rows=body.get('samples',[])
+   body_valid=body.get('source')=='pawn_location_plus_eye_height_controller_yaw' and len(body_rows)>=10 and all(all(math.isfinite(v) for v in r['origin']+r['pawn']+[r['eye_height']]) and math.dist(r['origin'],[r['pawn'][0],r['pawn'][1],r['pawn'][2]+r['eye_height']])<.001 for r in body_rows)
+   bridge_passed=bridge_passed and body_valid
+   summary.update(bridge_trial_passed=bridge_passed,bridge=bridge,body_anchor_passed=body_valid,body_anchor_samples=len(body_rows))
   weapon_passed=True
   if weapon_trial:
    weapon_path=directory/'native-weapon.json';weapon=json.loads(weapon_path.read_text()) if weapon_path.exists() else {};weapon_passed=weapon.get('valid',0)>10 and weapon.get('failed',1)==0
