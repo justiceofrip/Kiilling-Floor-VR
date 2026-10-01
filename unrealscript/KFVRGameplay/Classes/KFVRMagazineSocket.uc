@@ -61,7 +61,7 @@ simulated function Tick(float Delta)
     local float Travel,RestError,StartDistance,ForwardTravel,TranslationScale;
     if (Target==None || Target.bDeleteMe || Gun==None || Gun.bDeleteMe
         || Target.SourceWeapon!=Gun) { Destroy(); return; }
-    if (Stage==3 && (!Target.bAuthoredActionProfile || Target.MagazineBone!=TranslationBone))
+    if (Stage==3 && (!Target.bFeedOnSeat || Target.MagazineBone!=TranslationBone))
     { Fail(); return; }
     if (Level.TimeSeconds<=QueuedAt) return;
     BoneRefresh(); Chassis=GetBoneCoords(ChassisBone); Magazine=GetBoneCoords(Target.MagazineBone);
@@ -109,9 +109,9 @@ simulated function Tick(float Delta)
     if (VSize(Target.InsertionX)<0.99 || VSize(Target.InsertionY)<0.99) { Fail(); return; }
     Target.InsertionSampleTravel=Travel; Target.InsertionEndDistance=VSize(EndOffset);
     Target.InsertionRestError=RestError;
-    if (Target.bAuthoredActionProfile)
+    if (Target.bFeedOnSeat)
     {
-        // Authored actions need magazine motion without probing the visible
+        // Magazine-only profiles need motion without probing the visible
         // rifle. Keep readiness closed until this hidden clone measures it.
         Target.bInsertionCalibrated=False;
         Target.bTranslationCalibrated=False; Target.bHiddenTranslationCalibrated=False;

@@ -72,7 +72,7 @@ The current single-pistol defaults arm at least 5 cm outside the seated root, fi
 
 The 132-byte tracking packet separates game/presentation `Serial`, fresh-controller `InputSerial`, and unscaled pose timestamp `InputSeconds`. Both single-pistol and belt insertion use controller time, so duplicate game Ticks and ZED-time dilation cannot shorten physical travel intervals. Pose/focus/expiry loss and source-clock faults reach the normal rig Tick and suspend the interaction; a reference-generation change delivers a neutral Tick even when new eye/controller frames arrive together. Delivery uses request ABI15, with reflected package/layout verification before native writes. The source clock subtracts an epoch before float conversion and rejects rollback, mutated/replayed timestamps and large jumps; no input expiry was extended.
 
-After seating, release the offhand grip before a fresh slide grab. Seating does not chamber a round; a retained chamber remains retained, and an empty chamber still needs the existing full slide stroke. No timed reload or animation completion credits ammunition.
+For an installed manual-action profile, release the offhand grip after seating before a fresh slide grab. Seating alone does not chamber a round; a retained chamber remains retained, and an empty chamber still needs the existing full slide stroke. No timed reload or animation completion credits ammunition.
 
 
 ## Extending the pistol mechanism
@@ -96,14 +96,33 @@ Live single/dual adapters reconcile capacity after stock weapon updates and publ
 
 ## Support and reload ownership
 
-A manual magazine/action grasp reserves the offhand before two-handed weapon support chooses a pose. A fresh belt-grab attempt gets the same priority, using the current body-space belt location. Seating while the squeeze remains held cannot acquire support: release and squeeze again first. Tracking loss, switching and holstering also require a fresh release/press before support returns. Physical reload still updates after the weapon's current pose, so magazine/action contact uses the current frame.
+A manual magazine/action grasp reserves the offhand before two-handed weapon support chooses a pose. A fresh belt-grab attempt gets the same priority, using the current body-space belt location. Seating while the squeeze remains held cannot acquire support: release and squeeze again first. Tracking loss, switching and holstering also require a fresh release/press before support returns. Physical reload still updates after the weapon's current pose, so magaMagazine capability alone does not imply an action exists. The installed Bullpup has a magazine and no separate reload action. Its explicit magazine-only policy finishes an empty reload on a successful seat, moving one existing round into the chamber. A retained chamber remains untouched. Unknown weapons receive neither an invented part nor an automatic feed policy.
 
-Magazine capability alone does not enable a complete physical reload. The Bullpup has measured magazine geometry but no independent action bone. Its opt-in RifleReloadTest fixture now adds an authored chambering handle; ordinary launch retains timed reload. Existing pistol slide travel and magazine state transitions are unchanged.
+## Current controls
 
-## Bullpup charging-handle prototype
+Use `Start-KFVRDev.ps1 -Unattended -NativeHands -VRProfile -PhysicalReloads` for the current private test. Supported non-dual guns enter physical mode automatically; Y is not needed. Without that option, the legacy Y toggle remains available. Dual pistols retain their separate Y belt-mode toggle.
 
-Use `Start-KFVRDev.ps1 -Unattended -NativeHands -VRProfile -RifleReloadTest` for the private prototype. Select the rifle at the right shoulder, then use the existing physical-mode toggle. Magazine release, native offhand magazine grasp, belt supply, continuous insertion and retained partial magazines reuse the shared system.
+- Right B releases the magazine. Hold left grip near its measured magazine grasp to catch it; otherwise the native magazine briefly falls from the gun.
+- Keep holding the caught magazine to move it. Release at the belt to retain its contents, then grip the belt for supply and push the magazine along its measured insertion path.
+- For a pistol with an empty chamber, release left grip once after seating, squeeze it near the slide, pull fully and release or guide it forward. Neither left trigger nor right grip is required. The visible native hand attaches to the slide during this grasp.
+- Bullpup ends at magazine insertion; there is no handle or chambering gesture.
 
-For an empty chamber, release after seating, hold offhand grip plus trigger near the new receiver-side knob, pull it rearward through its 60 mm travel, and let it return or guide it forward. Tactical reloads preserve an existing chambered round; no extra rack is required. Tracking loss and moving the hand out of the capture envelope cancel a pull without chambering. Stock firing still handles cadence and damage.
+The uncaught magazine presentation is temporary and cannot be picked back up. It disappears when replaced by a held/seated magazine, when tracking/switch cancels it, or after 2.5 seconds. This adds visible release feedback, not dropped-item persistence. Exact palm contact and appearance still need wearer assessment.
 
-The knob is original prototype geometry attached as a separate part. Position, travel, finish and grasp comfort need wearer polish. This does not repair the original rifle's missing back surfaces, add a stock bolt animation, or enable other unaudited weapons.
+## Audited expansion map
+
+An October 1 read-only audit examined the installed mesh weights, animation tracks and SDK. The supplied video could not be fetched. Repeatable local evidence is in `reports/reload_family_asset_audit.py` and `reports/reload-family-asset-audit.json`; proprietary exports stay ignored under `local/reload-family-audit`.
+
+| Weapon | Existing animation behavior | Adapter work still required |
+|---|---|---|
+| Bullpup | Magazine replacement, no reload action | Current explicit seat-completion policy |
+| AK47 | Native bolt after magazine replacement | Magazine grasp/root calibration, then installed rail |
+| SCAR | Bolt exists but does not move in Reload | Magazine-only policy; do not infer a rack from its bone name |
+| M4 | Two magazine meshes plus handle, latch and bolt | Replacement-magazine handoff and coupled action parts |
+| AA12 | Handle operates before magazine replacement | Action-before-magazine sequence |
+| Pump shotgun | Individual shells, pump and charging handle move together | Tube ledger and coupled pump action |
+| Benelli | Shell loading, rotating tray and terminal bolt operation | Shell ledger and bolt interaction |
+| KSG | Modified stock loading piece plus pump | Audit its actual loading geometry; do not substitute real-world assumptions |
+| BoomStick | Hinge, latch and shell tracks in Fire_Both/Fire_Last, no Reload clip | Two chambers and hinged breech; block stock timed refill |
+
+This is an implementation map, not enabled weapon coverage. AK47/SCAR grasps exceed the current palm-to-mag-root guard, and M4 switches between two magazine meshes. Simply supplying bone names would produce incorrect interactions. Current 9mm/Deagle 50 mm interaction strokes and action-palm contacts remain provisional; measured reload slide motion is about 38.66/32.60 mm, versus MK23's measured 45.86 mm. All metre values assume the current 300 model-units/metre presentation scale.

@@ -44,7 +44,7 @@ var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
 var bool bManualArmed,bManualPrevious,bUseArmed,bUsePrevious;
 var int UseCount;
-var bool bMeleeTest,bArmTest,bNativeHandTest,bRifleReloadTest;
+var bool bMeleeTest,bArmTest,bNativeHandTest,bPhysicalReloadDefault;
 var KFVRMeleeTarget MeleeTarget;
 var KFVRSupportGripState SupportGrip;
 var bool bSupportHeld,bSupportArmed,bSupportPrevious;
@@ -68,6 +68,18 @@ function PulseLeft(float Strength, int DurationMs)
     Feedback.LeftAmplitude=FClamp(Strength,0.0,1.0); Feedback.LeftMs=Clamp(DurationMs,0,100);
     Feedback.LeftSerial++; Feedback.Serial++;
 }
+function bool EnableManualReload()
+{
+    if (ManualReload!=None) return True;
+    if (Gun==None || Visual==None || Gun.bIsReloading || bHolstered || !Visual.ManualReloadReady()
+        || KFVRTrackedDualies(Gun)!=None) return False;
+    ManualReload=Spawn(class'KFVRManualReload',self);
+    if (ManualReload==None) return False;
+    if (!ManualReload.Initialize(self,Gun)) { ManualReload.Destroy(); ManualReload=None; return False; }
+    InventoryManuals[ActiveIndex]=ManualReload;
+    Gun.StopFire(0); bFiring=False; bTriggerArmed=False;
+    return True;
+}
 function ToggleManualReload()
 {
     if (Gun==None || Visual==None || Gun.bIsReloading || bHolstered) return;
@@ -85,9 +97,7 @@ function ToggleManualReload()
     }
     else
     {
-        ManualReload=Spawn(class'KFVRManualReload',self);
-        if (ManualReload!=None && !ManualReload.Initialize(self,Gun))
-        { ManualReload.Destroy(); ManualReload=None; return; }
+        if (!EnableManualReload()) return;
     }
     InventoryManuals[ActiveIndex]=ManualReload;
     bTriggerArmed=False; Gun.StopFire(0); bFiring=False; PulseLeft(0.5,40);
@@ -379,12 +389,9 @@ function EnsureHandVisuals()
 // This avoids displaying the previous weapon frame or a stale grasp role.
 function Tick(float Delta)
 {
-    local int I;
     UpdateRig(Delta);
     // Also synchronize hides after tracking loss, switching or rig release.
-    // Child parts never advance mechanics or acquire their own Tick order.
-    for (I=0;I<InventoryCount;I++)
-        if (InventoryVisuals[I]!=None) InventoryVisuals[I].SyncAuthoredAction();
+    if (LeftHand!=None) LeftHand.bActionAttached=False;
     if (bTracking) UpdateHands();
     PresentationSerial=Tracking.Serial;
 }
@@ -405,6 +412,11 @@ function UpdateHands()
     }
     if (LeftHand!=None)
     {
+        if (ManualReload!=None && ManualReload.bSlideHeld && !bHolstered && Visual!=None && !Visual.bHidden && (Tracking.Flags & 3)==3)
+        {
+            LeftHand.bActionAttached=True; LeftHand.ActionPalmTarget=ManualReload.ActionPalmWorld;
+            LeftHand.ActionPalmRotation=ManualReload.ActionPalmRotation;
+        }
         LeftHand.bHidden=(Tracking.Flags & 1)==0;
         if (!LeftHand.bHidden) LeftHand.PoseHand(Tracking.LeftPosition,Tracking.LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl,LeftRole,LeftGrasp,True);
     }
@@ -421,6 +433,7 @@ function UpdateRig(float Delta)
     local bool GripDown,ReloadDown,CycleDown,ManualDown,UseDown;
     local int I;
     local coords Muzzle;
+    local KFVRManualReload PendingEject;
     PC=PlayerController(Owner);
     if (Level.NetMode!=NM_Standalone || PC==None || PC.Pawn==None || PC.Pawn.Health<=0 || Level.Pauser!=None)
     { ReleaseInput(); return; }
@@ -498,6 +511,7 @@ function UpdateRig(float Delta)
     bUsePrevious=UseDown;
     if (Trader!=None && Trader.bOpen) return;
     ReloadDown=(Tracking.Flags & 32)!=0; CycleDown=(Tracking.Flags & 4)!=0;
+    if (bPhysicalReloadDefault && !bHolstered) EnableManualReload();
     ManualDown=(Tracking.Flags & 16)!=0;
     if (!ManualDown) bManualArmed=True;
     if (bManualArmed && ManualDown && !bManualPrevious)
@@ -507,7 +521,7 @@ function UpdateRig(float Delta)
             if (MeleeTarget!=None) MeleeTarget.Destroy();
             MeleeTarget=Spawn(class'KFVRMeleeTarget',self,,MuzzleLocation+X*0.3*Tracking.UnitsPerMetre);
         }
-        else ToggleManualReload();
+        else if (!bPhysicalReloadDefault || KFVRTrackedDualies(Gun)!=None) ToggleManualReload();
     }
     bManualPrevious=ManualDown;
     if (!ReloadDown) bReloadArmed=True;
@@ -517,8 +531,9 @@ function UpdateRig(float Delta)
         Gun.StopFire(0); bFiring=False; bTriggerArmed=False;
         if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).ResetInput(True);
         if (KFVRTrackedDualies(Gun)!=None && KFVRTrackedDualies(Gun).Belt!=None) KFVRTrackedDualies(Gun).Belt.EjectDownward();
-        else if (ManualReload!=None && ManualReload.Gun==Gun) ManualReload.EjectMagazine();
-        else if (Gun.AllowReload()) { Gun.ReloadMeNow(); ReloadCount++; }
+        else if (ManualReload!=None && ManualReload.Gun==Gun) PendingEject=ManualReload;
+        else if ((!bPhysicalReloadDefault || KFVRTrackedDualies(Gun)!=None || (!Visual.ManualActionReady() && !Visual.bFeedOnSeat)) && Gun.AllowReload())
+        { Gun.ReloadMeNow(); ReloadCount++; }
     }
     if (bCycleArmed && CycleDown && !bCyclePrevious && InventoryCount>1)
         SelectInventoryWeapon((ActiveIndex+1)%InventoryCount);
@@ -537,6 +552,7 @@ function UpdateRig(float Delta)
         Position=Tracking.RightPosition-vector(GunRotation)*Recoil*Tracking.UnitsPerMetre;
     }
     Visual.PoseAt(Position,GunRotation,Tracking.UnitsPerMetre);
+    if (PendingEject!=None && PendingEject==ManualReload && PendingEject.Gun==Gun && !bHolstered) PendingEject.EjectMagazine();
     if (ManualReload!=None) ManualReload.Update(Delta);
     Visual.BoneRefresh(); Visual.SampleMagazinePose(); Muzzle=Visual.GetBoneCoords(Visual.TipBone);
     MuzzleLocation=Muzzle.Origin; AimRotation=GunRotation;

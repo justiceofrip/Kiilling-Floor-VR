@@ -56,7 +56,7 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.SPGrenadeLauncher | BreakActionLauncher | 1 | 0.009999999776482582 | Pending interaction/asset validation |
 | KFMod.FNFAL_ACOG_AssaultRifle | MagazineFed | 20 | 3.5999999046325684 | Pending interaction/asset validation |
 | KFMod.MAC10MP | MagazineFed | 30 | 3.0 | Pending interaction/asset validation |
-| KFMod.Bullpup | MagazineFed | 40 | 1.9666670560836792 | Tracked automatic fire, shoulder slot/support; opt-in RifleReloadTest adds physical magazines and an authored charging handle |
+| KFMod.Bullpup | MagazineFed | 40 | 1.9666670560836792 | Tracked automatic fire, shoulder slot/support; physical magazines finish at seating, no invented action; private PhysicalReloads startup |
 | KFMod.Welder | Tool | 0 | 0.0 | Tracked flame tip, stock charge/perks, real Offices door weld/unweld/Use verified |
 | KFMod.Winchester | LeverAction | 10 | 0.6666666865348816 | Pending interaction/asset validation |
 | KFMod.M4203AssaultRifle | MagazineFed+UnderbarrelLauncher | 30 | 3.6333000659942627 | Pending interaction/asset validation |

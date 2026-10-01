@@ -77,7 +77,7 @@ def analyze(rows):
                     and vector(v.get('SlideLocal')) and math.dist(v['SlideLocal'], (0, 0, 0)) == 0
                     and vector(v.get('MeasuredActionPosition')) and math.dist(v['MeasuredActionPosition'], (0, 0, 0)) == 0)
                 state['timed'] &= g.get('Manual') == '0x0'
-                state['translation'] &= v.get('bTranslationCalibrated') is False and v.get('bTranslationProbe') is False
+                state['translation'] &= v.get('bTranslationProbe') is False and (not v.get('bInsertionCalibrated') or (v.get('bTranslationCalibrated') is True and v.get('bHiddenTranslationCalibrated') is True))
             else:
                 state['capability'] &= (all(v.get(k) is True for k in ('bMagazineProfile', 'bActionProfile',
                     'bPhysicalProfile', 'bMagazineTranslationFrame', 'bActionTranslationFrame'))

@@ -61,7 +61,7 @@ def _capture(observer, snapshot, weapon):
     if not owned_by(rig, pc['address']):
         raise ValueError('Weapon rig is not owned by its bound controller')
     target_class = {'single': 'KFVRTrackedSingle', 'deagle': 'KFVRTrackedDeagle',
-                    'mk23': 'KFVRTrackedMK23'}[weapon]
+                    'mk23': 'KFVRTrackedMK23', 'bullpup':'KFVRTrackedBullpup'}[weapon]
     gun = _one([o for o in objects if o['type'] == target_class
                 and o['values'].get('VRRig') == rig['address'] and owned_by(o, pawn['address'])],
                'owned ' + target_class)
@@ -75,7 +75,7 @@ def _capture(observer, snapshot, weapon):
         raise ValueError('Installed reload insertion calibration failed for ' + target_class)
     if not v['bInsertionCalibrated']:
         raise _NotReady('Insertion calibration is still pending for ' + target_class)
-    if not v.get('bCalibrated') or not v.get('bPhysicalProfile'):
+    if not v.get('bCalibrated') or not v.get('bMagazineProfile') or not (v.get('bPhysicalProfile') or v.get('bFeedOnSeat')):
         raise ValueError('Selected visual has no valid physical weapon profile')
     units = _number(v.get('ModelUnitsPerMetre'), 'ModelUnitsPerMetre')
     if not 10 <= units <= 10000:
@@ -112,10 +112,24 @@ def _capture(observer, snapshot, weapon):
                ['InsertionSampleTravel', 'InsertionEndDistance', 'InsertionRestError']}
     if any(value < 0 for value in metrics.values()):
         raise ValueError('Negative insertion calibration distance')
-    values = gun_offset + grip_offset + axis
-    if len(values) != 9 or not all(math.isfinite(x) for x in values):
-        raise ValueError('Fixture must contain exactly nine finite values')
-    return dict(weapon=weapon, source_pid=observer.pid, read_only=True, generated_from_live_assets=True,
+    if weapon == 'bullpup':
+        if not v.get('bFeedOnSeat') or v.get('bActionProfile') or v.get('bPhysicalProfile'):
+            raise ValueError('Bullpup must use its installed magazine-only reload')
+        if not v.get('bHiddenTranslationCalibrated'):
+            raise _NotReady('Hidden magazine translation calibration is pending')
+        action_grasp, pull, travel = [0., 0., 0.], [-1., 0., 0.], 0.
+    else:
+        slide, offset = _vector(v, 'SlideLocal'), _vector(v, 'ActionPalmOffset')
+        action_grasp = [(x-y)/units+z for x,y,z in zip(slide,palm,offset)]
+        pull = _vector(v, 'ActionPullAxis')
+        travel = _number(v.get('ActionTravelMetres'), 'ActionTravelMetres')
+        if not .01 <= travel <= .25 or abs(math.dist(pull,(0,0,0))-1)>.001:
+            raise ValueError('Invalid installed action rail')
+    values = gun_offset + grip_offset + axis + action_grasp + pull + [travel]
+    if len(values) != 16 or not all(math.isfinite(x) for x in values):
+        raise ValueError('Fixture must contain exactly sixteen finite values')
+    return dict(protocol='kfvr-reload-v2', weapon=weapon, feed_on_seat=bool(v.get('bFeedOnSeat')),
+                action_grasp_from_weapon_palm_metres=action_grasp, action_pull_axis=pull, action_travel_metres=travel, source_pid=observer.pid, read_only=True, generated_from_live_assets=True,
                 rig_address=rig['address'], pawn_address=pawn['address'], gun_address=gun['address'],
                 visual_address=visual['address'], magazine_grip_address=grip_address,
                 native_hands=native, model_units_per_metre=units,
@@ -131,8 +145,8 @@ def make_fixture(pid, game, folder, weapon='single') -> Path:
     This does not select a weapon or modify the game. The native trial runner
     still performs its normal private-world/viewport preflight before injection.
     """
-    if weapon not in ('single', 'deagle', 'mk23'):
-        raise ValueError('Insertion fixture weapon must be single, deagle or mk23')
+    if weapon not in ('single', 'deagle', 'mk23', 'bullpup'):
+        raise ValueError('Insertion fixture weapon must be single, deagle, mk23 or bullpup')
     game, folder = Path(game), Path(folder)
     deadline = time.monotonic() + 10
     reason = 'No calibration snapshot'
@@ -161,7 +175,7 @@ def make_fixture(pid, game, folder, weapon='single') -> Path:
         time.sleep(min(0.1, remaining))
     metadata['captured_utc'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     folder.mkdir(parents=True, exist_ok=True)
-    (folder/'reload-fixture.json').write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
-    path = folder/'reload-fixture.txt'
+    (folder/('rifle-reload-fixture.json' if weapon=='bullpup' else 'reload-fixture.json')).write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
+    path = folder/('rifle-reload-fixture.txt' if weapon=='bullpup' else 'reload-fixture.txt')
     path.write_text(' '.join(format(value, '.9g') for value in metadata['values']) + '\n', encoding='ascii')
     return path

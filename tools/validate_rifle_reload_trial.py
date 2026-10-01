@@ -1,3 +1,5 @@
+# Historical analyzer for removed prototype checkpoint 6520481.
+# Current Bullpup tests use validate_reload_ux.py and the magazine-only profile.
 """Independent desktop evidence for the opt-in Bullpup authored-action trial.
 
 Uses the ordinary reload phases (including its two-second full-pull dwell).

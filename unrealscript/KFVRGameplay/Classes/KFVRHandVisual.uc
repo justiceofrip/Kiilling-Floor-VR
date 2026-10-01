@@ -1,5 +1,8 @@
 // Sleeve-free hand presentation: authored defaults or optional locally built KF art.
 class KFVRHandVisual extends KFVRWeaponVisual;
+var bool bActionAttached;
+var vector ActionPalmTarget;
+var rotator ActionPalmRotation;
 #exec MESH MODELIMPORT MESH=KFVRGloveRight MODELFILE=Models\KFVRGloveRight.psk
 #exec MESH ORIGIN MESH=KFVRGloveRight X=0 Y=0 Z=0 YAW=0 PITCH=0 ROLL=0
 #exec MESH SCALE MESH=KFVRGloveRight X=1 Y=1 Z=1
@@ -187,6 +190,7 @@ simulated function PoseGlove(vector Position,rotator HandRotation,float Units)
     local vector X,Y,Z,DesiredX,DesiredY,DesiredZ,UnrolledY;
     local coords C,Closed;
     TrackedPalmPosition=Position;
+    if (bActionAttached) { Position=ActionPalmTarget; HandRotation=ActionPalmRotation; }
     if (bGripPose)
     {
         if (!bGripSourceLeft) GripBase=16;
@@ -370,6 +374,7 @@ simulated function PoseHand(vector Position, rotator HandRotation, float Units, 
     if (GripRole>0) GripCurl=FMax(GripCurl,0.72);
     if (GripRole==2) IndexCurl=FMax(IndexCurl,0.75);
     if (GripRole==3) IndexCurl=FMax(IndexCurl,0.45);
+    if (bActionAttached) { IndexCurl=FMax(IndexCurl,0.9); GripCurl=FMax(GripCurl,0.9); }
     if (bStandaloneGlove) { PoseGlove(Position,HandRotation,Units); return; }
     R=KFVRWeaponRig(Owner);
     if (R!=None && R.bArmTest && bArmValid && ArmCalibrationStage>=4)

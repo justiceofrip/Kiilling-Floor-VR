@@ -112,6 +112,81 @@ function CheckCapacities()
     Check(A.Valid(),"read-only invalid access leaves valid state");
 }
 
+// Adapter-selected seating policy must preserve the ledger on every rejection.
+function RejectSeatedFeed(KFVRMagazineState A,string Label)
+{
+    local string Before;
+    Before=A.Capacity $ ":" $ A.Revision $ ":" $ Contents(A);
+    Check(!A.FeedSeatedMagazine(),Label $ " rejects feed");
+    Check(Before==(A.Capacity $ ":" $ A.Revision $ ":" $ Contents(A)),Label $ " leaves every field unchanged");
+    Check(A.Valid(),Label $ " preserves valid conserved state");
+}
+function CheckSeatedFeed()
+{
+    local KFVRMagazineState A;
+    local int Identity,BeforeRevision,BeforeReserve,BeforeTotal;
+    A=new class'KFVRMagazineState';
+    Check(A.Initialize(40,1,120),"seated feed empty chamber seed");
+    Check(A.Eject(True) && A.ConsumeShot() && A.Stow(),"spend retained chamber and preserve empty shell");
+    Check(A.GrabBelt() && A.Seat() && !A.bChamber && A.bSlideLocked,"seat replacement without implicit feed");
+    Identity=A.Inserted; BeforeRevision=A.Revision; BeforeReserve=A.Reserve; BeforeTotal=A.Total();
+    Check(A.GetMagazineRounds(Identity)==40 && A.Loaded()==40,"replacement begins full with empty chamber");
+    Check(A.FeedSeatedMagazine(),"explicit seated policy feeds empty chamber");
+    Check(A.bChamber && !A.bSlideLocked && A.CanFire(),"one round enters chamber and clears empty lock");
+    Check(A.GetMagazineRounds(Identity)==39 && A.Loaded()==40,"feed moves one round without increasing loaded total");
+    Check(A.Total()==BeforeTotal && A.Reserve==BeforeReserve && A.Budget==120
+        && A.Spent==1 && A.Discarded==0 && A.Valid(),"feed preserves reserve and total ammunition budget");
+    Check(A.Inserted==Identity && A.Held==0 && A.MagazineCount==1
+        && A.GetMagazineCapacity(Identity)==40 && A.Capacity==40,"feed preserves magazine identity and capacity");
+    Check(A.Revision==BeforeRevision+1 && A.Travel==0 && !A.bFeedArmed && !A.bExtracted,
+        "feed changes revision once without creating a mechanical stroke");
+    RejectSeatedFeed(A,"duplicate seated feed");
+    Check(A.ConsumeShot() && A.bChamber && A.GetMagazineRounds(Identity)==38
+        && A.Loaded()==39 && A.Spent==2 && A.Discarded==0 && A.Valid(),"fed round uses ordinary self-loading shot path");
+
+    A=new class'KFVRMagazineState';
+    Check(A.Initialize(40,1,100) && A.Eject(True) && A.Stow() && A.GrabBelt() && A.Seat(),
+        "tactical seating preserves existing chamber seed");
+    Check(A.bChamber && A.Loaded()==41 && A.GetMagazineRounds(A.Inserted)==40,"tactical chamber plus full magazine");
+    RejectSeatedFeed(A,"already chambered tactical reload");
+    Check(A.bChamber && A.Loaded()==41 && A.Spent==0 && A.Discarded==0,"tactical feed never extracts the live chamber");
+
+    A=new class'KFVRMagazineState';
+    Check(A.Initialize(40,0,10),"empty inserted magazine with reserve seed");
+    RejectSeatedFeed(A,"empty inserted magazine cannot draw from reserve");
+    Check(A.Eject(True),"remove empty magazine");
+    RejectSeatedFeed(A,"absent inserted magazine with empty held shell");
+    A=new class'KFVRMagazineState';
+    Check(A.Initialize(40,40,80) && A.Eject(True) && A.ConsumeShot(),"full held magazine with empty chamber seed");
+    RejectSeatedFeed(A,"absent magazine cannot feed held rounds");
+    Check(A.Stow(),"retain full held magazine in storage");
+    RejectSeatedFeed(A,"absent magazine cannot feed stored rounds");
+
+    A=new class'KFVRMagazineState';
+    Check(A.Initialize(40,0,80) && A.Eject(True) && A.Stow() && A.GrabBelt() && A.Seat(),
+        "open action with full inserted magazine seed");
+    A.MoveSlide(0.5);
+    RejectSeatedFeed(A,"partial open action");
+    A.MoveSlide(1.0);
+    Check(A.bFeedArmed && !A.bChamber,"full pull arms ordinary feed but keeps chamber empty");
+    RejectSeatedFeed(A,"fully open armed action");
+    A.MoveSlide(0.1001);
+    RejectSeatedFeed(A,"action just above closed threshold");
+
+    A=new class'KFVRMagazineState';
+    Check(A.Initialize(40,0,1) && A.Eject(True) && A.Stow() && A.GrabBelt() && A.Seat(),
+        "single remaining round seed");
+    A.MoveSlide(0.1); BeforeRevision=A.Revision;
+    Check(!A.bChamber && A.GetMagazineRounds(A.Inserted)==1,"partial return alone does not invent feed");
+    Check(A.FeedSeatedMagazine() && A.bChamber && A.GetMagazineRounds(A.Inserted)==0,
+        "closed threshold transfers the final magazine round");
+    Check(A.Revision==BeforeRevision+1 && A.Travel==0.1 && A.Loaded()==1 && A.Total()==1
+        && A.Spent==0 && A.Discarded==0 && A.Valid(),"threshold feed preserves mechanics and one-round budget");
+    RejectSeatedFeed(A,"repeated final-round feed");
+    Check(A.ConsumeShot() && !A.bChamber && A.Total()==0 && A.Spent==1 && A.Valid(),"last supplied round fires exactly once");
+    RejectSeatedFeed(A,"spent magazine cannot create another chamber round");
+}
+
 event int Main(string Params)
 {
     local KFVRMagazineState A;
@@ -149,6 +224,7 @@ event int Main(string Params)
         Check(A.Valid(),"random live ledger budget");
     }
     CheckCapacities();
+    CheckSeatedFeed();
     Log("KFVR_MAG_TEST_RESULT checks=" $ Checks $ " failures=" $ Failures);
     if (Failures>0) return 1;
     return 0;

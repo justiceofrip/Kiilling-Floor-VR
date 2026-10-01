@@ -29,6 +29,13 @@ def build(game):
  lines=configuration.splitlines();last=max(i for i,line in enumerate(lines) if line.lower().startswith('editpackages='));lines.insert(last+1,'EditPackages=KFVRGameplay');configuration='\n'.join(lines)+'\n'
  for name in ['KFVRMake.ini','Default.ini','KillingFloor.ini']:(system/name).write_text(configuration)
  shutil.copy2(source/'defuser.ini',system/'User.ini')
+ # Prune removed mod sources only within the isolated compiler package.
+ # Otherwise a deleted class is silently rebuilt from yesterday's staged copy.
+ package_sources=(work/'KFVRGameplay').resolve()
+ for stale in package_sources.rglob('*'):
+  if stale.is_file() and stale.suffix.lower() in ['.uc','.lwo','.psk','.psa']:
+   if not stale.resolve().is_relative_to(package_sources):raise ValueError('Compiler source escaped package')
+   if not (ROOT/'unrealscript/KFVRGameplay'/stale.relative_to(package_sources)).exists():stale.unlink()
  for p in (ROOT/'unrealscript').rglob('*'):
   if not p.is_file() or p.suffix.lower() not in ['.uc','.lwo','.psk','.psa']:continue
   dest=work/p.relative_to(ROOT/'unrealscript');dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,dest)
@@ -71,7 +78,7 @@ def build(game):
  rail_output=(rail_result.stdout+rail_result.stderr).decode('utf-8',errors='replace');(reports/'unrealscript-action-rail-tests.log').write_text(rail_output,encoding='utf-8')
  rail_match=re.search(r'KFVR_ACTION_RAIL_TEST_RESULT checks=(\d+) failures=0',rail_output)
  if rail_result.returncode or not rail_match:raise RuntimeError('Action rail tests failed; see saved compiler log')
- print('UnrealScript authored action rail: '+rail_match.group(1)+' checks passed')
+ print('UnrealScript modular action rail: '+rail_match.group(1)+' checks passed')
  support_result=subprocess.run([str(system/'ucc.exe'),'KFVRGameplay.KFVRPoseMathTests','ini=KFVRMake.ini'],cwd=system,capture_output=True,timeout=90)
  support_output=(support_result.stdout+support_result.stderr).decode('utf-8',errors='replace');(reports/'unrealscript-support-tests.log').write_text(support_output)
  support_match=re.search(r'KFVR_SUPPORT_TEST_RESULT checks=(\d+) failures=0',support_output)

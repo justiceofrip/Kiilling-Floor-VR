@@ -5,13 +5,20 @@ var KFWeapon Gun;
 var KFVRMagazineState Ammo;
 var KFVRMagazineInsertion Insertion;
 var KFVRActionRail ActionRail;
+var vector ActionPalmWorld,ActionPalmX,ActionPalmY,ActionPalmZ;
+var rotator ActionPalmRotation;
+var bool bEjectedVisible,bEjectedGrounded;
+var vector EjectedPosition,EjectedVelocity;
+var rotator EjectedRotation;
+var float EjectedAge;
+var int EjectedVisualCount;
 var vector InsertionPosition;
 var float InsertionProgress,InsertionLastDelta,InsertionLastDistance;
 var int InsertionSpeedRejects,InsertionGapRejects;
 var bool bInsertionApproached;
 var bool bLeftArmed,bLeftPrevious,bSlideHeld,bRecoveryPending;
 var int HeldInterruptions,RecoveryStowCount;
-var vector MagWell,SlideLocation,BeltLocation,SlideGrabLocal,MagazineWorld,MagazineTarget;
+var vector MagWell,SlideLocation,BeltLocation,MagazineWorld,MagazineTarget;
 var float MagazineError,SlideTravel,MagazineDirectionDot,MagazineAlignment;
 var int EjectCount,GrabCount,SeatCount,StowCount,DropCount,RackCount;
 var int LoadedRounds,OwnedRounds,SpentRounds,DiscardedRounds,HeldMagazine,InsertedMagazine,Revision;
@@ -23,7 +30,7 @@ function bool Initialize(KFVRWeaponRig R,KFWeapon W)
     if (R==None || R.Visual==None || !R.Visual.ManualReloadReady()) return False;
     Rig=R; Gun=W; Ammo=new class'KFVRMagazineState';
     Insertion=new class'KFVRMagazineInsertion';
-    if (R.Visual.bAuthoredActionProfile) ActionRail=new class'KFVRActionRail';
+    if (R.Visual.ManualActionReady()) ActionRail=new class'KFVRActionRail';
     if (!Ammo.Initialize(W.MagCapacity,W.MagAmmoRemaining,W.AmmoAmount(0))) return False;
     class'KFVRWeaponProfile'.static.BindManual(Gun,self); Publish(); return True;
 }
@@ -50,7 +57,9 @@ function Reconcile()
 }
 function Suspend()
 {
-    bLeftArmed=False; bLeftPrevious=False;
+    local bool ResetPose;
+    ResetPose=bEjectedVisible || bSlideHeld || (Ammo!=None && Ammo.Held>0);
+    bLeftArmed=False; bLeftPrevious=False; bEjectedVisible=False;
     if (Insertion!=None) Insertion.Reset();
     if (ActionRail!=None) ActionRail.Cancel();
     InsertionProgress=0; bInsertionApproached=False;
@@ -58,14 +67,14 @@ function Suspend()
     {
         if (!bRecoveryPending) HeldInterruptions++;
         bRecoveryPending=True;
-        // The gun can remain visible when only the offhand is lost. Hide its
-        // detached magazine until a fresh tracked grasp can own that pose.
-        if (Rig!=None && Rig.Gun==Gun && Rig.Visual!=None)
-            Rig.Visual.PoseMagazine(Ammo.Inserted>0,False,vect(0,0,0),Ammo.Travel);
     }
     // Tracking loss cancels the grab without completing a feed transition.
     if (bSlideHeld)
     { Ammo.bFeedArmed=False; Ammo.bExtracted=False; Ammo.Travel=0; bSlideHeld=False; Publish(); }
+    // The gun stays visible through offhand-only loss. Clear the actual bone
+    // overrides as well as state: no frozen dropped magazine or pulled slide.
+    if (ResetPose && Ammo!=None && Rig!=None && Rig.Gun==Gun && Rig.Visual!=None)
+        Rig.Visual.PoseMagazine(Ammo.Inserted>0,False,vect(0,0,0),Ammo.Travel);
 }
 function StoreForSwitch()
 {
@@ -78,10 +87,61 @@ function bool CanDisable() { return Ammo!=None && Ammo.Held==0 && Ammo.Inserted>
 function EjectMagazine()
 {
     local bool Catch;
-    if (Gun!=Rig.Gun || Rig.bHolstered || bSlideHeld) return;
+    if (Gun!=Rig.Gun || Rig.bHolstered) return;
+    // The release button must remain usable while the other hand is on the
+    // action. Cancel that grasp without completing a feed, then evaluate catch.
+    if (bSlideHeld) Suspend();
+    MagWell=Rig.Visual.MagazineRest();
     Catch=(Rig.Tracking.Flags & 1)!=0 && Rig.Tracking.LeftGrip>0.55 && VSize(Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation)-MagWell)<0.16*Rig.Tracking.UnitsPerMetre;
     if (Ammo.Eject(Catch))
-    { EjectCount++; Insertion.Reset(); Rig.PulseRight(0.3,20); Publish(); }
+    {
+        EjectCount++; Insertion.Reset(); Rig.PulseRight(0.3,20);
+        if (!Catch) BeginEjectedVisual(MagWell,Rig.Visual.Rotation);
+        Publish();
+    }
+}
+// The native magazine bone presents a discarded part briefly in world space.
+// It carries no ammunition or pickup authority; a new held/seated part replaces
+// this transient presentation. Floor contact prevents it falling through BSP.
+function BeginEjectedVisual(vector Position,rotator Orientation)
+{
+    EjectedPosition=Position; EjectedRotation=Orientation;
+    EjectedVelocity=(-(Rig.Visual.InsertionAxis>>Orientation)*0.6)*Rig.Tracking.UnitsPerMetre;
+    EjectedAge=0; bEjectedVisible=True; bEjectedGrounded=False; EjectedVisualCount++;
+}
+function UpdateEjectedVisual(float Delta)
+{
+    local vector Next,HitLocation,HitNormal;
+    local Actor Hit;
+    if (!bEjectedVisible) return;
+    EjectedAge+=Delta;
+    if (Ammo.Held>0 || Ammo.Inserted>0 || EjectedAge>2.5) { bEjectedVisible=False; return; }
+    if (bEjectedGrounded) return;
+    Delta=FClamp(Delta,0,0.1);
+    Next=EjectedPosition+EjectedVelocity*Delta;
+    EjectedVelocity.Z-=9.81*Rig.Tracking.UnitsPerMetre*Delta;
+    Hit=Trace(HitLocation,HitNormal,Next,EjectedPosition,False);
+    if (Hit!=None) { Next=HitLocation+HitNormal*0.008*Rig.Tracking.UnitsPerMetre; bEjectedGrounded=True; }
+    EjectedPosition=Next;
+}
+function bool ActionInReach()
+{
+    return Rig!=None && Ammo!=None && Ammo.Held==0 && Ammo.Inserted>0
+        && (Rig.Tracking.Flags & 3)==3 && (Rig.Tracking.Flags & 32)==0
+        && Rig.Visual!=None && Rig.Visual.ManualActionReady()
+        && VSize(Rig.Tracking.LeftPosition-Rig.Visual.ManualActionPoint(Ammo.Travel))<0.08*Rig.Tracking.UnitsPerMetre;
+}
+function CaptureActionPalm()
+{
+    local vector X,Y,Z;
+    GetAxes(Rig.Tracking.LeftRotation,X,Y,Z);
+    ActionPalmX=X<<Rig.Visual.Rotation; ActionPalmY=Y<<Rig.Visual.Rotation; ActionPalmZ=Z<<Rig.Visual.Rotation;
+}
+function UpdateActionPalm()
+{
+    if (!bSlideHeld) return;
+    ActionPalmWorld=Rig.Visual.ManualActionPoint(Ammo.Travel);
+    ActionPalmRotation=OrthoRotation(ActionPalmX>>Rig.Visual.Rotation,ActionPalmY>>Rig.Visual.Rotation,ActionPalmZ>>Rig.Visual.Rotation);
 }
 // Current body-space belt position is shared by intent reservation and acquisition.
 function vector CurrentBeltLocation()
@@ -96,13 +156,14 @@ function vector CurrentBeltLocation()
 function bool ReservesOffhand()
 {
     if (Rig==None || Ammo==None || Gun!=Rig.Gun) return False;
-    if (Ammo.Held>0 || bSlideHeld || Rig.Tracking.LeftTrigger>0.5) return True;
+    if (Ammo.Held>0 || bSlideHeld || (Rig.Tracking.Flags & 32)!=0) return True;
+    if (bLeftArmed && Rig.Tracking.LeftGrip>0.7 && !bLeftPrevious && ActionInReach()) return True;
     return bLeftArmed && Rig.Tracking.LeftGrip>0.7 && !bLeftPrevious && Ammo.Inserted==0
         && VSize(Rig.Tracking.LeftPosition-CurrentBeltLocation())<0.18*Rig.Tracking.UnitsPerMetre;
 }
-// Count a complete authored rail return whether the player releases the knob
+// Count a complete installed action return whether the player releases the knob
 // or guides it forward while still gripping it. Cancellation never calls here.
-function MoveAuthoredAction(float Travel)
+function MoveAction(float Travel)
 {
     local bool WasArmed;
     WasArmed=Ammo.bFeedArmed; Ammo.MoveSlide(Travel);
@@ -111,9 +172,8 @@ function MoveAuthoredAction(float Travel)
 }
 function Update(float Delta)
 {
-    local vector Relative,Displacement;
+    local vector Relative;
     local bool Down,NearBelt;
-    local float Before;
     local coords Part;
     if (Rig.Gun!=Gun || !Rig.Active() || Rig.bHolstered || (Rig.Tracking.Flags & 3)!=3)
     { Suspend(); return; }
@@ -125,6 +185,8 @@ function Update(float Delta)
     NearBelt=VSize(Rig.Tracking.LeftPosition-BeltLocation)<0.18*Rig.Tracking.UnitsPerMetre;
     MagazineTarget=Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation);
     MagazineAlignment=Rig.Visual.MagazineAlignmentCos(Rig.Tracking.LeftRotation);
+    // Current supported firearm model axes coincide with controller aim.
+    // Presentation recoil must never become physical action travel.
     Relative=(Rig.Tracking.LeftPosition-Rig.Tracking.RightPosition)<<Rig.Tracking.RightRotation;
     if (bRecoveryPending)
     {
@@ -138,13 +200,12 @@ function Update(float Delta)
     if (!Down) bLeftArmed=True;
     if (bLeftArmed && Down && !bLeftPrevious && Ammo.Held==0)
     {
-        if (Rig.Visual.ManualActionReady()
-            && Rig.Tracking.LeftTrigger>0.5 && VSize(Rig.Tracking.LeftPosition-SlideLocation)<0.13*Rig.Tracking.UnitsPerMetre && Ammo.Inserted>0)
+        if (ActionInReach())
         {
-            if (Rig.Visual.bActionProfile) { bSlideHeld=True; SlideGrabLocal=Relative; }
-            else if (ActionRail!=None)
+            if (ActionRail!=None)
                 bSlideHeld=ActionRail.Begin(Relative/Rig.Tracking.UnitsPerMetre,
-                    Rig.Visual.AuthoredAction.PullAxisLocal,Rig.Visual.ManualActionTravel(),Ammo.Travel);
+                    Rig.Visual.ActionPullAxis,Rig.Visual.ManualActionTravel(),Ammo.Travel);
+            if (bSlideHeld) CaptureActionPalm();
         }
         else if (NearBelt && Ammo.GrabBelt()) { GrabCount++; Rig.PulseLeft(0.25,18); }
     }
@@ -153,43 +214,37 @@ function Update(float Delta)
     InsertionPosition=Rig.Visual.MagazineSocketPosition(MagazineTarget,Rig.Tracking.UnitsPerMetre);
     if (Insertion.Update(InsertionPosition,MagazineAlignment,Rig.Tracking.InputSerial,
         Rig.Tracking.InputSeconds,Ammo.Held,Down) && Ammo.Seat())
-    { SeatCount++; Rig.PulseLeft(0.4,25); }
+    {
+        SeatCount++;
+        // This installed model has no manual action. Finish its reload by
+        // moving one existing magazine round into an empty chamber.
+        if (Rig.Visual.bFeedOnSeat) Ammo.FeedSeatedMagazine();
+        Rig.PulseLeft(0.4,25);
+    }
     InsertionProgress=Insertion.Progress; bInsertionApproached=Insertion.bApproached;
     InsertionLastDelta=Insertion.LastDelta; InsertionLastDistance=Insertion.LastDistance;
     InsertionSpeedRejects=Insertion.SpeedRejects; InsertionGapRejects=Insertion.GapRejects;
     if (bSlideHeld && !Rig.Visual.ManualActionReady()) Suspend();
     if (bSlideHeld)
     {
-        if (Rig.Visual.bAuthoredActionProfile)
-        {
-            if (ActionRail==None || !ActionRail.Move(Relative/Rig.Tracking.UnitsPerMetre)) Suspend();
-            else if (Down) MoveAuthoredAction(ActionRail.Progress);
-            else
-            {
-                // A release returns the spring; only an earlier held full pull
-                // can have armed feed. A bad/lost sample cancels without feeding.
-                MoveAuthoredAction(0); bSlideHeld=False; ActionRail.Cancel();
-            }
-        }
+        if (ActionRail==None || !ActionRail.Move(Relative/Rig.Tracking.UnitsPerMetre)) Suspend();
+        else if (Down) MoveAction(ActionRail.Progress);
         else
         {
-            Displacement=Relative-SlideGrabLocal;
-            if (Abs(Displacement.Y)>0.12*Rig.Tracking.UnitsPerMetre || Abs(Displacement.Z)>0.12*Rig.Tracking.UnitsPerMetre) Suspend();
-            else if (Down) Ammo.MoveSlide(-Displacement.X/(Rig.Visual.ActionTravelMetres*Rig.Tracking.UnitsPerMetre));
-            else
-            {
-                Before=float(Ammo.bFeedArmed); Ammo.MoveSlide(0); bSlideHeld=False;
-                if (Before>0) { RackCount++; Rig.PulseLeft(0.3,20); }
-            }
+            // Spring return can feed only after a held full stroke. Invalid
+            // or lost tracking cancels the rail without a feed transition.
+            MoveAction(0); bSlideHeld=False; ActionRail.Cancel();
         }
     }
     else if (bLeftArmed && !Down && bLeftPrevious && Ammo.Held>0)
     {
         if (NearBelt && Ammo.Stow()) { StowCount++; Rig.PulseLeft(0.2,15); }
-        else if (Ammo.Drop()) DropCount++;
+        else if (Ammo.Drop()) { DropCount++; BeginEjectedVisual(MagazineTarget,Rig.Tracking.LeftRotation); }
     }
     bLeftPrevious=Down;
-    Rig.Visual.PoseMagazine(Ammo.Inserted>0,Ammo.Held>0,Rig.Tracking.LeftPosition,Ammo.Travel,Rig.Tracking.LeftRotation);
+    UpdateEjectedVisual(Delta); UpdateActionPalm();
+    Rig.Visual.PoseMagazine(Ammo.Inserted>0,Ammo.Held>0,Rig.Tracking.LeftPosition,Ammo.Travel,Rig.Tracking.LeftRotation,
+        bEjectedVisible,EjectedPosition,EjectedRotation);
     Part=Rig.Visual.GetBoneCoords(Rig.Visual.MagazineBone); MagazineWorld=Part.Origin;
     MagazineError=0;
     MagazineDirectionDot=Normal(Part.XAxis) dot (Rig.Visual.MagazineX>>Rig.Tracking.LeftRotation);

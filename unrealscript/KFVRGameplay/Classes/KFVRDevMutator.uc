@@ -84,7 +84,7 @@ function Timer()
         if (Rig==None) return;
         Rig.bArmTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRARMTEST=1")>=0;
         Rig.bNativeHandTest=InStr(Caps(Level.GetLocalURL()),"KFVRNATIVEHANDS=1")>=0;
-        Rig.bRifleReloadTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRRIFLERELOADTEST=1")>=0;
+        Rig.bPhysicalReloadDefault=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRPHYSICALRELOADS=1")>=0;
         if (bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRRELOADTIMETEST=1")>=0
             && Rig.BoundPawn==PC.Pawn && ReloadTimeTest==None)
         {

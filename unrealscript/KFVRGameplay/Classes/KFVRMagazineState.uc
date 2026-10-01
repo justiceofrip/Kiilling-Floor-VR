@@ -101,6 +101,12 @@ function bool Seat()
     if (Inserted>0 || Held==0) return False;
     Inserted=Held; Held=0; Revision++; return True;
 }
+// Explicit magazine-only adapter policy; never cycles/extracts a live chamber.
+function bool FeedSeatedMagazine()
+{
+    if (bChamber || Inserted<=0 || Rounds[Inserted-1]<=0 || Travel>0.1) return False;
+    Rounds[Inserted-1]--; bChamber=True; bSlideLocked=False; Revision++; return True;
+}
 function bool MoveSlide(float Amount)
 {
     Amount=FClamp(Amount,0,1);
