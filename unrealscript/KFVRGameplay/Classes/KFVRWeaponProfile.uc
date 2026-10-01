@@ -15,6 +15,11 @@ static function name ActionBone(KFWeapon W)
 }
 // Explicit policy for a magazine-only reload. Unknown weapons do not inherit it.
 static function bool FeedOnSeat(KFWeapon W) { return KFVRTrackedBullpup(W)!=None || KFVRTrackedSCAR(W)!=None; }
+// Grip-and-pull removal is explicitly enabled only for the audited rifles.
+static function bool SupportsMagazinePull(KFWeapon W)
+{
+    return KFVRTrackedBullpup(W)!=None || KFVRTrackedSCAR(W)!=None;
+}
 static function vector ActionAxis(KFWeapon W) { return vect(-1,0,0); }
 // Authored normalized markers, sampled from the owner's installed Reload.
 // Geometry/axes are measured at runtime, not copied out of the game assets.
@@ -67,6 +72,15 @@ static function float MagazineGraspLimit(KFWeapon W)
 static function bool SupportsOffhand(KFWeapon W)
 {
     return KFVRTrackedBullpup(W)!=None || KFVRTrackedSCAR(W)!=None;
+}
+// Fixed authored overhand frame, not a pose sampled from the stock Reload.
+// Converted native left-hand axes: +X fingers, +Y curl/palm side, +Z thumb.
+// Put fingers across gun +Y, palm down -Z and thumb toward the rear -X.
+static function rotator ActionPalmFrame(KFWeapon W)
+{
+    if (ActionBone(W)!='')
+        return OrthoRotation(vect(0,1,0),vect(0,0,-1),vect(-1,0,0));
+    return rot(0,0,0);
 }
 // Provisional overhand palm contact, in metres relative to the slide origin.
 // This is authored hand placement, not a claimed stock chambering animation.

@@ -112,7 +112,9 @@ def sample(o):
  o.rig_sample_consistent=bool(guards) and ('PresentationSerial' not in stamps or stamps['PresentationSerial']==stamps.get('Tracking.Serial')) and all(o.read(at,len(before))==before for at,before in guards)
  return out
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--seconds',type=float,default=20);a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--seconds',type=float,default=20);p.add_argument('--sample-interval',type=float,default=.1);p.add_argument('--discovery-interval',type=float,default=1);a=p.parse_args()
+ if not .02<=a.sample_interval<=1:p.error('--sample-interval must be finite and between 0.02 and 1 second')
+ if not 1<=a.discovery_interval<=30:p.error('--discovery-interval must be finite and between 1 and 30 seconds')
  tick=ctypes.WinDLL('kernel32').GetTickCount64;tick.restype=ctypes.c_ulonglong
  # Build full object inventories on a separate reader so discovery cannot
  # leave one-second holes in the live pose/contact samples. Each reader owns
@@ -135,7 +137,7 @@ if __name__=='__main__':
      if pending is not None and pending.done():
       completed=pending;pending=None;fresh=completed.result()
       if o is not None:o.close()
-      o=fresh;next_discovery=time.monotonic()+1;consecutive_errors=0
+      o=fresh;next_discovery=time.monotonic()+a.discovery_interval;consecutive_errors=0
      if pending is None and time.monotonic()>=next_discovery:pending=discovery.submit(discover)
      if o is not None:
       f.write(json.dumps(dict(uptime_ms=tick(),objects=sample(o),rig_sample_consistent=o.rig_sample_consistent))+'\n');f.flush()
@@ -146,7 +148,7 @@ if __name__=='__main__':
      if consecutive_errors>=5:raise
      if o is not None:o.close();o=None
      next_discovery=0
-    time.sleep(.1)
+    time.sleep(a.sample_interval)
   finally:
    if o is not None:o.close()
    if pending is not None:

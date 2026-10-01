@@ -1,4 +1,4 @@
-"""Validate the 62-second live reload UX trial from recorded observations.
+"""Validate the 62-second live reload UX trial and optional104-second guide extension from recorded observations.
 
 No game reads, writes, inputs or injection occur here. Geometry uses completed
 rig snapshots and actual bone/palm observations; reported script error fields
@@ -73,8 +73,9 @@ def collect(rows, gun_type):
 def geometry(records, rifle, native):
     errors = {k: [] for k in ('slide', 'action_palm', 'action_target', 'action_axis',
                               'raw_palm', 'muzzle', 'right_palm', 'held_magazine',
-                              'held_palm', 'magazine_axes', 'rest_magazine', 'ejected_magazine')}
-    counts = dict(active=0, attached=0, held=0, ejected=0, resting=0)
+                              'held_palm', 'magazine_axes', 'rest_magazine', 'ejected_magazine',
+                              'guided_target', 'guided_hand_axes', 'guided_finger_axes', 'guided_raw_palm')}
+    counts = dict(active=0, attached=0, held=0, guided=0, ejected=0, resting=0)
     issues, offsets, action_frames, capture_evidence = [], [], [], []
     offset_evidence = {n: [] for n in OFFSET_PHASES}
     okay = dict(ownership=True, hand=True, profile=True, orientation=True)
@@ -135,23 +136,14 @@ def geometry(records, rifle, native):
                         raise ValueError('Missing finite captured action frame')
                     okay['orientation'] &= all(abs(sum(x*y for x, y in zip(a, b))-(1 if i == j else 0)) < .002
                         for i, a in enumerate(local_axes) for j, b in enumerate(local_axes))
+                    # Authored overhand grasp is deliberately independent of
+                    # acquisition orientation and transient visual recoil.
+                    expected_capture = ((0,1,0),(0,0,-1),(-1,0,0))
+                    okay['orientation'] &= all(distance(a,b)<.002 for a,b in zip(local_axes,expected_capture))
                     if not previous_held:
                         captured_axes = [list(a) for a in local_axes]
-                        phase_id = rec.get('input_phase')
-                        # Phase24 grabs during recoil, which may finish before the
-                        # observer's first completed snapshot. Its current weapon
-                        # frame cannot reconstruct the earlier acquisition frame.
-                        # Still require a fixed captured frame and independently
-                        # matching actual hand axes throughout that entire grab.
-                        compare_capture = phase_id != 24
-                        if compare_capture:
-                            gun_axes = [rotate(a, v['Rotation']) for a in AXES]
-                            expected_capture = [[sum(x*y for x, y in zip(rotate(a, r['Tracking.LeftRotation']), b))
-                                                 for b in gun_axes] for a in AXES]
-                            okay['orientation'] &= all(distance(a, b) < .002 for a, b in zip(local_axes, expected_capture))
-                        capture_evidence.append(dict(uptime_ms=rec['row']['uptime_ms'], phase=phase_id,
-                            controller_relation_checked=compare_capture,
-                            acquisition_frame_unobserved_during_recoil=not compare_capture))
+                        capture_evidence.append(dict(uptime_ms=rec['row']['uptime_ms'],phase=rec.get('input_phase'),
+                            authored_overhand_frame_checked=True,controller_approach_rotation=r['Tracking.LeftRotation']))
                     okay['orientation'] &= all(distance(a, b) < .002 for a, b in zip(local_axes, captured_axes))
                     for index, a in enumerate(AXES):
                         expected = rotate(local_axes[index], v['Rotation'])
@@ -161,21 +153,43 @@ def geometry(records, rifle, native):
             else:
                 okay['profile'] &= v.get('ActionTravelMetres') == 0 and m.get('SlideTravel') == 0 and m.get('RackCount') == 0
             previous_held = held
-            if m.get('HeldMagazine', 0) > 0 and (r.get('Tracking.Flags', 0) & 3) == 3:
+            if (m.get('HeldMagazine', 0) > 0 or m.get('bMagazinePullHeld') is True or m.get('bMagazineGuided') is True) and (r.get('Tracking.Flags', 0) & 3) == 3:
                 counts['held'] += 1
+                guided = m.get('bMagazineGuided') is True
                 okay['ownership'] &= r.get('bSupportHeld') is False and h.get('bActionAttached') is False
-                expected = r['Tracking.LeftPosition']
+                expected = r['Tracking.LeftPosition']; palm = expected
+                orientation = v['Rotation'] if guided else r['Tracking.LeftRotation']
+                grip = {}
                 if native:
                     grip_obj = objs.get(v.get('MagazineGrip'), {}); grip = grip_obj.get('values', {})
                     okay['hand'] &= (grip_obj.get('type') == 'KFVRMagazineGrip' and grip.get('bCalibrated') is True
                         and grip.get('SourceWeapon') == rec['gun'] and h.get('bGripPose') is True
                         and h.get('GripVisual') == grip_obj.get('address') and h.get('bGripSourceLeft') is True)
-                    offset = rotate([x*scale for x in grip['PalmLocal']], r['Tracking.LeftRotation'])
-                    expected = [x-y for x, y in zip(expected, offset)]
+                if guided:
+                    counts['guided'] += 1
+                    depth = m['GuideRailDepth']
+                    if not finite(depth) or not -.25 <= depth <= .02:
+                        raise ValueError('Invalid guided depth')
+                    expected = world(v, [x+y*depth*units for x,y in zip(v['MagazineLocal'], v['InsertionAxis'])])
+                    offset = rotate([x*scale for x in grip['PalmLocal']], orientation) if native else [0,0,0]
+                    palm = [x+y for x,y in zip(expected,offset)]
+                    errors['guided_target'].extend((distance(m.get('MagazinePalmWorld'),palm), distance(h.get('GripPalmTarget'),palm)))
+                    errors['guided_raw_palm'].append(distance(h.get('TrackedPalmPosition'),r['Tracking.LeftPosition']))
+                    for i,suffix in enumerate('XYZ'):
+                        errors['guided_hand_axes'].append(distance(rotate(AXES[i],m['MagazinePalmRotation']),rotate(AXES[i],orientation)))
+                        if native:
+                            errors['guided_hand_axes'].append(distance(rotate(AXES[i],h['Rotation']),rotate(grip['GripPose.0.'+suffix+'Axis'],orientation)))
+                            # Native closed index/middle/ring/pinky bone bases are
+                            # actual readbacks; the thumb may change capacitive pose.
+                            for j in range(3,15):
+                                errors['guided_finger_axes'].append(distance(h[f'FingerWorld.{j}.{suffix}Axis'],rotate(grip[f'GripPose.{j+1}.{suffix}Axis'],orientation)))
+                elif native:
+                    offset = rotate([x*scale for x in grip['PalmLocal']], orientation)
+                    expected = [x-y for x,y in zip(expected,offset)]
                 errors['held_magazine'].append(distance(v.get('MeasuredMagazinePosition'), expected))
-                errors['held_palm'].append(distance(h.get('PalmWorld'), r.get('Tracking.LeftPosition')))
+                errors['held_palm'].append(distance(h.get('PalmWorld'), palm))
                 for suffix in 'XYZ':
-                    errors['magazine_axes'].append(distance(v.get('MeasuredMagazine'+suffix), rotate(v['Magazine'+suffix], r['Tracking.LeftRotation'])))
+                    errors['magazine_axes'].append(distance(v.get('MeasuredMagazine'+suffix), rotate(v['Magazine'+suffix], orientation)))
             elif m.get('bEjectedVisible') is True:
                 counts['ejected'] += 1
                 okay['ownership'] &= m.get('HeldMagazine') == m.get('InsertedMagazine') == 0
@@ -202,6 +216,11 @@ def geometry(records, rifle, native):
         actual_inserted_magazine_stays_on_weapon=bounded('rest_magazine', .05, 10),
         actual_magazine_axes_follow_owner=bounded('magazine_axes', .002, 15),
         actual_discarded_magazine_follows_fall=bounded('ejected_magazine', .05, 3))
+    if counts['guided']:
+        checks.update(actual_guide_target_matches_native_socket=bounded('guided_target',.005,3),
+            actual_guided_hand_keeps_native_frame=bounded('guided_hand_axes',.002,9),
+            actual_guided_fingers_keep_native_frame=(not native or bounded('guided_finger_axes',.002,36)),
+            guided_hand_retains_raw_tracking=bounded('guided_raw_palm',.005,3))
     if not rifle:
         checks.update(actual_native_slide_follows_measured_rail=bounded('slide', .05, 20),
             actual_action_hand_locks_to_slide=bounded('action_palm', .005, 10) and bounded('action_target', .005, 10),
@@ -302,13 +321,151 @@ def supply_geometry(records):
         native_mesh='KillingFloorStatics.L85Ammo', comfort_tested=False)
 
 
+def guide_evidence(records, ranges, sent, rifle, native):
+    """Independent observed state and geometry for the optional104-second trial."""
+    checks, metrics, failures = {}, {}, []
+    def phase(n, settle=150):
+        times = ranges.get(n, [])
+        return [p for p in records if times and min(times)+settle <= p['row']['uptime_ms'] <= max(times)]
+    def covered(data):
+        return len(data) >= MIN_SAMPLES and len({p['r'].get('Tracking.InputSerial') for p in data}) >= MIN_SAMPLES
+    def last(n):
+        data = phase(n)
+        return data[-1] if data else dict(m={},r={},g={},v={},objects={})
+    def field(n,key): return last(n)['m'].get(key)
+    def check(name,n,predicate,settle=150):
+        data=phase(n,settle); bad=[]
+        for p in data:
+            try:
+                if not predicate(p): bad.append(p['row']['uptime_ms'])
+            except (KeyError,TypeError,ValueError,IndexError,ZeroDivisionError) as e:
+                bad.append(p['row']['uptime_ms'])
+                if len(failures)<12: failures.append(dict(check=name,problem=str(e)))
+        checks[name]=covered(data) and not bad
+        metrics[str(n)]=dict(samples=len(data),distinct_inputs=len({p['r'].get('Tracking.InputSerial') for p in data}),required=MIN_SAMPLES,settle_ms=settle)
+        if bad and len(failures)<12: failures.append(dict(check=name,failed_sample_times=bad[:5]))
+    unchanged=('OwnedRounds','SpentRounds','DiscardedRounds','LoadedRounds','bChambered','SeatCount','DropCount')
+    def same(p,n,keys=unchanged): return all(p['m'][k]==field(n,k) for k in keys)
+    commands=[c for c in sent if c.get('phase',-1)>=61]
+    checks['guide_extension_never_uses_release_button_or_fire']=bool(commands) and all(c.get('right_secondary') is False and c.get('left_secondary') is False and c.get('right_trigger')==c.get('left_trigger')==c.get('right_squeeze')==0 for c in commands)
+    check('guide_chest_grab_has_owned_identity',61,lambda p:p['m']['HeldMagazine']>0 and p['m']['InsertedMagazine']==0
+          and p['m']['ChestGrabCount']==field(60,'ChestGrabCount')+1 and same(p,60))
+    ident=field(61,'HeldMagazine')
+    check('off_axis_entry_captures_without_seating',63,lambda p:p['m']['bMagazineGuided'] is True
+          and p['m']['HeldMagazine']==ident and p['m']['InsertedMagazine']==0
+          and p['m']['GuideCaptureCount']==field(61,'GuideCaptureCount')+1 and same(p,61)
+          and p['r']['bSupportHeld'] is False)
+    check('lateral_escape_cancels_but_keeps_magazine',65,lambda p:p['m']['bMagazineGuided'] is False
+          and p['m']['GuideCancelCount']==field(63,'GuideCancelCount')+1 and p['m']['HeldMagazine']==ident
+          and p['m']['InsertedMagazine']==0 and same(p,63))
+    check('tracking_loss_cancels_new_capture_without_transfer',67,lambda p:(p['r']['Tracking.Flags']&3)==2
+          and p['m']['bMagazineGuided'] is False and p['m']['GuideCaptureCount']==field(63,'GuideCaptureCount')+1
+          and p['m']['GuideCancelCount']==field(65,'GuideCancelCount')+1 and p['m']['HeldMagazine']==ident
+          and p['m']['InsertedMagazine']==0 and same(p,65)
+          and p['objects'][pointer(p['r'],'LeftHand')]['values']['bHidden'] is True)
+    check('held_tracking_recovery_does_not_recapture',68,lambda p:(p['r']['Tracking.Flags']&3)==3
+          and p['r']['Tracking.LeftGrip']>.7 and p['m']['bMagazineGuided'] is False
+          and p['m']['HeldMagazine']==ident and same(p,67)
+          and p['m']['GuideCaptureCount']==field(67,'GuideCaptureCount'))
+    check('guided_loss_release_stows_exact_identity',69,lambda p:p['m']['HeldMagazine']==p['m']['InsertedMagazine']==0
+          and p['m']['StowCount']==field(68,'StowCount')+1 and same(p,68))
+    check('next_chest_grab_preserves_total',70,lambda p:p['m']['HeldMagazine']>0 and p['m']['InsertedMagazine']==0
+          and p['m']['ChestGrabCount']==field(69,'ChestGrabCount')+1 and same(p,69))
+    inserted=field(70,'HeldMagazine')
+    check('guided_push_seats_once_while_grip_held',73,lambda p:p['m']['InsertedMagazine']==inserted
+          and p['m']['HeldMagazine']==0 and p['m']['SeatCount']==field(70,'SeatCount')+1
+          and p['r']['Tracking.LeftGrip']>.7 and p['r']['bSupportHeld'] is False
+          and p['m']['bMagazinePullHeld'] is False
+          and all(p['m'][k]==field(70,k) for k in ('OwnedRounds','SpentRounds','DiscardedRounds','DropCount','EjectCount')))
+    # A coherent completed Tick can still contain the previous host input.
+    # Current two-second static phases use the standard150ms delivery settle.
+    # Retain the historical one-second protocol's zero-dwell check only when
+    # both recorded phase61 and74 boundaries identify that older schedule;
+    # its first admitted sample must still satisfy every release/latch check.
+    release_durations = [min(ranges[n+1])-min(ranges[n]) if ranges.get(n) and ranges.get(n+1) else None
+                         for n in (61,74)]
+    legacy_release = all(finite(d) and 750<=d<=1250 for d in release_durations)
+    release_settle = 0 if legacy_release else 150
+    check('seated_grip_release_does_not_repeat_transfer',74,lambda p:same(p,73)
+          and p['m']['InsertedMagazine']==inserted and p['m']['HeldMagazine']==0
+          and p['r']['Tracking.LeftGrip']<.3 and p['m']['bMagazineGuided'] is False
+          and p['m']['bMagazineSeatHeld'] is False and p['m']['bMagazinePullHeld'] is False,settle=release_settle)
+    # Stationary phase63 proves real assistance, not merely close raw placement.
+    # Reconstruct the raw free-root from two controller poses independently of
+    # Manual.InsertionPosition, GuideRailDepth or its reported errors.
+    evidence=[]; geometry_ok=True
+    for p in phase(63):
+        try:
+            r,v,m,objs=(p[k] for k in ('r','v','m','objects'))
+            u=r['Tracking.UnitsPerMetre'];scale=v['DrawScale'];mu=v['ModelUnitsPerMetre']
+            grip=objs[v['MagazineGrip']]['values'] if native else {}
+            grasp=grip['PalmLocal'] if native else (0,0,0)
+            offset=rotate([x*scale for x in grasp],r['Tracking.LeftRotation'])
+            free=[x-y for x,y in zip(r['Tracking.LeftPosition'],offset)]
+            socket_delta=rotate([(x-y)/mu*u for x,y in zip(v['MagazineLocal'],v['PalmLocal'])],r['Tracking.RightRotation'])
+            socket=[x+y for x,y in zip(r['Tracking.RightPosition'],socket_delta)]
+            axis=rotate(v['InsertionAxis'],r['Tracking.RightRotation'])
+            delta=[(x-y)/u for x,y in zip(free,socket)];depth=sum(x*y for x,y in zip(delta,axis))
+            lateral=distance([x-y*depth for x,y in zip(delta,axis)],(0,0,0))
+            left=objs[pointer(r,'LeftHand')]['values']
+            palm_offset=distance(left['PalmWorld'],r['Tracking.LeftPosition'])/u
+            cosines=[sum(x*y for x,y in zip(rotate(a,r['Tracking.LeftRotation']),rotate(a,r['Tracking.RightRotation']))) for a in AXES]
+            geometry_ok &= (.025<lateral<.035 and abs(depth+.10)<.005 and abs(m['GuideRailDepth']-depth)<.005
+                            and min(cosines)<.95 and palm_offset>.01)
+            evidence.append(dict(uptime_ms=p['row']['uptime_ms'],raw_depth_metres=depth,raw_lateral_metres=lateral,
+                                 actual_palm_from_raw_metres=palm_offset,axis_cosines=cosines))
+        except (KeyError,TypeError,ValueError,IndexError,ZeroDivisionError): geometry_ok=False
+    checks['magnetic_capture_corrects_measured_position_and_orientation']=covered(phase(63)) and geometry_ok and len(evidence)>=MIN_SAMPLES
+    if rifle:
+        check('fresh_rifle_grip_reserves_inserted_magazine',76,lambda p:p['m']['bMagazinePullHeld'] is True
+              and p['m']['bMagazineGuided'] is True and p['r']['bSupportHeld'] is False
+              and p['m']['PullGrabCount']==field(75,'PullGrabCount')+1
+              and p['m']['HeldMagazine']==0 and p['m']['InsertedMagazine']==inserted and same(p,75))
+        check('partial_pull_release_restores_without_detach',78,lambda p:p['m']['bMagazinePullHeld'] is False
+              and p['m']['bMagazineGuided'] is False and p['m']['InsertedMagazine']==inserted
+              and p['m']['HeldMagazine']==0 and p['m']['PullRemoveCount']==field(75,'PullRemoveCount')
+              and p['m']['EjectCount']==field(75,'EjectCount') and same(p,75))
+        check('full_grip_pull_removes_exact_identity_without_button',82,lambda p:p['m']['HeldMagazine']==inserted
+              and p['m']['InsertedMagazine']==0 and p['m']['PullGrabCount']==field(75,'PullGrabCount')+2
+              and p['m']['PullRemoveCount']==field(75,'PullRemoveCount')+1
+              and p['m']['EjectCount']==field(75,'EjectCount')+1 and p['m']['SeatCount']==field(75,'SeatCount')
+              and p['m']['bMagazineGuided'] is False and p['m']['bMagazinePullHeld'] is False
+              and p['m']['LoadedRounds']==int(p['m']['bChambered']) and p['r']['bSupportHeld'] is False
+              and all(p['m'][k]==field(75,k) for k in ('OwnedRounds','SpentRounds','DiscardedRounds','DropCount','bChambered')))
+        check('withdrawn_hold_cannot_capture_instantly',82,lambda p:p['m']['GuideCaptureCount']==field(80,'GuideCaptureCount')
+              and p['m']['SeatCount']==field(80,'SeatCount'))
+        check('deliberate_return_reseats_same_magazine_once',85,lambda p:p['m']['InsertedMagazine']==inserted
+              and p['m']['HeldMagazine']==0 and p['m']['SeatCount']==field(82,'SeatCount')+1
+              and p['m']['GuideCaptureCount']==field(82,'GuideCaptureCount')+1
+              and p['m']['PullRemoveCount']==field(82,'PullRemoveCount')
+              and p['m']['LoadedRounds']==field(75,'LoadedRounds') and p['m']['bMagazinePullHeld'] is False
+              and p['r']['bSupportHeld'] is False and p['r']['Tracking.LeftGrip']>.7
+              and all(p['m'][k]==field(82,k) for k in ('OwnedRounds','SpentRounds','DiscardedRounds','DropCount','EjectCount')))
+        check('final_release_preserves_reseated_ledger',86,lambda p:same(p,85)
+              and p['m']['InsertedMagazine']==inserted and p['m']['HeldMagazine']==0)
+        partial=[p for p in phase(77,0) if p['m'].get('bMagazinePullHeld') is True and p['m'].get('GuideRailDepth',0)<-.01]
+        checks['partial_pull_has_actual_native_travel']=covered(partial) and all(p['m']['InsertedMagazine']==inserted
+            and p['m']['HeldMagazine']==0 and p['m']['SeatCount']==field(75,'SeatCount')
+            and p['m']['PullRemoveCount']==field(75,'PullRemoveCount') and p['r']['bSupportHeld'] is False for p in partial)
+    else:
+        check('pistol_never_inherits_rifle_pull',86,lambda p:p['m']['PullGrabCount']==p['m']['PullRemoveCount']==0
+              and p['m']['bMagazinePullHeld'] is False and same(p,74)
+              and p['m']['InsertedMagazine']==inserted and p['m']['HeldMagazine']==0)
+    return checks,dict(phase_coverage=metrics,failures=failures,magnetic_pose_evidence=evidence,
+                       release_delivery_policy=dict(legacy_one_second_protocol=legacy_release,
+                           recorded_phase61_and74_durations_ms=release_durations,settle_ms=release_settle),
+                       raw_input_uses_measured_socket=True,headset_acceptance=False)
+
+
 def analyze(controls, rows, fixture, weapon='single'):
     if weapon not in GUNS:
         raise ValueError('Unsupported reload UX weapon: '+weapon)
     rifle = weapon in ('bullpup', 'scar'); checks = {}; metrics = {}; notes = []
     records, rejected = collect(rows, GUNS[weapon])
     sent = [c for c in controls if c.get('sent') is True]
-    ranges = {n:[c['uptime_ms'] for c in sent if c.get('phase') == n] for n in range(61)}
+    guide_trial = any(c.get('reload_guide') is True or c.get('phase',0)>60 for c in controls)
+    end_phase = 86 if guide_trial else 60
+    ranges = {n:[c['uptime_ms'] for c in sent if c.get('phase') == n] for n in range(end_phase+1)}
     def phase(n, settle=150):
         times = ranges[n]
         return [p for p in records if times and min(times)+settle <= p['row']['uptime_ms'] <= max(times)]
@@ -332,7 +489,9 @@ def analyze(controls, rows, fixture, weapon='single'):
         return data[-1] if data else dict(m={}, r={}, g={}, v={})
     def field(n, key):
         return last(n)['m'].get(key)
-    checks['all_controller_phases_sent'] = all(len(ranges[n]) >= 3 for n in range(61))
+    checks['all_controller_phases_sent'] = all(len(ranges[n]) >= 3 for n in range(end_phase+1))
+    if guide_trial:
+        checks['guide_protocol_marked_in_every_command'] = bool(sent) and all(c.get('reload_guide') is True for c in sent)
     checks['no_Y_mode_toggle_sent'] = bool(sent) and all(c.get('left_secondary') is False for c in sent)
     checks['left_trigger_unused'] = bool(sent) and all(finite(c.get('left_trigger')) and c['left_trigger'] == 0 for c in sent)
     checks['dominant_grip_unused_after_draw'] = bool(sent) and all(finite(c.get('right_squeeze')) and c['right_squeeze'] == 0 for c in sent if c.get('phase', -1) >= 2)
@@ -343,7 +502,7 @@ def analyze(controls, rows, fixture, weapon='single'):
         commands = [c for c in sent if c.get('phase') == n]
         checks['grip_only_action_sent_phase_'+str(n)] = len(commands) >= 3 and all(finite(c.get('left_squeeze')) and c['left_squeeze'] > .7 and c.get('left_trigger') == c.get('right_squeeze') == 0 for c in commands)
     main = [p for p in records if ranges[2] and p['row']['uptime_ms'] >= min(ranges[2])+150
-            and ranges[60] and p['row']['uptime_ms'] <= max(ranges[60])]
+            and ranges[end_phase] and p['row']['uptime_ms'] <= max(ranges[end_phase])]
     for p in main:
         p['input_phase'] = max((n for n, times in ranges.items()
             if times and min(times) <= p['row']['uptime_ms']), default=None)
@@ -515,6 +674,8 @@ def analyze(controls, rows, fixture, weapon='single'):
         checks['fixture_matches_current_owned_weapon'] = (checks['live_fixture_provenance'] and fixture.get('gun_address') == p['gun'] and fixture.get('visual_address') == p['visual'] and fixture.get('rig_address') == p['rig'] and distance(vals[:3], root) < .00001 and distance(vals[3:6], grasp) < .00001 and distance(vals[6:9], v['InsertionAxis']) < .00001 and distance(vals[9:12], action) < .00001 and distance(vals[12:15], v['ActionPullAxis']) < .00001 and abs(vals[15]-v['ActionTravelMetres']) < .000001 and fixture.get('feed_on_seat') is rifle)
     except (KeyError, TypeError, ValueError, ZeroDivisionError):
         checks['fixture_matches_current_owned_weapon'] = False
+    guide_checks, guide = guide_evidence(records, ranges, sent, rifle, native) if guide_trial else ({},None)
+    checks.update(guide_checks)
     geo_checks, geo = geometry(main, rifle, native); checks.update(geo_checks)
     supply_checks, supply = supply_geometry(main); checks.update(supply_checks)
     from validate_reload_trial import capacity_evidence
@@ -535,7 +696,7 @@ def analyze(controls, rows, fixture, weapon='single'):
     final_rigs = [o['values'] for o in rows[-1].get('objects', []) if o['type'] == 'KFVRWeaponRig' and not o['values'].get('bDeleteMe')] if rows else []
     checks['final_input_released'] = len(final_rigs) == 1 and final_rigs[0].get('bTracking') is False and final_rigs[0].get('bFiring') is False
     return dict(passed=all(checks.values()), weapon=weapon, checks=checks, phase_coverage=metrics,
-                geometry=geo, chest_supply=supply, capacity_evidence=capacity, coherent_owned_samples=len(main), rejected_ownership_samples=rejected[:12],
+                geometry=geo, magazine_guide=guide, chest_supply=supply, capacity_evidence=capacity, coherent_owned_samples=len(main), rejected_ownership_samples=rejected[:12],
                 failed_sample_details=notes, initial_ammo_budget=budgets[0] if budgets else None,
                 discarded_magazine_travel_world_units=travel if finite(travel) else None,
                 live_game=True, synthetic_controllers=True, headset_presented=False,

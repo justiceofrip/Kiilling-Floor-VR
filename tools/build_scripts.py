@@ -79,6 +79,13 @@ def build(game):
  insertion_match=re.search(r'KFVR_MAG_INSERT_TEST_RESULT checks=(\d+) failures=0',insertion_output)
  if insertion_result.returncode or not insertion_match:raise RuntimeError('Magazine insertion tests failed; see saved compiler log')
  print('UnrealScript continuous magazine insertion: '+insertion_match.group(1)+' checks passed')
+ magazine_gesture_checks={}
+ for label,command,token in [('magazine-guide','KFVRMagazineGuideTests','KFVR_MAG_GUIDE_TEST_RESULT'),('magazine-pull','KFVRMagazinePullTests','KFVR_MAG_PULL_TEST_RESULT')]:
+  result=subprocess.run([str(system/'ucc.exe'),'KFVRGameplay.'+command,'ini=KFVRMake.ini'],cwd=system,capture_output=True,timeout=90)
+  gesture_output=(result.stdout+result.stderr).decode('utf-8',errors='replace');(reports/('unrealscript-'+label+'-tests.log')).write_text(gesture_output,encoding='utf-8')
+  match=re.search(token+r' checks=(\d+) failures=0',gesture_output)
+  if result.returncode or not match:raise RuntimeError(label+' tests failed; see saved compiler log')
+  magazine_gesture_checks[label]=int(match.group(1));print('UnrealScript '+label+': '+match.group(1)+' checks passed')
  rail_result=subprocess.run([str(system/'ucc.exe'),'KFVRGameplay.KFVRActionRailTests','ini=KFVRMake.ini'],cwd=system,capture_output=True,timeout=90)
  rail_output=(rail_result.stdout+rail_result.stderr).decode('utf-8',errors='replace');(reports/'unrealscript-action-rail-tests.log').write_text(rail_output,encoding='utf-8')
  rail_match=re.search(r'KFVR_ACTION_RAIL_TEST_RESULT checks=(\d+) failures=0',rail_output)
@@ -120,6 +127,6 @@ def build(game):
  if throw_result.returncode or not throw_match:raise RuntimeError('Throw velocity tests failed; see saved compiler log')
  print('UnrealScript throw velocity: '+throw_match.group(1)+' checks passed')
  out=ROOT/'build/unrealscript';out.mkdir(parents=True,exist_ok=True);shutil.copy2(package,out/package.name)
- (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),scar_compatibility_checks=int(scar_match.group(1)),reload_pose_checks=int(pose_match.group(1)),magazine_checks=int(mag_match.group(1)),support_pose_checks=int(support_match.group(1)),action_rail_checks=int(rail_match.group(1)),support_grip_checks=int(support_grip_match.group(1)),arm_pose_checks=int(arm_match.group(1)),throw_motion_checks=int(throw_match.group(1)),melee_checks=int(melee_match.group(1)),dual_feed_checks=int(dual_match.group(1)),dual_magazine_checks=int(dual_mag_match.group(1)),inputs=manifest),indent=2))
+ (reports/'unrealscript-build.json').write_text(json.dumps(dict(game=str(game),compiler=str(system/'ucc.exe'),package=str(out/package.name),package_sha256=hashlib.sha256(package.read_bytes()).hexdigest(),game_files_written=False,parity_checkpoints=len(actual),scar_compatibility_checks=int(scar_match.group(1)),reload_pose_checks=int(pose_match.group(1)),magazine_checks=int(mag_match.group(1)),magazine_gesture_checks=magazine_gesture_checks,support_pose_checks=int(support_match.group(1)),action_rail_checks=int(rail_match.group(1)),support_grip_checks=int(support_grip_match.group(1)),arm_pose_checks=int(arm_match.group(1)),throw_motion_checks=int(throw_match.group(1)),melee_checks=int(melee_match.group(1)),dual_feed_checks=int(dual_match.group(1)),dual_magazine_checks=int(dual_mag_match.group(1)),inputs=manifest),indent=2))
 if __name__=='__main__':
  parser=argparse.ArgumentParser();parser.add_argument('--game',type=pathlib.Path,required=True);build(parser.parse_args().game.resolve())

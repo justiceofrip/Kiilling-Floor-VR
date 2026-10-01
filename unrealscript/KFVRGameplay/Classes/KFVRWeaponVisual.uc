@@ -251,6 +251,53 @@ simulated function vector HeldMagazinePosition(vector HandPosition,rotator HandR
         return HandPosition-((MagazineGrip.PalmLocal*DrawScale)>>HandRotation);
     return HandPosition;
 }
+// Same native grasp offset, with explicit scale for mechanics evaluated before
+// PoseAt. The caller supplies the current validated tracking scale/frame.
+simulated function vector HeldMagazinePositionAt(vector HandPosition,rotator HandRotation,float Units)
+{
+    if (MagazineGrip!=None && MagazineGrip.bCalibrated)
+        return HandPosition-((MagazineGrip.PalmLocal*(Units/ModelUnitsPerMetre))>>HandRotation);
+    return HandPosition;
+}
+// Inverse native-grasp mapping: a magazine root becomes its measured palm.
+// Omitted Units uses the actual displayed scale; mechanics pass tracking Units.
+simulated function vector MagazinePalmPosition(vector MagazineRoot,rotator MagazineRotation,optional float Units)
+{
+    local float Scale;
+    Scale=DrawScale;
+    if (Units>0) Scale=Units/ModelUnitsPerMetre;
+    if (MagazineGrip!=None && MagazineGrip.bCalibrated)
+        return MagazineRoot+((MagazineGrip.PalmLocal*Scale)>>MagazineRotation);
+    return MagazineRoot;
+}
+// Current firearm model axes follow controller aim. Compute the rest/socket
+// from that raw frame, without support/recoil or changing the rendered actor.
+simulated function vector MagazineRestAt(vector GripPosition,rotator GripRotation,float Units)
+{
+    return GripPosition+(((MagazineLocal-PalmLocal)*(Units/ModelUnitsPerMetre))>>GripRotation);
+}
+simulated function vector MagazineSocketPositionAt(vector WorldRoot,vector GripPosition,rotator GripRotation,float Units)
+{
+    local vector D,P;
+    D=((WorldRoot-MagazineRestAt(GripPosition,GripRotation,Units))<<GripRotation)/Units;
+    P.X=D dot InsertionX; P.Y=D dot InsertionY; P.Z=D dot InsertionAxis;
+    return P;
+}
+// Inverse of the displayed socket projection. Only presentation uses the final
+// visual frame; raw controller geometry remains the authority for rail travel.
+simulated function vector MagazineSocketWorld(vector SocketPosition,float Units)
+{
+    return MagazineRest()+(((InsertionX*SocketPosition.X+InsertionY*SocketPosition.Y
+        +InsertionAxis*SocketPosition.Z)*Units)>>Rotation);
+}
+simulated function float MagazineAlignmentAt(rotator HandRotation,rotator GripRotation)
+{
+    local float Trace;
+    Trace=((MagazineX>>HandRotation) dot (MagazineX>>GripRotation))
+        +((MagazineY>>HandRotation) dot (MagazineY>>GripRotation))
+        +((MagazineZ>>HandRotation) dot (MagazineZ>>GripRotation));
+    return FClamp((Trace-1.0)*0.5,-1.0,1.0);
+}
 // The seat is the installed magazine root. Socket +Z follows measured travel.
 simulated function vector MagazineSocketPosition(vector WorldRoot,float Units)
 {
@@ -324,8 +371,9 @@ simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, f
     if (Held) HandPosition=HeldMagazinePosition(HandPosition,HandRotation);
     if (Held) Offset=((HandPosition-Location)<<Rotation)/DrawScale-MagazineLocal;
     if (Detached) { Offset=((DetachedPosition-Location)<<Rotation)/DrawScale-MagazineLocal; HandRotation=DetachedRotation; }
-    // Only a detached, held magazine needs an absolute world rotation. A
-    // seated magazine inherits the installed skeleton's frame with the gun.
+    // Held is presentation ownership: a guided partial pull may still retain
+    // its inserted ledger identity. An ungripped seated magazine inherits the
+    // installed skeleton frame; guided/held/dropped parts use a world frame.
     if (Held || Detached)
     {
         Desired=OrthoRotation(MagazineX>>HandRotation,MagazineY>>HandRotation,MagazineZ>>HandRotation);

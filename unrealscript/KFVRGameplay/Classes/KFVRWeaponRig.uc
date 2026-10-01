@@ -359,13 +359,21 @@ function ReleaseInput()
     if (StatusDisplay!=None) StatusDisplay.HideDisplay();
     if (AmmoSupply!=None) AmmoSupply.HideDisplay();
 }
+// A guided seat may remain gripped until release even after Held becomes zero.
+// Require a real held/inserted identity; guide flags alone cannot create a grasp.
+function bool MagazineHandActive()
+{
+    return ManualReload!=None && ManualReload.Gun==Gun
+        && (ManualReload.HeldMagazine>0 || (ManualReload.InsertedMagazine>0
+            && (ManualReload.bMagazinePullHeld || ManualReload.bMagazineGuided)));
+}
 function int HandGripRole(bool Left)
 {
     if (bHolstered || Gun==None) return 0;
     if (!Left) { if (KFVRTrackedKnife(Gun)!=None || Gun.Class==class'Frag') return 2; return 1; }
     if (KFVRTrackedDualies(Gun)!=None) return 1;
     if (bSupportHeld) return 3;
-    if (ManualReload!=None && (ManualReload.HeldMagazine>0 || ManualReload.bSlideHeld)) return 3;
+    if (MagazineHandActive() || (ManualReload!=None && ManualReload.Gun==Gun && ManualReload.bSlideHeld)) return 3;
     return 0;
 }
 // Load the presentation while the private match starts, before XR requests its
@@ -422,6 +430,10 @@ function UpdateHands()
 {
     local KFVRWeaponVisual LeftGrasp,RightGrasp;
     local int LeftRole,RightRole;
+    local vector LeftPosition;
+    local rotator LeftRotation;
+    local bool GuidedMagazine;
+    LeftPosition=Tracking.LeftPosition; LeftRotation=Tracking.LeftRotation;
     if (Gun!=None && !bHolstered && (Trader==None || !Trader.bOpen))
     {
         RightGrasp=Visual;
@@ -429,8 +441,14 @@ function UpdateHands()
         // provisional right-hand grasp until a matching profile is available.
         if (Gun.Class==class'Frag') RightGrasp=None;
         if (KFVRTrackedDualies(Gun)!=None) LeftGrasp=KFVRTrackedDualies(Gun).LeftVisual;
+        else if (MagazineHandActive() && Visual!=None && !Visual.bHidden && (Tracking.Flags & 3)==3)
+        {
+            LeftGrasp=Visual.MagazineGrip;
+            GuidedMagazine=ManualReload.bMagazineGuided;
+            if (GuidedMagazine)
+            { LeftPosition=ManualReload.MagazinePalmWorld; LeftRotation=ManualReload.MagazinePalmRotation; }
+        }
         else if (bSupportHeld && Visual!=None && !Visual.bHidden && (Tracking.Flags & 3)==3) LeftGrasp=Visual;
-        else if (ManualReload!=None && ManualReload.HeldMagazine>0 && Visual!=None && !Visual.bHidden && (Tracking.Flags & 3)==3) LeftGrasp=Visual.MagazineGrip;
         LeftRole=HandGripRole(True); RightRole=HandGripRole(False);
     }
     if (LeftHand!=None)
@@ -441,7 +459,17 @@ function UpdateHands()
             LeftHand.ActionPalmRotation=ManualReload.ActionPalmRotation;
         }
         LeftHand.bHidden=(Tracking.Flags & 1)==0;
-        if (!LeftHand.bHidden) LeftHand.PoseHand(Tracking.LeftPosition,Tracking.LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl,LeftRole,LeftGrasp,True);
+        if (!LeftHand.bHidden)
+        {
+            LeftHand.PoseHand(LeftPosition,LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl,LeftRole,LeftGrasp,True);
+            // The supplied pose may be on the magazine rail. Preserve actual
+            // controller telemetry independently of its guided presentation.
+            if (GuidedMagazine)
+            {
+                LeftHand.TrackedPalmPosition=Tracking.LeftPosition;
+                LeftHand.ControllerPalmError=VSize(LeftHand.PalmWorld-Tracking.LeftPosition);
+            }
+        }
     }
     if (RightHand!=None)
     {
