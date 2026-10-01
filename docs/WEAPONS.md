@@ -107,3 +107,12 @@ Class names and inheritance come from the installed packages. Numerical defaults
 ## Deferred VR surface inspection
 
 October 1 wearer feedback: the assault rifle's rear surface is missing when viewed from angles unavailable in flat play. The pistol and other inspected items did not show the same obvious issue to the wearer; coverage across the catalog is unknown. Audit each model from all sides and distinguish absent geometry, backface culling, material flags and missing textures before choosing a repair. Keep repairs separate from the accepted rifle grip/aim transform. No blanket two-sided-material change or mesh repair has been made.
+
+
+## Bullpup reload asset audit
+
+The installed `Bullpup_Trip` / `BullPup_anim` reload has a usable magazine sequence: proposed normalized insertion markers .62/.76 move the magazine root from 55.469 mm to 5.229 mm from its idle position, along a 50.240 mm segment. Replacement grasp .62 passes the existing palm/finger geometry guards; removal grasp .40 is a possible separate future role. Magazine and translation parent are `Magazine` and `Bullpup`. The root is near the top of the roughly 174 mm magazine, so interaction distances refer to that root rather than its center.
+
+No independent charging-handle or bolt bone exists among the 55 bones or seven animation sequences. `Mag Release` only presses about 4 mm laterally; it is not a charging handle. The existing .07 action-travel value is an unsupported placeholder. Physical rifle reload remains disabled until an explicit usable action presentation/policy exists. The accepted idle palm, support and muzzle transforms are preserved; offline predictions match existing engine measurements within 0.0000171 model UU.
+
+Local provenance and reproducible measurements are in ignored `reports/bullpup-reload-asset-audit.json` and `reports/bullpup_reload_asset_audit.py`. Runtime animation sampling and wearer acceptance remain separate. Rifle integration also needs explicit offhand ownership between support, magazine and action interactions, and must retain stock automatic-fire/perk cadence. Commando changes the stock 40-round capacity to 44/48/50; retained magazines require per-identity limits when that capacity changes.

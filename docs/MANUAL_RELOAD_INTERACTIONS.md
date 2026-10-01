@@ -83,3 +83,12 @@ Launch with `Start-KFVRDev.ps1 -Unattended -NativeHands -MK23Test -VRProfile`. T
 
 
 Mechanical translations now project model-space offsets into the measured installed parent frame before applying the engine's measured translation scale. Magazine rotation continues to follow the hand independently of that rest parent frame. Separate magazine/action parent selectors avoid assuming identical hierarchies on future profiles. The legacy dual-belt path remains unchanged until separately audited.
+
+
+## Magazine capacity changes
+
+Each physical magazine records its own capacity. The weapon's current perk-adjusted capacity controls newly supplied magazines and refilled empty stored shells; a capacity notification does not resize an inserted, held, presented, stored or discarded magazine, change its rounds, or complete a mechanical action. Repeated notifications are no-ops. Invalid capacities leave the ledger untouched.
+
+Binding an existing stock weapon preserves all observed loaded rounds, including a chambered plus-one or a larger load retained after a perk decrease. The initial identity limit is the larger of current supply capacity and observed magazine rounds, within the ledger's existing hard bounds. Later supply uses the current stock capacity. Ordinary mode exit keeps its existing policy: loaded rounds are clamped to the current timed-feed capacity while the total remains conserved as loaded plus reserve.
+
+Live single/dual adapters reconcile capacity after stock weapon updates and publish current and per-slot limits for read-only inspection. Script magazine limits remain 1–100 rounds (up to 101 loaded including chamber); the separate portable prototype retains its 1–1000 bound. The portable identity ledger and engine-run single/dual ledgers have separate regression suites; the existing AmmoMachine parity stream is a different model and is not evidence of identity-ledger parity.

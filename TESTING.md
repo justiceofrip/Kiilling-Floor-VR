@@ -258,3 +258,10 @@ The trial retains the continuous insertion, real magazine/chamber accounting, st
 
 
 The extended official-SDK commandlets pass 10,500 melee, 4,512 throw and 34,661 dual-magazine checks. Fast and too-slow knife trajectories are compared across normal, slow and recovering game clocks; a rebased physical clock must retain the existing game-time cooldown. Throw cases require identical measured 5 m/s trajectories despite game dilation, skip repeated/replayed source samples and rebuild history after clock faults. These are engine-run state tests, distinct from the live collision/projectile fixtures.
+
+
+## Per-magazine capacity changes
+
+The portable PhysicalReload tests and official KFVRMagazineTests/KFVRDualMagazineTests commandlets exercise supply capacity changes while magazines are inserted, held, presented, stored or discarded. Retained identities keep their rounds and limits. New supply and refilled empty shells use the current limit. Tests include tactical plus-one binding, larger stock loads after perk decreases, invalid notifications, full identity pools, pending mechanical actions and randomized conservation. These ledgers have separate test suites; AmmoMachine parity is not identity-ledger parity.
+
+Live integration uses a fresh `-Unattended -NativeHands -VRProfile` match with `native_bridge_trial.py --reload-insertion`, followed by a fresh `-DualTest` match with `--dual-belt`, both at 1280 x 960 per eye. Capacity validators associate coherent controller and weapon samples, compare supply against the actual stock MagCapacity, require observed empty/occupied magazine slots, and bound loaded rounds against the recorded inserted identity. Retained capacity may differ from current supply. These ordinary runs verify binding and reload behavior, not a live perk change or new headset acceptance.

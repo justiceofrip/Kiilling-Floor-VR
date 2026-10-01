@@ -15,6 +15,7 @@ var float MagazineError,SlideTravel,MagazineDirectionDot,MagazineAlignment;
 var int EjectCount,GrabCount,SeatCount,StowCount,DropCount,RackCount;
 var int LoadedRounds,OwnedRounds,SpentRounds,DiscardedRounds,HeldMagazine,InsertedMagazine,Revision;
 var bool bChambered,bValid;
+var int CurrentCapacity,InsertedCapacity,HeldCapacity,CapacityChanges;
 function bool Initialize(KFVRWeaponRig R,KFWeapon W)
 {
     if (W==None || class'KFVRWeaponProfile'.static.Manual(W)!=None || W.bIsReloading) return False;
@@ -31,10 +32,18 @@ function Publish()
     LoadedRounds=Ammo.Loaded(); OwnedRounds=Ammo.Total(); SpentRounds=Ammo.Spent;
     DiscardedRounds=Ammo.Discarded; HeldMagazine=Ammo.Held; InsertedMagazine=Ammo.Inserted;
     Revision=Ammo.Revision; bChambered=Ammo.bChamber; bValid=Ammo.Valid(); SlideTravel=Ammo.Travel;
+    CurrentCapacity=Ammo.Capacity; InsertedCapacity=0; HeldCapacity=0;
+    if (Ammo.Inserted>0) InsertedCapacity=Ammo.GetMagazineCapacity(Ammo.Inserted);
+    if (Ammo.Held>0) HeldCapacity=Ammo.GetMagazineCapacity(Ammo.Held);
 }
 function Reconcile()
 {
+    local int PreviousCapacity;
     if (Gun==None || Ammo==None) return;
+    // Stock WeaponTick updates perk capacity. Existing magazine identities keep
+    // their rounds/limits; only subsequently supplied magazines use this value.
+    PreviousCapacity=Ammo.Capacity;
+    if (Ammo.SetCapacity(Gun.MagCapacity) && PreviousCapacity!=Ammo.Capacity) CapacityChanges++;
     Ammo.ReconcileTotal(Gun.AmmoAmount(0)); Publish();
 }
 function Suspend()

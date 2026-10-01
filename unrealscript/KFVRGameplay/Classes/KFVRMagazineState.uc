@@ -1,16 +1,39 @@
-// Game-thread single-pistol ledger. Slots are identities; partial magazines are
+// Game-thread closed-bolt ledger. Slots are identities; partial magazines are
 // retained separately. No animation notify or visual actor can credit ammunition.
 class KFVRMagazineState extends Object;
-var int Rounds[64];
+var int Rounds[64],MagazineCapacity[64];
+// Capacity is the current supply limit; existing identities keep their own limit.
 var int MagazineCount, Inserted, Held, Capacity, Reserve, Budget, Spent, Discarded, Revision;
 var bool bChamber, bFeedArmed, bExtracted, bSlideLocked;
 var float Travel;
 function bool Initialize(int InCapacity, int Loaded, int Total)
 {
-    if (InCapacity<1 || InCapacity>100 || Loaded<0 || Loaded>InCapacity || Total<Loaded || Total>10000) return False;
+    if (InCapacity<1 || InCapacity>100 || Loaded<0 || Loaded>101 || Total<Loaded || Total>10000) return False;
     Capacity=InCapacity; Reserve=Total-Loaded; Budget=Total;
     Inserted=1; MagazineCount=1; Rounds[0]=Max(0,Loaded-1); bChamber=Loaded>0;
+    // Stock can retain an older, larger load after a perk decrease.
+    MagazineCapacity[0]=Max(InCapacity,Rounds[0]);
     return Valid();
+}
+// A trusted stock capacity change affects only future supply/refills.
+// Invalid values and repeated notifications leave every field untouched.
+function bool SetCapacity(int NewCapacity)
+{
+    if (NewCapacity<1 || NewCapacity>100) return False;
+    if (Capacity==NewCapacity) return True;
+    Capacity=NewCapacity; Revision++; return True;
+}
+// UE2 cannot encode external context access to a 256-byte int[64] field.
+// Expose bounded, one-based identities without exposing that bytecode limit.
+function int GetMagazineCapacity(int Id)
+{
+    if (Id<1 || Id>MagazineCount || Id>64) return 0;
+    return MagazineCapacity[Id-1];
+}
+function int GetMagazineRounds(int Id)
+{
+    if (Id<1 || Id>MagazineCount || Id>64) return 0;
+    return Rounds[Id-1];
 }
 function int Loaded() { return int(bChamber)+(int(Inserted>0)*Rounds[Max(0,Inserted-1)]); }
 function int Total()
@@ -23,8 +46,8 @@ function int Total()
 function bool Valid()
 {
     local int I;
-    if (MagazineCount<1 || MagazineCount>64 || Inserted<0 || Inserted>MagazineCount || Held<0 || Held>MagazineCount || (Inserted>0 && Inserted==Held) || Reserve<0 || Travel<0 || Travel>1) return False;
-    for (I=0;I<MagazineCount;I++) if (Rounds[I]<0 || Rounds[I]>Capacity) return False;
+    if (Capacity<1 || Capacity>100 || MagazineCount<1 || MagazineCount>64 || Inserted<0 || Inserted>MagazineCount || Held<0 || Held>MagazineCount || (Inserted>0 && Inserted==Held) || Reserve<0 || Travel<0 || Travel>1) return False;
+    for (I=0;I<MagazineCount;I++) if (MagazineCapacity[I]<1 || MagazineCapacity[I]>100 || Rounds[I]<0 || Rounds[I]>MagazineCapacity[I]) return False;
     return Total()+Spent+Discarded==Budget;
 }
 function bool CanFire() { return bChamber && Travel<=0.1 && Valid(); }
@@ -64,11 +87,11 @@ function bool GrabBelt()
         if (Rounds[I]==0) Empty=I;
     }
     Fresh=Min(Capacity,Reserve);
-    if (Best>=0 && Rounds[Best]>0 && Rounds[Best]>=Fresh) Held=Best+1;
+    if (Best>=0 && Rounds[Best]>0 && (Rounds[Best]>=Fresh || (Empty<0 && MagazineCount==64))) Held=Best+1;
     else if (Fresh>0)
     {
         if (Empty<0) { if (MagazineCount>=64) return False; Empty=MagazineCount; MagazineCount++; }
-        Rounds[Empty]=Fresh; Reserve-=Fresh; Held=Empty+1;
+        MagazineCapacity[Empty]=Capacity; Rounds[Empty]=Fresh; Reserve-=Fresh; Held=Empty+1;
     }
     else return False;
     Revision++; return True;

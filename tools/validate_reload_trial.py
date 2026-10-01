@@ -61,6 +61,55 @@ def clock_evidence(controls,rows,native,gun_addresses):
  checks['fast_stroke_exposes_scaled_clock_bug']=any(p['delta']>0 and p['distance']>4*p['delta']*.22+.005 for p in moving)
  return checks,dict(native_source_clock_resets=native.get('source_clock_resets'),native_last_clock_fault=native.get('last_clock_fault'),fixture_samples=len(fixtures),fixture_final=last,slow_motion_slopes=slopes,sent_rollback_count=len(rollbacks),stroke_sent_samples=len(stroke),stroke_travel_metres=travel,stroke_duration_seconds=duration,moving_segments=moving)
 
+def capacity_evidence(rows,gun_type):
+ """Compare coherent live gun state with each magazine's recorded limit."""
+ gun_addresses={o['address'] for row in rows for o in row['objects'] if o['type']==gun_type and not o['values'].get('bDeleteMe')}
+ manual_addresses={o['address'] for row in rows for o in row['objects'] if o['type']=='KFVRManualReload' and not o['values'].get('bDeleteMe') and o['values'].get('Gun') in gun_addresses}
+ slots=(('InsertedMagazine','InsertedCapacity'),('HeldMagazine','HeldCapacity'))
+ counts={name:dict(absent=0,present=0,limits=set()) for name,_ in slots}
+ samples=0;missing={};failures=[];supply_ok=identity_ok=loaded_ok=changes_ok=True;previous_changes={};supply_limits=set()
+ def integer(value):return type(value) is int
+ for line,row in enumerate(rows,1):
+  if row.get('rig_sample_consistent') is not True:continue
+  objs={o['address']:o for o in row['objects'] if not o['values'].get('bDeleteMe')}
+  for address in manual_addresses:
+   obj=objs.get(address)
+   if not obj or obj['type']!='KFVRManualReload':continue
+   m=obj['values'];gun=objs.get(m.get('Gun'),{});g=gun.get('values',{});samples+=1;bad=[]
+   for key in ('CurrentCapacity','InsertedCapacity','HeldCapacity','CapacityChanges'):
+    if key not in m:missing[key]=missing.get(key,0)+1
+   current=m.get('CurrentCapacity');stock=g.get('MagCapacity')
+   good=gun.get('type')==gun_type and integer(current) and 1<=current<=100 and integer(stock) and current==stock
+   supply_ok &= good
+   if not good:bad.append('supply')
+   if integer(current):supply_limits.add(current)
+   for name,limit_name in slots:
+    identity=m.get(name);limit=m.get(limit_name)
+    good=integer(identity) and identity>=0 and integer(limit) and (limit==0 if identity==0 else 1<=limit<=100)
+    identity_ok &= good
+    if not good:bad.append(limit_name)
+    if integer(identity) and identity>=0:counts[name]['present' if identity else 'absent']+=1
+    if integer(limit):counts[name]['limits'].add(limit)
+   inserted=m.get('InsertedMagazine');limit=m.get('InsertedCapacity');loaded=m.get('LoadedRounds');chamber=m.get('bChambered')
+   good=integer(inserted) and inserted>=0 and integer(limit) and (limit==0 if inserted==0 else 1<=limit<=100) and integer(loaded) and type(chamber) is bool and int(chamber)<=loaded<=(limit if inserted else 0)+int(chamber)
+   loaded_ok &= good
+   if not good:bad.append('loaded')
+   changed=m.get('CapacityChanges');good=integer(changed) and changed>=previous_changes.get(address,0)
+   changes_ok &= good
+   if not good:bad.append('change_counter')
+   if integer(changed):previous_changes[address]=changed
+   if bad and len(failures)<8:failures.append(dict(line=line,uptime_ms=row['uptime_ms'],manual=address,fields=bad))
+ coverage=samples>=10
+ identity_coverage=all(c['absent']>=5 and c['present']>=5 for c in counts.values())
+ checks=dict(supply_capacity_matches_live_gun=coverage and supply_ok,
+             magazine_identities_have_recorded_capacities=coverage and identity_coverage and identity_ok,
+             loaded_rounds_fit_recorded_inserted_capacity=coverage and loaded_ok,
+             capacity_change_counter_is_valid=coverage and changes_ok)
+ metrics=dict(coherent_samples=samples,required_samples=10,required_slot_state_samples=5,missing_fields=missing,
+              supply_capacities=sorted(supply_limits),slots={name:dict(absent=c['absent'],present=c['present'],capacities=sorted(c['limits'])) for name,c in counts.items()},last_change_counters=previous_changes,failures=failures)
+ return checks,metrics
+
+
 def validate(folder,weapon="single",interrupted=False,insertion=False,clock=False):
  insertion=insertion or clock
  folder=pathlib.Path(folder)
@@ -78,6 +127,7 @@ def validate(folder,weapon="single",interrupted=False,insertion=False,clock=Fals
  def at(name,n,predicate,typ='KFVRManualReload'):
   data=phase(n,typ);checks[name]=bool(data) and all(predicate(x) for x in data)
  checks['every_sample_conserves_ammo']=all(m['bValid'] and m['OwnedRounds']+m['SpentRounds']+m['DiscardedRounds']==initial for m in manuals)
+ capacity_checks,capacity_metrics=capacity_evidence(rows,gun_type);checks.update(capacity_checks)
  at('catch_keeps_chamber',5,lambda m:m['HeldMagazine']==1 and m['InsertedMagazine']==0 and m['LoadedRounds']==1 and m['bChambered'])
  at('retained_chamber_fires_once',7,lambda m:m['SpentRounds']==1 and m['LoadedRounds']==0 and not m['bChambered'])
  at('empty_trigger_cannot_fire',8,lambda m:m['SpentRounds']==1)
@@ -235,7 +285,7 @@ def validate(folder,weapon="single",interrupted=False,insertion=False,clock=Fals
     palm_tracking_errors.append(math.dist(hand['PalmWorld'],rig['Tracking.LeftPosition']))
   checks['native_magazine_grasp_is_measured_and_attached']=native_grip_samples>=5 and not missing_native_profiles and bool(mag_palm_errors) and max(mag_palm_errors)<.05
   checks['magazine_grasp_keeps_controller_palm']=bool(palm_tracking_errors) and max(palm_tracking_errors)<.005
- report=dict(clock_trial=clock,clock_evidence=clock_metrics,max_socket_position_error_metres=max(socket_errors,default=None) if insertion else None,insertion_trial=insertion,interruption_trial=interrupted,inserted_magazine_frames=rest_metrics,action_bone_positions=action_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
+ report=dict(capacity_evidence=capacity_metrics,clock_trial=clock,clock_evidence=clock_metrics,max_socket_position_error_metres=max(socket_errors,default=None) if insertion else None,insertion_trial=insertion,interruption_trial=interrupted,inserted_magazine_frames=rest_metrics,action_bone_positions=action_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
  (folder/'reload-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Reload checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

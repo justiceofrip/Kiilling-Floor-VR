@@ -6,9 +6,15 @@
 namespace kfvr::gameplay {
 PhysicalReload::PhysicalReload(PhysicalReloadConfig c,std::array<unsigned,2> loaded,unsigned reserve,std::uint32_t epoch):config_(c),epoch_(epoch){
     const auto budget=std::uint64_t(loaded[0])+loaded[1]+reserve;
-    if(!epoch||c.guns<1||c.guns>2||!c.capacity||c.capacity>1000||!c.maximumRounds||c.maximumRounds>1000000||c.maximumMagazines<c.guns||c.maximumMagazines>4096||!c.fireMs||c.fireMs>60000||loaded[0]>c.capacity||loaded[1]>c.capacity||(c.guns==1&&loaded[1])||budget>c.maximumRounds||!std::isfinite(c.closedTravel)||!std::isfinite(c.extractTravel)||!std::isfinite(c.fullTravel)||c.closedTravel<0||c.closedTravel>=c.extractTravel||c.extractTravel>=c.fullTravel||c.fullTravel>1)throw std::invalid_argument("Invalid physical reload profile");
+    if(!epoch||c.guns<1||c.guns>2||!c.capacity||c.capacity>1000||!c.maximumRounds||c.maximumRounds>1000000||c.maximumMagazines<c.guns||c.maximumMagazines>4096||!c.fireMs||c.fireMs>60000||loaded[0]>1001||loaded[1]>1001||(c.guns==1&&loaded[1])||budget>c.maximumRounds||!std::isfinite(c.closedTravel)||!std::isfinite(c.extractTravel)||!std::isfinite(c.fullTravel)||c.closedTravel<0||c.closedTravel>=c.extractTravel||c.extractTravel>=c.fullTravel||c.fullTravel>1)throw std::invalid_argument("Invalid physical reload profile");
     state_.reserve=reserve;state_.budget=budget;state_.magazines.reserve(c.maximumMagazines);
-    for(unsigned i=0;i<c.guns;++i){auto& g=state_.guns[i];g.magazine=nextMagazine_++;g.chamber=loaded[i]>0;state_.magazines.push_back({g.magazine,loaded[i]?loaded[i]-1:0,MagazinePlace::Weapon,i});}
+    // Preserve a stock tactical plus-one or rounds retained after a perk downgrade.
+    for(unsigned i=0;i<c.guns;++i){auto& g=state_.guns[i];g.magazine=nextMagazine_++;g.chamber=loaded[i]>0;const auto rounds=loaded[i]?loaded[i]-1:0;state_.magazines.push_back({g.magazine,rounds,(std::max)(c.capacity,rounds),MagazinePlace::Weapon,i});}
+}
+bool PhysicalReload::SetCapacity(unsigned capacity)noexcept {
+    if(!capacity||capacity>1000)return false;
+    if(capacity!=config_.capacity){config_.capacity=capacity;++state_.revision;}
+    return true;
 }
 const PhysicalMagazine* PhysicalReload::Magazine(std::uint32_t id)const noexcept {for(const auto& m:state_.magazines)if(m.id==id)return &m;return nullptr;}
 PhysicalMagazine* PhysicalReload::Find(std::uint32_t id)noexcept {for(auto& m:state_.magazines)if(m.id==id)return &m;return nullptr;}
@@ -20,10 +26,10 @@ std::uint64_t PhysicalReload::AvailableRounds()const noexcept {
 std::uint64_t PhysicalReload::DiscardedRounds()const noexcept {std::uint64_t n=state_.ejected;for(const auto& m:state_.magazines)if(m.place==MagazinePlace::Discarded)n+=m.rounds;return n;}
 unsigned PhysicalReload::Loaded(unsigned gun)const noexcept {if(gun>=config_.guns)return 0;const auto& g=state_.guns[gun];const auto* m=Magazine(g.magazine);return unsigned(g.chamber)+(m?m->rounds:0);}
 bool PhysicalReload::Valid()const noexcept {
-    if(state_.budget>config_.maximumRounds||state_.reserve>state_.budget||state_.spent>state_.budget||state_.ejected>state_.budget||state_.magazines.size()>config_.maximumMagazines)return false;
+    if(!config_.capacity||config_.capacity>1000||state_.budget>config_.maximumRounds||state_.reserve>state_.budget||state_.spent>state_.budget||state_.ejected>state_.budget||state_.magazines.size()>config_.maximumMagazines)return false;
     std::array<std::array<bool,2>,3> occupied{};
     for(std::size_t i=0;i<state_.magazines.size();++i){const auto& m=state_.magazines[i];
-        if(!m.id||m.rounds>config_.capacity||m.place<MagazinePlace::Weapon||m.place>MagazinePlace::Discarded)return false;
+        if(!m.id||!m.capacity||m.capacity>1000||m.rounds>m.capacity||m.place<MagazinePlace::Weapon||m.place>MagazinePlace::Discarded)return false;
         for(std::size_t j=0;j<i;++j)if(state_.magazines[j].id==m.id)return false;
         if(m.place<=MagazinePlace::Belt){const unsigned p=unsigned(m.place);if(m.slot>=2||occupied[p][m.slot])return false;occupied[p][m.slot]=true;}
         if(m.place==MagazinePlace::Weapon&&(m.slot>=config_.guns||state_.guns[m.slot].magazine!=m.id))return false;
@@ -48,8 +54,8 @@ bool PhysicalReload::Apply(const PhysicalRequest& r){
         if(!fresh)return false;
         // Reuse an empty retained shell; never erase the identity/content of a partial magazine.
         PhysicalMagazine* shell=nullptr;for(auto& m:state_.magazines)if(m.place==MagazinePlace::Stored&&!m.rounds){shell=&m;break;}
-        if(!shell){if(state_.magazines.size()>=config_.maximumMagazines){if(!best)return false;best->place=MagazinePlace::Belt;best->slot=r.slot;return true;}state_.magazines.push_back({nextMagazine_++,0,MagazinePlace::Stored,0});shell=&state_.magazines.back();}
-        shell->rounds=fresh;shell->place=MagazinePlace::Belt;shell->slot=r.slot;state_.reserve-=fresh;return true;
+        if(!shell){if(state_.magazines.size()>=config_.maximumMagazines){if(!best)return false;best->place=MagazinePlace::Belt;best->slot=r.slot;return true;}state_.magazines.push_back({nextMagazine_++,0,config_.capacity,MagazinePlace::Stored,0});shell=&state_.magazines.back();}
+        shell->capacity=config_.capacity;shell->rounds=fresh;shell->place=MagazinePlace::Belt;shell->slot=r.slot;state_.reserve-=fresh;return true;
     }
     case PhysicalAction::GrabFromBelt:{
         // Each physical hand accesses the matching belt slot; crossed grabs are an adapter extension.

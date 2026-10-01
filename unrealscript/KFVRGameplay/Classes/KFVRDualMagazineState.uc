@@ -1,18 +1,39 @@
 // One shared supply and identity pool for the two physical belt-fed pistols.
 // Mode 0 is right; mode 1 is left, matching KF's existing fire-mode indexing.
 class KFVRDualMagazineState extends Object;
-var int Rounds[64],Inserted[2],Presented[2];
+var int Rounds[64],MagazineCapacity[64],Inserted[2],Presented[2];
+// Capacity applies to future supply, not retained magazine contents.
 var byte Chamber[2],SlideLocked[2],BeltLatched[2];
 var int Capacity,MagazineCount,Reserve,Budget,Spent,Revision,AssistCount;
 function bool Initialize(int Cap,int RightLoaded,int LeftLoaded,int TotalRounds)
 {
-    if (Cap<1 || Cap>100 || RightLoaded<0 || LeftLoaded<0 || RightLoaded>Cap || LeftLoaded>Cap || TotalRounds<RightLoaded+LeftLoaded || TotalRounds>10000) return False;
+    if (Cap<1 || Cap>100 || RightLoaded<0 || LeftLoaded<0 || RightLoaded>101 || LeftLoaded>101 || TotalRounds<RightLoaded+LeftLoaded || TotalRounds>10000) return False;
     Capacity=Cap; MagazineCount=2; Inserted[0]=1; Inserted[1]=2;
     if (RightLoaded>0) Chamber[0]=1; else SlideLocked[0]=1;
     if (LeftLoaded>0) Chamber[1]=1; else SlideLocked[1]=1;
     Rounds[0]=Max(0,RightLoaded-1); Rounds[1]=Max(0,LeftLoaded-1);
+    MagazineCapacity[0]=Max(Cap,Rounds[0]); MagazineCapacity[1]=Max(Cap,Rounds[1]);
     Reserve=TotalRounds-RightLoaded-LeftLoaded; Budget=TotalRounds;
     return Valid();
+}
+// Retain inserted, presented and stored identities across perk changes.
+function bool SetCapacity(int NewCapacity)
+{
+    if (NewCapacity<1 || NewCapacity>100) return False;
+    if (Capacity==NewCapacity) return True;
+    Capacity=NewCapacity; Revision++; return True;
+}
+// UE2 cannot encode external context access to a 256-byte int[64] field.
+// Expose bounded, one-based identities without exposing that bytecode limit.
+function int GetMagazineCapacity(int Id)
+{
+    if (Id<1 || Id>MagazineCount || Id>64) return 0;
+    return MagazineCapacity[Id-1];
+}
+function int GetMagazineRounds(int Id)
+{
+    if (Id<1 || Id>MagazineCount || Id>64) return 0;
+    return Rounds[Id-1];
 }
 function int Loaded(int Hand)
 {
@@ -34,8 +55,8 @@ function bool Stored(int Id)
 function bool Valid()
 {
     local int I,J;
-    if (Capacity<1 || MagazineCount<2 || MagazineCount>64 || Reserve<0 || Total()+Spent!=Budget) return False;
-    for (I=0;I<MagazineCount;I++) if (Rounds[I]<0 || Rounds[I]>Capacity) return False;
+    if (Capacity<1 || Capacity>100 || MagazineCount<2 || MagazineCount>64 || Reserve<0 || Total()+Spent!=Budget) return False;
+    for (I=0;I<MagazineCount;I++) if (MagazineCapacity[I]<1 || MagazineCapacity[I]>100 || Rounds[I]<0 || Rounds[I]>MagazineCapacity[I]) return False;
     for (I=0;I<2;I++)
     {
         if (Inserted[I]<0 || Inserted[I]>MagazineCount || Presented[I]<0 || Presented[I]>MagazineCount || Chamber[I]>1 || SlideLocked[I]>1 || BeltLatched[I]>1) return False;
@@ -77,7 +98,7 @@ function bool Present(int Hand)
     else if (Fresh>0)
     {
         if (Empty<0) { if (MagazineCount>=64) return False; Empty=MagazineCount; MagazineCount++; }
-        Rounds[Empty]=Fresh; Reserve-=Fresh; Presented[Hand]=Empty+1;
+        MagazineCapacity[Empty]=Capacity; Rounds[Empty]=Fresh; Reserve-=Fresh; Presented[Hand]=Empty+1;
     }
     else return False;
     Revision++; return True;

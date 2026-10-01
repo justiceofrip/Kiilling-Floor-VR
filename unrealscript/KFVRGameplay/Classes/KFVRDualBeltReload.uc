@@ -7,6 +7,7 @@ var vector RightDock,LeftDock,RightMagazineWorld,LeftMagazineWorld;
 var float RightMagazineError,LeftMagazineError,RightProgress,LeftProgress;
 var int RightInserted,LeftInserted,RightPresented,LeftPresented,RightLoaded,LeftLoaded;
 var int OwnedRounds,SpentRounds,ReserveRounds,Revision,AssistCount;
+var int CurrentCapacity,RightInsertedCapacity,LeftInsertedCapacity,RightPresentedCapacity,LeftPresentedCapacity,CapacityChanges;
 var int EjectCount,PresentCount,SeatCount,ClearCount,StowCount;
 var bool bValid,bRightChamber,bLeftChamber,bRightLatched,bLeftLatched;
 function bool Initialize(KFVRTrackedDualies W)
@@ -29,10 +30,20 @@ function Publish()
     bRightChamber=Ammo.Chamber[0]!=0; bLeftChamber=Ammo.Chamber[1]!=0;
     bRightLatched=Ammo.BeltLatched[0]!=0; bLeftLatched=Ammo.BeltLatched[1]!=0;
     Revision=Ammo.Revision; AssistCount=Ammo.AssistCount; bValid=Ammo.Valid();
+    CurrentCapacity=Ammo.Capacity;
+    RightInsertedCapacity=0; LeftInsertedCapacity=0; RightPresentedCapacity=0; LeftPresentedCapacity=0;
+    if (Ammo.Inserted[0]>0) RightInsertedCapacity=Ammo.GetMagazineCapacity(Ammo.Inserted[0]);
+    if (Ammo.Inserted[1]>0) LeftInsertedCapacity=Ammo.GetMagazineCapacity(Ammo.Inserted[1]);
+    if (Ammo.Presented[0]>0) RightPresentedCapacity=Ammo.GetMagazineCapacity(Ammo.Presented[0]);
+    if (Ammo.Presented[1]>0) LeftPresentedCapacity=Ammo.GetMagazineCapacity(Ammo.Presented[1]);
 }
 function Reconcile()
 {
+    local int PreviousCapacity;
     if (Gun==None || Ammo==None) return;
+    PreviousCapacity=Ammo.Capacity;
+    if ((Gun.MagCapacity%2)==0 && Ammo.SetCapacity(Gun.MagCapacity/2)
+        && PreviousCapacity!=Ammo.Capacity) CapacityChanges++;
     Ammo.ReconcileTotal(Gun.AmmoAmount(0)); Publish();
 }
 function Suspend()

@@ -7,7 +7,7 @@ namespace kfvr::gameplay {
 // This boundary is called by authoritative gesture/weapon adapters, not raw RPCs.
 enum class MagazinePlace { Weapon, Hand, Belt, Stored, Discarded };
 struct PhysicalMagazine {
-    std::uint32_t id=0,rounds=0;
+    std::uint32_t id=0,rounds=0,capacity=0;
     MagazinePlace place=MagazinePlace::Stored;
     unsigned slot=0;
 };
@@ -45,6 +45,9 @@ class PhysicalReload {
 public:
     PhysicalReload(PhysicalReloadConfig,std::array<unsigned,2> loaded,unsigned reserve,std::uint32_t epoch=1);
     PhysicalResult Request(const PhysicalRequest&,std::uint64_t serverMs);
+    // Trusted supply/profile update: retained magazine identities and contents are unchanged.
+    // A valid unchanged capacity succeeds without creating a new revision.
+    bool SetCapacity(unsigned newCapacity) noexcept;
     void Suspend() noexcept {active_=false;}
     bool Activate(std::uint32_t newEpoch) noexcept;
     const PhysicalReloadState& State() const noexcept {return state_;}

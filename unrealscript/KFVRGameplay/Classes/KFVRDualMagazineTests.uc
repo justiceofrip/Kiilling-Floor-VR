@@ -66,6 +66,120 @@ function CheckSourceClock()
     Check(!G.Update(vect(-0.02,0,0),0.12,True),"new epoch duplicate cannot seat twice");
 }
 
+// Snapshot excludes only the two fields a capacity notification may change.
+function string Contents(KFVRDualMagazineState A)
+{
+    local int I;
+    local string S;
+    S=A.MagazineCount $ ":" $ A.Reserve $ ":" $ A.Budget $ ":" $ A.Spent $ ":" $ A.AssistCount;
+    for (I=0;I<2;I++) S=S $ ":" $ A.Inserted[I] $ ":" $ A.Presented[I]
+        $ ":" $ A.Chamber[I] $ ":" $ A.SlideLocked[I] $ ":" $ A.BeltLatched[I];
+    for (I=0;I<64;I++) S=S $ ":" $ A.GetMagazineRounds(I+1) $ ":" $ A.GetMagazineCapacity(I+1);
+    return S;
+}
+function CheckCapacity(KFVRDualMagazineState A,int NewCapacity,string Label)
+{
+    local int OldCapacity,OldRevision;
+    local string Before;
+    local bool Accepted;
+    OldCapacity=A.Capacity; OldRevision=A.Revision; Before=Contents(A);
+    Accepted=NewCapacity>=1 && NewCapacity<=100;
+    Check(A.SetCapacity(NewCapacity)==Accepted,Label $ " accepted range");
+    Check(Contents(A)==Before,Label $ " ownership contents and mechanics unchanged");
+    if (Accepted)
+    {
+        Check(A.Capacity==NewCapacity,Label $ " current supply");
+        Check(A.Revision==OldRevision+int(NewCapacity!=OldCapacity),Label $ " revision only on change");
+    }
+    else Check(A.Capacity==OldCapacity && A.Revision==OldRevision,Label $ " rejection has no mutation");
+    Check(A.Valid(),Label $ " independent old limits remain valid");
+}
+function RejectInitialize(KFVRDualMagazineState A,int Cap,int RightLoaded,int LeftLoaded,int Total)
+{
+    local string Before;
+    Before=A.Capacity $ ":" $ A.Revision $ ":" $ Contents(A);
+    Check(!A.Initialize(Cap,RightLoaded,LeftLoaded,Total),"invalid dual initialization rejected");
+    Check(Before==(A.Capacity $ ":" $ A.Revision $ ":" $ Contents(A)),"invalid initialization leaves all fields untouched");
+}
+function CheckCapacities()
+{
+    local KFVRDualMagazineState A;
+    local int I,RightId,LeftId,ReserveBefore;
+    A=new(None) class'KFVRDualMagazineState'; Check(A.Initialize(40,40,41,300),"dual capacity seed");
+    CheckCapacity(A,50,"upgrade inserted pair");
+    Check(A.Loaded(0)==40 && A.Loaded(1)==41 && A.GetMagazineCapacity(1)==40 && A.GetMagazineCapacity(2)==40,
+        "upgrade does not fill inserted magazines");
+    Check(A.Eject(0) && A.Present(0),"present newly supplied right magazine"); RightId=A.Presented[0];
+    Check(RightId==3 && A.GetMagazineRounds(RightId)==50 && A.GetMagazineCapacity(RightId)==50,"new right supply capacity");
+    CheckCapacity(A,15,"downgrade presented right and inserted left");
+    Check(A.Eject(1),"store old left magazine"); CheckCapacity(A,44,"change stored and presented pair");
+    Check(A.Present(1),"present replacement left magazine"); LeftId=A.Presented[1];
+    Check(LeftId==4 && A.GetMagazineRounds(LeftId)==44 && A.GetMagazineCapacity(LeftId)==44
+        && A.GetMagazineRounds(1)==39 && A.GetMagazineRounds(2)==40,"fresh left supply retains earlier identities");
+    CheckCapacity(A,40,"both presented magazines retain earlier limits");
+    Check(A.Seat(0) && A.Seat(1) && A.Loaded(0)==51 && A.Loaded(1)==45,"both old supplies seat with retained chambers");
+    CheckCapacity(A,50,"capacity change while belt latched");
+    Check(!A.Consume(0) && !A.Consume(1),"capacity change never clears belt latch");
+    Check(A.ClearBelt(0) && A.ClearBelt(1) && A.Consume(0) && A.Consume(1) && A.Total()==298,
+        "grandfathered magazines fire with normal ownership rules");
+    CheckCapacity(A,50,"duplicate supply notification");
+    CheckCapacity(A,0,"zero supply rejected"); CheckCapacity(A,-1,"negative supply rejected");
+    CheckCapacity(A,101,"excessive supply rejected");
+
+    A=new(None) class'KFVRDualMagazineState'; Check(A.Initialize(40,1,5,76),"empty shell with independent loaded left");
+    Check(A.Eject(0),"store empty right shell"); CheckCapacity(A,50,"upgrade empty stored shell");
+    Check(A.GetMagazineCapacity(1)==40 && A.Present(0) && A.Presented[0]==1 && A.MagazineCount==2
+        && A.GetMagazineRounds(1)==50 && A.GetMagazineCapacity(1)==50 && A.Reserve==20,"refill stamps reused identity only on supply");
+    CheckCapacity(A,15,"downgrade presented full shell");
+    Check(A.Seat(0) && A.ClearBelt(0),"seat full grandfathered shell");
+    for (I=0;I<51;I++) Check(A.Consume(0),"consume full grandfathered right supply");
+    Check(!A.CanFire(0) && A.Loaded(1)==5 && A.GetMagazineRounds(2)==4 && A.GetMagazineCapacity(2)==40 && A.Total()==25,
+        "right depletion preserves independent left contents");
+    Check(A.Eject(0) && A.Present(0) && A.Presented[0]==1 && A.GetMagazineRounds(1)==15
+        && A.GetMagazineCapacity(1)==15 && A.Reserve==5,"empty refill adopts smaller supply limit");
+
+    A=new(None) class'KFVRDualMagazineState'; Check(A.Initialize(50,51,1,62),"larger retained dual magazine seed");
+    CheckCapacity(A,40,"downgrade retained dual supply");
+    Check(A.Eject(0) && A.Present(0) && A.Presented[0]==1 && A.GetMagazineRounds(1)==50 && A.Reserve==10,
+        "prefer full retained magazine to smaller fresh supply");
+    A=new(None) class'KFVRDualMagazineState'; Check(A.Initialize(40,0,0,7),"limited dual reserve seed");
+    CheckCapacity(A,50,"upgrade limited dual reserve");
+    Check(A.Eject(0) && A.Present(0),"supply partial replacement"); RightId=A.Presented[0];
+    Check(A.GetMagazineRounds(RightId)==7 && A.GetMagazineCapacity(RightId)==50 && A.Total()==7 && A.Reserve==0,
+        "partial dual supply never invents rounds");
+
+    A=new(None) class'KFVRDualMagazineState'; Check(A.Initialize(2,2,2,1000),"full pool dual seed");
+    Check(A.Eject(0) && A.Eject(1),"retain initial dual partials");
+    for (I=2;I<64;I++)
+        Check(A.Present(0) && A.Seat(0) && A.ClearBelt(0) && A.Consume(0) && A.Eject(0),"fill dual pool with retained partials");
+    Check(A.MagazineCount==64 && A.Valid(),"all dual pool identities retained");
+    CheckCapacity(A,50,"increase supply at dual pool limit"); ReserveBefore=A.Reserve;
+    Check(A.Present(0) && A.Presented[0]>0 && A.MagazineCount==64 && A.Reserve==ReserveBefore,
+        "full dual pool falls back to retained partial");
+    for (I=0;I<64;I++) Check(A.GetMagazineRounds(I+1)==1 && A.GetMagazineCapacity(I+1)==2,"dual fallback never refills partials");
+
+    A=new(None) class'KFVRDualMagazineState';
+    Check(A.Initialize(15,16,16,62) && A.Loaded(0)==16 && A.Loaded(1)==16 && A.Reserve==30,
+        "initialize dual tactical plus one");
+    A=new(None) class'KFVRDualMagazineState';
+    Check(A.Initialize(40,51,45,126) && A.GetMagazineCapacity(1)==50 && A.GetMagazineCapacity(2)==44
+        && A.Loaded(0)==51 && A.Loaded(1)==45 && A.Reserve==30 && A.Valid(),"infer each old stock magazine limit independently");
+    A=new(None) class'KFVRDualMagazineState';
+    Check(A.Initialize(1,101,101,202) && A.GetMagazineCapacity(1)==100 && A.GetMagazineCapacity(2)==100 && A.Valid(),
+        "bounded maximum initial dual loads");
+    RejectInitialize(A,0,1,1,2); RejectInitialize(A,101,1,1,2);
+    RejectInitialize(A,40,-1,1,2); RejectInitialize(A,40,1,-1,2);
+    RejectInitialize(A,40,102,1,103); RejectInitialize(A,40,1,102,103);
+    RejectInitialize(A,40,51,51,101); RejectInitialize(A,40,1,1,10001);
+    Check(A.GetMagazineCapacity(0)==0 && A.GetMagazineCapacity(-1)==0
+        && A.GetMagazineCapacity(A.MagazineCount+1)==0 && A.GetMagazineCapacity(65)==0,
+        "capacity access rejects absent and invalid identities");
+    Check(A.GetMagazineRounds(0)==0 && A.GetMagazineRounds(-1)==0
+        && A.GetMagazineRounds(A.MagazineCount+1)==0 && A.GetMagazineRounds(65)==0,
+        "round access rejects absent and invalid identities");
+    Check(A.Valid(),"read-only invalid access leaves valid state");
+}
+
 event int Main(string Params)
 {
     local KFVRDualMagazineState S;
@@ -86,14 +200,15 @@ event int Main(string Params)
     S=new(None) class'KFVRDualMagazineState'; Check(S.Initialize(15,15,15,400));
     for (I=0;I<30000;I++)
     {
-        H=Rand(2); Choice=Rand(7); Before=S.Total();
+        H=Rand(2); Choice=Rand(8); Before=S.Total();
         if (Choice==0) { if (S.Consume(H)) Check(S.Total()==Before-1); else Check(S.Total()==Before); }
         else if (Choice==1) S.Eject(H);
         else if (Choice==2) S.Present(H);
         else if (Choice==3) S.Seat(H);
         else if (Choice==4) S.ClearBelt(H);
         else if (Choice==5) S.StoreForSwitch();
-        else S.ReconcileTotal(Rand(501));
+        else if (Choice==6) S.ReconcileTotal(Rand(501));
+        else CheckCapacity(S,1+Rand(100),"random dual capacity change");
         Check(S.Valid());
     }
     G=new(None) class'KFVRBeltInsertion';
@@ -113,6 +228,7 @@ event int Main(string Params)
     G.Reset(); Check(!G.Update(vect(0.1,0.09,0),4,True));
     Check(!G.Update(vect(-0.02,0.09,0),4.05,True));
     CheckSourceClock();
+    CheckCapacities();
     Log("KFVR_DUAL_MAG_TEST_RESULT checks=" $ Checks $ " failures=" $ Failures);
     if (Failures>0) return 1;
     return 0;
