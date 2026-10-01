@@ -145,3 +145,14 @@ After initial bone-translation calibration, a weapon with a physical-reload adap
 
 
 A seated magazine inherits the installed skeleton's local frame. Only a held, detached magazine receives an absolute world-direction override. Exiting physical mode calls ClearMechanicalPose to remove direction/translation overrides and restore magazine visibility before the next skeletal evaluation. This shared weapon-visual lifecycle prevents an inserted magazine from remaining world-locked as its controller turns after mode exit. The active rig samples the completed magazine origin and three axes for independent regression checks.
+
+
+## Physical magazine interruption and alignment
+
+KFVRManualReload records a pending recovery if focus or either required hand pose disappears while a magazine is held. It preserves the exact magazine identity/contents and hides its detached presentation during the gap. A fresh valid return with the grip held resumes that magazine. A fresh return with an open hand stows it once: the missing release has no trustworthy world location, so recovery cannot insert, drop or chamber it. Normal slide cancellation still cannot invent a feed transition.
+
+Single-pistol insertion compares the complete held magazine frame with its installed rest frame through KFVRWeaponVisual.MagazineAlignmentCos. The rotation-matrix trace gives the relative angle cosine, including roll. Both frames use the weapon's measured magazine axes; no new per-pistol offset is introduced. The existing 0.55 cosine and 12 cm root-distance tolerance remain provisional. This is still a deliberate grip-release gate, not the portable continuous insertion-stroke implementation.
+
+FrameChannel optionally returns rejected-input diagnostics (sequence, current QPC, expiry) while keeping failed output neutral. NativeEyeBridge counts missing/expired/malformed input and retains at most 128 coalesced fault intervals, with an overflow counter. Shared-memory layouts, 100 ms expiry and bounded mutex reads are unchanged. Diagnostic elapsed time is zero when the bridge never reached its first world callback.
+
+The native target preflight rejects a zero-sized D3D viewport before constructing or binding an auxiliary target. A minimized game was observed to enter with 0 x 0 while native PopState restored the 640 x 480 backbuffer extent. Reports now preserve before/after viewport values. This is early rejection, not support for rendering a minimized game; the desktop caller must restore the window without stealing focus.

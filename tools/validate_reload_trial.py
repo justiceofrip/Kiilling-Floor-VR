@@ -1,7 +1,7 @@
 """Assert live physical magazine, slide, stock-shot and bone behavior."""
 import json,pathlib,math
 
-def validate(folder,weapon="single"):
+def validate(folder,weapon="single",interrupted=False):
  folder=pathlib.Path(folder)
  controls=[json.loads(x) for x in (folder/'controls.jsonl').read_text().splitlines()]
  rows=[json.loads(x) for x in (folder/'weapon-observations.jsonl').read_text().splitlines()]
@@ -10,7 +10,7 @@ def validate(folder,weapon="single"):
  def objects(typ,selected=rows):return [o['values'] for row in selected for o in row['objects'] if o['type']==typ and not o['values'].get('bDeleteMe') and (typ!='KFVRManualReload' or o['values']['Gun'] in gun_addresses)]
  def phase(n,typ='KFVRManualReload'):
   times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
-  return objects(typ,[r for r in rows if times and min(times)+120<=r['uptime_ms']<=max(times)])
+  return objects(typ,[r for r in rows if times and min(times)+(700 if interrupted and n==10 else 120)<=r['uptime_ms']<=max(times)])
  checks={};rigs=objects('KFVRWeaponRig');manuals=objects('KFVRManualReload');guns=objects(gun_type);capacity=guns[0]['MagCapacity']
  if not manuals:raise ValueError('Physical mode was never observed')
  start,end=manuals[0],manuals[-1];shots=rigs[-1]['TraceCount']-rigs[0]['TraceCount'];initial=start['OwnedRounds']+start['SpentRounds']+start['DiscardedRounds']
@@ -47,6 +47,13 @@ def validate(folder,weapon="single"):
     m=obj['values'];other_states.setdefault(m['Gun'],[]).append(tuple(m[k] for k in ['OwnedRounds','LoadedRounds','SpentRounds','DiscardedRounds','HeldMagazine','InsertedMagazine','Revision']))
  checks['other_physical_weapon_states_unchanged']=all(len(set(states))==1 for states in other_states.values())
  checks['input_released_at_stop']=not rigs[-1]['bTracking'] and not rigs[-1]['bFiring']
+ if interrupted:
+  checks['offhand_loss_exercised']=any(r['Tracking.Flags']&3==2 for r in phase(5,'KFVRWeaponRig'))
+  times=[c['uptime_ms'] for c in controls if c['phase']==10 and c['sent']]
+  checks['release_focus_loss_exercised']=any(not o['values']['bTracking'] for row in rows if times and min(times)<=row['uptime_ms']<min(times)+500 for o in row['objects'] if o['type']=='KFVRWeaponRig')
+  at('recovery_never_auto_inserts_or_chambers',10,lambda m:m['InsertedMagazine']==0 and m['SeatCount']==0 and not m['bChambered'] and m['HeldMagazine']==0)
+  at('interrupted_open_hand_retains_magazine_once',10,lambda m:m.get('RecoveryStowCount')==1 and m.get('HeldInterruptions',0)>=2 and not m.get('bRecoveryPending',True))
+
  # A magazine seated in the gun must retain its full bone frame when physical
  # mode is toggled off and the controller subsequently turns on several axes.
  from validate_grip_pose import rotate
@@ -93,7 +100,7 @@ def validate(folder,weapon="single"):
     palm_tracking_errors.append(math.dist(hand['PalmWorld'],rig['Tracking.LeftPosition']))
   checks['native_magazine_grasp_is_measured_and_attached']=native_grip_samples>=5 and not missing_native_profiles and bool(mag_palm_errors) and max(mag_palm_errors)<.05
   checks['magazine_grasp_keeps_controller_palm']=bool(palm_tracking_errors) and max(palm_tracking_errors)<.005
- report=dict(inserted_magazine_frames=rest_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
+ report=dict(interruption_trial=interrupted,inserted_magazine_frames=rest_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
  (folder/'reload-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Reload checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

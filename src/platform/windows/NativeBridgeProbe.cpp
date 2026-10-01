@@ -46,8 +46,8 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;
- for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,reloadInterrupt=false,reloadAlignment=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
  Require(width>=64&&height>=64&&width<=4096&&height<=4096&&std::uint64_t(width)*height*40<=256*1024*1024,"Receiver dimensions exceed CPU bridge budget");
  const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
  ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level{};const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_0};
@@ -59,7 +59,7 @@ int wmain(int argc,wchar_t** argv){try{
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
  const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::array<unsigned,64> phasePairs{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
- const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reload?61000:inventory?26700:7500;
+ const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reloadAlignment?37000:reload?61000:inventory?26700:7500;
  for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:reload||dual||dualBelt||heal||weld||arms||hands||hud?90000:inventory?60000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
@@ -128,11 +128,30 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase==6||phase==8||phase==14||phase==19||phase==25||phase==34||phase==36||phase==38)rh.trigger=1;
      if(phase==9||phase==10||phase==11){lh.gripPose.position={-.2f,-.6f,-.12f};lh.squeeze=phase==10?0.f:1.f;}
      if(phase==12||phase==13){lh.gripPose.position={.2f,-.30f,-.5f};lh.squeeze=phase==12?1.f:0.f;}
+     if(reloadInterrupt){
+      // Lose only the offhand while a magazine remains gripped, then lose
+      // focus across a belt release. Reappear near the magwell with an open
+      // hand: recovery must retain ammo without inventing an insertion edge.
+      if(phase==5&&elapsed%1000<350)lh.gripValid=lh.aimValid=false;
+      if(phase==10){input.focused=elapsed%1000>=500;if(input.focused)lh.gripPose.position={.2f,-.30f,-.5f};}
+     }
      // A short pull must not feed; a full pull must return before firing.
      if(phase==16||phase==17||phase==18||phase==21||phase==22||phase==23||phase==24){
       lh.gripPose.position={.2f,-.22f,-.5f};lh.trigger=1;lh.squeeze=(phase==18||phase==24)?0.f:1.f;
       if(phase==17)lh.gripPose.position.z+=.02f;
       if(phase==22||phase==23)lh.gripPose.position.z+=.06f;
+     }
+     if(reloadAlignment){
+      // Release first upside down, then sideways, then aligned. The first
+      // two preserve forward aim, exposing a forward-vector-only gate.
+      if(phase==12||phase==13||phase==15||phase==16){
+       lh.gripPose.position={.2f,-.30f,-.5f};
+       lh.gripPose.orientation=phase<=13?math::Quaternion{0,0,1,0}:math::Quaternion{0,0,.70710678f,.70710678f};
+       lh.squeeze=(phase==12||phase==15)?1.f:0.f;lh.trigger=0;
+      }
+      if(phase==14||phase==17||phase==18){lh.gripPose.position={-.2f,-.6f,-.12f};lh.squeeze=phase==17?0.f:1.f;lh.trigger=0;}
+      if(phase==19||phase==20){lh.gripPose.position={.2f,-.30f,-.5f};lh.squeeze=phase==19?1.f:0.f;lh.trigger=0;}
+      if(phase==14||phase==19)rh.trigger=0;
      }
      if(phase==23)rh.trigger=1;
      // Retain a partial magazine, seat a fresh one with the chamber intact.

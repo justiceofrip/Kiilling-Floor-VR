@@ -3,9 +3,10 @@ class KFVRManualReload extends Info;
 var KFVRWeaponRig Rig;
 var KFWeapon Gun;
 var KFVRMagazineState Ammo;
-var bool bLeftArmed,bLeftPrevious,bSlideHeld;
+var bool bLeftArmed,bLeftPrevious,bSlideHeld,bRecoveryPending;
+var int HeldInterruptions,RecoveryStowCount;
 var vector MagWell,SlideLocation,BeltLocation,SlideGrabLocal,MagazineWorld,MagazineTarget;
-var float MagazineError,SlideTravel,MagazineDirectionDot;
+var float MagazineError,SlideTravel,MagazineDirectionDot,MagazineAlignment;
 var int EjectCount,GrabCount,SeatCount,StowCount,DropCount,RackCount;
 var int LoadedRounds,OwnedRounds,SpentRounds,DiscardedRounds,HeldMagazine,InsertedMagazine,Revision;
 var bool bChambered,bValid;
@@ -32,6 +33,15 @@ function Reconcile()
 function Suspend()
 {
     bLeftArmed=False; bLeftPrevious=False;
+    if (Ammo!=None && Ammo.Held>0)
+    {
+        if (!bRecoveryPending) HeldInterruptions++;
+        bRecoveryPending=True;
+        // The gun can remain visible when only the offhand is lost. Hide its
+        // detached magazine until a fresh tracked grasp can own that pose.
+        if (Rig!=None && Rig.Gun==Gun && Rig.Visual!=None)
+            Rig.Visual.PoseMagazine(Ammo.Inserted>0,False,vect(0,0,0),Ammo.Travel);
+    }
     // Tracking loss cancels the grab without completing a feed transition.
     if (bSlideHeld)
     { Ammo.bFeedArmed=False; Ammo.bExtracted=False; Ammo.Travel=0; bSlideHeld=False; Publish(); }
@@ -68,7 +78,17 @@ function Update(float Delta)
     NearBelt=VSize(Rig.Tracking.LeftPosition-BeltLocation)<0.18*Rig.Tracking.UnitsPerMetre;
     MagazineTarget=Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation);
     NearWell=VSize(MagazineTarget-MagWell)<0.12*Rig.Tracking.UnitsPerMetre;
+    MagazineAlignment=Rig.Visual.MagazineAlignmentCos(Rig.Tracking.LeftRotation);
     Relative=(Rig.Tracking.LeftPosition-Rig.Tracking.RightPosition)<<Rig.Tracking.RightRotation;
+    if (bRecoveryPending)
+    {
+        bRecoveryPending=False;
+        // A release that happened while tracking was absent has no reliable
+        // insertion/drop location. Preserve the exact magazine in storage;
+        // never invent a seating or chambering gesture on reacquisition.
+        if (!Down && Ammo.Held>0 && Ammo.Stow())
+        { StowCount++; RecoveryStowCount++; Rig.PulseLeft(0.2,15); }
+    }
     if (!Down) bLeftArmed=True;
     if (bLeftArmed && Down && !bLeftPrevious && Ammo.Held==0)
     {
@@ -89,7 +109,7 @@ function Update(float Delta)
     }
     else if (bLeftArmed && !Down && bLeftPrevious && Ammo.Held>0)
     {
-        if (NearWell && (vector(Rig.Tracking.LeftRotation) dot vector(Rig.Tracking.RightRotation))>0.55 && Ammo.Seat())
+        if (NearWell && MagazineAlignment>0.55 && Ammo.Seat())
         { SeatCount++; Rig.PulseLeft(0.4,25); }
         else if (NearBelt && Ammo.Stow()) { StowCount++; Rig.PulseLeft(0.2,15); }
         else if (Ammo.Drop()) DropCount++;

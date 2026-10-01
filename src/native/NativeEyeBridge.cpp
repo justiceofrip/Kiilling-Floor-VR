@@ -10,6 +10,7 @@ namespace {
 using Microsoft::WRL::ComPtr;
 using Reset=HRESULT(WINAPI*)(IDirect3DDevice9*,D3DPRESENT_PARAMETERS*);
 enum class Stage {Idle,Prepare,Rendered,Publish,Feedback,Skip};
+struct InputFault {unsigned kind=0,reads=0;std::uint64_t sequence=0,firstMs=0,lastMs=0;};
 struct State {
  ipc::FrameChannel channel;graphics::D3D9CpuPair transfer;
  ComPtr<IDirect3DDevice9> device;ComPtr<ID3D11Device> d11;NativeSurfaces eyes;
@@ -20,6 +21,8 @@ struct State {
  bool resetEnabled=false,resetRestored=true;const char* reason="not_started";
  unsigned levelCallbacks=0,noRequestCallbacks=0,pendingPairCallbacks=0;long long started=0,finished=0;graphics::D3D9TransferTiming timing{};
  unsigned requests=0,rendered=0,published=0,consumed=0,discarded=0,expired=0,inputs=0,resets=0,inputBusy=0,inputInvalid=0;
+ unsigned inputMissing=0,inputExpired=0,inputMalformed=0,inputFaultCount=0,inputFaultOverflow=0;
+ bool previousInputFault=false;std::array<InputFault,128> inputFaults{};
  std::uint64_t frame=0,epoch=0,lastInput=0;double renderMs=0,renderMax=0,transferMs=0,transferMax=0;
 } s;
 long long Now(){LARGE_INTEGER q;QueryPerformanceCounter(&q);return q.QuadPart;}
@@ -81,9 +84,16 @@ bool StartEyeBridge(const wchar_t* token){
 bool ReadEyeBridgeControls(xr::ControllerFrame& controls,std::uint64_t& sequence) noexcept{
  controls={};sequence=0;
  if(s.closed.load(std::memory_order_acquire)||s.stop.load(std::memory_order_acquire)||s.thread!=GetCurrentThreadId())return false;
- const auto result=s.channel.ReadInput(controls,sequence);
+ ipc::InputReadInfo info{};const auto result=s.channel.ReadInput(controls,sequence,&info);
  if(result==ipc::ChannelResult::Busy)++s.inputBusy;
- if(result==ipc::ChannelResult::Invalid)++s.inputInvalid;
+ if(result==ipc::ChannelResult::Invalid){
+  ++s.inputInvalid;const unsigned kind=!info.sequence?0:info.expiresQpc<=info.nowQpc?1:2;
+  if(kind==0)++s.inputMissing;else if(kind==1)++s.inputExpired;else ++s.inputMalformed;
+  const auto now=GetTickCount64();
+  if(s.previousInputFault&&s.inputFaultCount&&s.inputFaults[s.inputFaultCount-1].kind==kind&&s.inputFaults[s.inputFaultCount-1].sequence==info.sequence){auto& event=s.inputFaults[s.inputFaultCount-1];event.lastMs=now;++event.reads;}
+  else if(s.inputFaultCount<s.inputFaults.size())s.inputFaults[s.inputFaultCount++]={kind,1,info.sequence,now,now};else ++s.inputFaultOverflow;
+ }
+ s.previousInputFault=result==ipc::ChannelResult::Invalid;
  return result==ipc::ChannelResult::Ok;
 }
 bool SendEyeBridgeHaptics(std::uint64_t sequence,const std::array<xr::HapticPulse,2>& pulses) noexcept {
@@ -137,6 +147,7 @@ void EyeBridgePresent(bool worldValid) noexcept {try{
 }catch(...){Close("present_exception");}}
 void WriteEyeBridgeReport(const std::filesystem::path& folder){
  std::ofstream out(folder/L"native-bridge.json");if(!EyeBridgeClosed()){out<<"{\"closed\":false,\"cleanup_pending_on_graphics_thread\":true}\n";return;}
- out<<std::boolalpha<<"{\"closed\":true,\"reason\":\""<<s.reason<<"\",\"reset_hook_restored\":"<<s.resetRestored<<",\"resources_released\":true,\"requests\":"<<s.requests<<",\"rendered_pairs\":"<<s.rendered<<",\"published_pairs\":"<<s.published<<",\"consumed_pairs\":"<<s.consumed<<",\"discarded_pairs\":"<<s.discarded<<",\"expired_before_transfer\":"<<s.expired<<",\"controller_samples\":"<<s.inputs<<",\"input_busy_reads\":"<<s.inputBusy<<",\"input_invalid_reads\":"<<s.inputInvalid<<",\"device_resets\":"<<s.resets<<",\"render_total_ms\":"<<s.renderMs<<",\"render_max_ms\":"<<s.renderMax<<",\"transfer_total_ms\":"<<s.transferMs<<",\"transfer_max_ms\":"<<s.transferMax<<",\"elapsed_ms\":"<<Milliseconds(s.finished-s.started)<<",\"level_callbacks\":"<<s.levelCallbacks<<",\"no_request_callbacks\":"<<s.noRequestCallbacks<<",\"pending_pair_callbacks\":"<<s.pendingPairCallbacks<<",\"resolve_total_ms\":"<<s.timing.resolveMs<<",\"readback_total_ms\":"<<s.timing.readbackMs<<",\"convert_total_ms\":"<<s.timing.convertMs<<",\"upload_total_ms\":"<<s.timing.uploadMs<<",\"publish_total_ms\":"<<s.timing.publishMs<<",\"world_scale_calibrated\":false}\n";
+ out<<std::boolalpha<<"{\"closed\":true,\"reason\":\""<<s.reason<<"\",\"reset_hook_restored\":"<<s.resetRestored<<",\"resources_released\":true,\"requests\":"<<s.requests<<",\"rendered_pairs\":"<<s.rendered<<",\"published_pairs\":"<<s.published<<",\"consumed_pairs\":"<<s.consumed<<",\"discarded_pairs\":"<<s.discarded<<",\"expired_before_transfer\":"<<s.expired<<",\"controller_samples\":"<<s.inputs<<",\"input_busy_reads\":"<<s.inputBusy<<",\"input_invalid_reads\":"<<s.inputInvalid<<",\"device_resets\":"<<s.resets<<",\"render_total_ms\":"<<s.renderMs<<",\"render_max_ms\":"<<s.renderMax<<",\"transfer_total_ms\":"<<s.transferMs<<",\"transfer_max_ms\":"<<s.transferMax<<",\"elapsed_ms\":"<<(s.started?Milliseconds(s.finished-s.started):0.0)<<",\"level_callbacks\":"<<s.levelCallbacks<<",\"no_request_callbacks\":"<<s.noRequestCallbacks<<",\"pending_pair_callbacks\":"<<s.pendingPairCallbacks<<",\"resolve_total_ms\":"<<s.timing.resolveMs<<",\"readback_total_ms\":"<<s.timing.readbackMs<<",\"convert_total_ms\":"<<s.timing.convertMs<<",\"upload_total_ms\":"<<s.timing.uploadMs<<",\"publish_total_ms\":"<<s.timing.publishMs<<",\"world_scale_calibrated\":false,\"input_missing_reads\":"<<s.inputMissing<<",\"input_expired_reads\":"<<s.inputExpired<<",\"input_malformed_reads\":"<<s.inputMalformed<<",\"input_fault_overflow\":"<<s.inputFaultOverflow<<",\"input_faults\":[";
+ for(unsigned i=0;i<s.inputFaultCount;++i){const auto& event=s.inputFaults[i];if(i)out<<',';out<<"{\"kind\":\""<<(event.kind==0?"missing":event.kind==1?"expired":"malformed")<<"\",\"sequence\":"<<event.sequence<<",\"first_uptime_ms\":"<<event.firstMs<<",\"last_uptime_ms\":"<<event.lastMs<<",\"reads\":"<<event.reads<<'}';}out<<"]}\n";
 }
 }

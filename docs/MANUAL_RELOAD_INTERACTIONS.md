@@ -57,3 +57,8 @@ Native-hand presentation now has a measured detached-magazine grasp for 9mm and 
 
 
 October 1 headset retest rejected magazine clipping/attachment; it did not establish a successful physical catch. Repeated mode toggles exposed a shared presentation bug: an inserted magazine retained an absolute world rotation after physical mode was disabled. The corrected visual path clears that override for seated magazines and clears all mechanical overrides on mode exit. This applies through the common weapon visual rather than per-pistol offset patches. Updated wearer acceptance remains pending.
+
+
+Tracking interruption while holding a single-pistol magazine now has an explicit recovery rule. Returning with the grip held resumes the same magazine; returning with the hand open stores it with its remaining rounds. Reappearing beside the magwell cannot itself insert or chamber a round. This shared rule applies to native and fallback hand presentation.
+
+The live release-to-insert gate now measures complete magazine orientation against the installed socket frame. Forward aim alone was insufficient: a magazine rolled 180 degrees could previously seat. Sideways/upside-down releases now fail the same shared alignment gate; normal failed releases retain the existing drop/discard behavior. Continuous insertion travel and physical tip/socket calibration remain future work, and the current proximity/angular tolerances still need ergonomic assessment.

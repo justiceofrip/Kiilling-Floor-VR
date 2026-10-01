@@ -172,14 +172,15 @@ ChannelResult FrameChannel::SendInput(const xr::ControllerFrame& frame)noexcept{
  if(!wire.flags||wire.spaceGeneration!=s.shared->input.spaceGeneration)s.shared->haptics={};
  s.shared->input=wire;return valid?ChannelResult::Ok:ChannelResult::Invalid;
 }
-ChannelResult FrameChannel::ReadInput(xr::ControllerFrame& frame,std::uint64_t& sequence)noexcept{
- frame={};sequence=0;if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;
+ChannelResult FrameChannel::ReadInput(xr::ControllerFrame& frame,std::uint64_t& sequence,InputReadInfo* info)noexcept{
+ if(info)*info={};frame={};sequence=0;if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;
  // The host holds this mutex briefly while publishing a frame request. A
  // zero-time try-lock can manufacture a tracking-loss edge from that overlap.
  // Bound the input read wait to 1 ms; keep the original wire expiry untouched.
  State::Lock lock(s,1);
  if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;if(!s.Peer())return ChannelResult::Closed;
- return DecodeControls(s.shared->input,Now(),frame,sequence)?ChannelResult::Ok:ChannelResult::Invalid;
+ const auto now=Now();if(info)*info={s.shared->input.sequence,now,s.shared->input.expiresQpc};
+ return DecodeControls(s.shared->input,now,frame,sequence)?ChannelResult::Ok:ChannelResult::Invalid;
 }
 ChannelResult FrameChannel::SendHaptics(std::uint64_t sequence,const std::array<xr::HapticPulse,2>& pulses)noexcept{
  if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;State::Lock lock(s,1);

@@ -217,3 +217,14 @@ Both native reloads now require the correct measured magazine profile and compar
 
 
 The pistol reload preface also toggles physical mode on and off, then turns the gun through several wrist orientations. Phases 53/55/57/58/59 compare the actual inserted magazine origin and all three axes to the installed rest frame transformed by the current weapon actor. This covers normal state, active physical mode and subsequent mode-exit turns. Destroyed adapters from earlier toggles are excluded from live-state and inventory-isolation comparisons. The original rest-orientation failure is retained in native-bridge-20261001-061523.
+
+
+## Interrupted release and magazine roll regression
+
+Add `--reload-interrupt` to a fresh pistol reload trial (combine with `--deagle-reload` for Deagle). The receiver briefly loses only the offhand while holding a magazine, then loses focus across a belt release. It reappears at the magwell with an open hand. The validator requires retention exactly once with no automatic seating/chambering, then completes the normal mechanical sequence and inventory switch. A held-grip return must preserve the existing magazine. Native-hand and default-glove fixtures should both remain usable.
+
+`--reload-alignment` runs a separate 37-second sequence; combine with `--deagle-reload` for the other pistol. It releases an upside-down magazine near the well, repeats sideways, then inserts an aligned replacement, chambers and fires. Negative attempts must follow the existing drop/discard policy without changing the chamber or inserted magazine. Independent actual bone readback proves full rotation, matching controller forward axes and root distance below 12 cm, so the rejection cannot pass merely because the fixture missed the well. Check ammo conservation and actual stock-shot counters throughout. Run each pistol once per fresh inventory fixture; these tests intentionally consume/discard ammunition.
+
+The optional interruption and alignment variants exercise different scripted paths and should be run separately. Before starting, wait for a living pawn and the complete seven-weapon development rig; the pawn can become alive before the fixture finishes granting inventory. Keep KF unminimized; a normal-sized background window is sufficient. Zero-sized native viewport preflight now fails before auxiliary target binding and records its original dimensions. Exact window ownership must be checked before any automatic restore, and restore must not activate the window.
+
+Input fault intervals in `native-bridge.json` use Windows uptime milliseconds, matching `controls.jsonl`. Separate a missing release from a rejected packet, and correlate expiry with actual producer-send gaps. The diagnostic receiver's first full-image color count can exceed the input lifetime during startup; do not extend packet expiry to make a report look clean.

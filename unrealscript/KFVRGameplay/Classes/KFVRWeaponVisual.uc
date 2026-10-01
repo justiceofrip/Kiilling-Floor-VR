@@ -189,6 +189,17 @@ simulated function vector HeldMagazinePosition(vector HandPosition,rotator HandR
         return HandPosition-((MagazineGrip.PalmLocal*DrawScale)>>HandRotation);
     return HandPosition;
 }
+// Full relative rotation of the held magazine versus its installed socket.
+// The trace of the measured orthonormal frames gives cos(angle), including
+// roll: matching forward directions alone also accepts an upside-down mag.
+simulated function float MagazineAlignmentCos(rotator HandRotation)
+{
+    local float Trace;
+    Trace=((MagazineX>>HandRotation) dot (MagazineX>>Rotation))
+        +((MagazineY>>HandRotation) dot (MagazineY>>Rotation))
+        +((MagazineZ>>HandRotation) dot (MagazineZ>>Rotation));
+    return FClamp((Trace-1.0)*0.5,-1.0,1.0);
+}
 simulated function Destroyed()
 {
     if (MagazineGrip!=None) MagazineGrip.Destroy();

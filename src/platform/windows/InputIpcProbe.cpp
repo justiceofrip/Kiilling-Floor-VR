@@ -38,7 +38,7 @@ int Produce(const std::wstring& token){
  Require(endpoint.ReadInput(frame,sequence)==ipc::ChannelResult::Busy&&Neutral(frame)&&sequence==0,"Contended read did not fail neutral");
  Require(GetTickCount64()-contentionStart<100,"Input mutex wait was unbounded");SetEvent(ack.h);
  Wait(go.h);const auto start=GetTickCount64();bool expired=false;
- while(GetTickCount64()-start<2000){const auto result=endpoint.ReadInput(frame,sequence);if(result==ipc::ChannelResult::Invalid){Require(Neutral(frame)&&sequence==0,"Stale input did not release all controls");expired=true;break;}Sleep(1);}Require(expired,"Host stall did not expire controls");SetEvent(ack.h);
+ while(GetTickCount64()-start<2000){ipc::InputReadInfo info{};const auto result=endpoint.ReadInput(frame,sequence,&info);if(result==ipc::ChannelResult::Invalid){Require(Neutral(frame)&&sequence==0,"Stale input did not release all controls");Require(info.sequence&&info.expiresQpc<=info.nowQpc,"Expired input diagnostics lost the rejected sample identity");expired=true;break;}Sleep(1);}Require(expired,"Host stall did not expire controls");SetEvent(ack.h);
  Wait(go.h);Require(endpoint.ReadInput(frame,sequence)==ipc::ChannelResult::Ok&&Neutral(frame),"Focus loss was not transmitted without an eye frame");SetEvent(ack.h);
  Wait(go.h);Require(endpoint.ReadInput(frame,sequence)==ipc::ChannelResult::Ok&&frame.focused&&frame.spaceGeneration==Generation+1,"Recentered controller space not received");SetEvent(ack.h);
  Wait(go.h);Require(endpoint.ReadInput(frame,sequence)==ipc::ChannelResult::Ok&&Neutral(frame),"Invalid host pose did not publish a neutral release");SetEvent(ack.h);

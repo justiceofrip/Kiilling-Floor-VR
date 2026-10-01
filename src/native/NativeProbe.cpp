@@ -116,6 +116,7 @@ void CaptureColor(void* renderer){
 void __fastcall PresentHook(void* self,void*,void* viewport){if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){presents.fetch_add(1);if(LocalWorld()){CaptureColor(self);if(config.targetTrial)ReadTarget();if(config.stereoTrial)ReadStereo();}}if(config.bridgeTrial)kfvr::native::EyeBridgePresent(reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld());presentOriginal(self,viewport);if(config.bridgeTrial)kfvr::native::EyeBridgePresent(reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld());}
 bool Executable(void* at,HMODULE owner){MEMORY_BASIC_INFORMATION m{};if(!VirtualQuery(at,&m,sizeof(m))||m.AllocationBase!=owner||m.State!=MEM_COMMIT||m.Protect&(PAGE_GUARD|PAGE_NOACCESS))return false;return (m.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))!=0;}
 struct TargetTrial {
+ D3DVIEWPORT9 viewportBefore{},viewportAfter{};
  bool attempted=false,targetsRestored=false,depthRestored=false,viewportRestored=false,cacheRestored=false,stackRestored=false,canary=true,distinct=false;
  std::atomic<bool> ready=false;HRESULT result=E_PENDING;unsigned width=0,height=0,format=0,samples=0,pixelsVerified=0;
  Microsoft::WRL::ComPtr<IDirect3DSurface9> surface;
@@ -131,6 +132,13 @@ void ProbeTarget(void* scene,void* ri){
  if(stack>240||!Read(cache,before.data(),before.size())){targetTrial.result=E_UNEXPECTED;targetTrial.ready=true;return;}
  auto* device=reinterpret_cast<IDirect3DDevice9*>(deviceAddress);ComPtr<IDirect3DSurface9> previous,depth;D3DVIEWPORT9 viewport{};
  if(FAILED(device->GetRenderTarget(0,&previous))||FAILED(device->GetDepthStencilSurface(&depth))||FAILED(device->GetViewport(&viewport))){targetTrial.result=E_FAIL;targetTrial.ready=true;return;}
+ targetTrial.viewportBefore=targetTrial.viewportAfter=viewport;
+ // A minimized KF window reports a zero-sized viewport. Binding a target
+ // would replace it with the backbuffer extent, which PopState cannot undo.
+ // Reject before any render-target/cache mutation; restoring the window is
+ // the caller's job and must not steal focus from another desktop app.
+ if(!viewport.Width||!viewport.Height){targetTrial.result=D3DERR_INVALIDCALL;targetTrial.ready=true;return;}
+
  alignas(16) std::array<unsigned char,64> aux;aux.fill(0xcd);auxCtor(aux.data(),512,384,5);
  const auto push=reinterpret_cast<SimpleCall>(targetMethods[0]),pop=reinterpret_cast<SimpleCall>(targetMethods[1]);
  const auto setTarget=reinterpret_cast<int(__thiscall*)(void*,void*)>(targetMethods[2]);
@@ -148,6 +156,7 @@ void ProbeTarget(void* scene,void* ri){
  targetTrial.targetsRestored=SUCCEEDED(device->GetRenderTarget(0,&restored))&&restored.Get()==previous.Get();
  targetTrial.depthRestored=SUCCEEDED(device->GetDepthStencilSurface(&restoredDepth))&&restoredDepth.Get()==depth.Get();
  targetTrial.viewportRestored=SUCCEEDED(device->GetViewport(&restoredViewport))&&std::memcmp(&viewport,&restoredViewport,sizeof(viewport))==0;
+ targetTrial.viewportBefore=viewport;targetTrial.viewportAfter=restoredViewport;
  targetTrial.stackRestored=U32(address+0x59870)==stack&&U32(address+0x5940c)==cache;
  targetTrial.cacheRestored=Read(cache,after.data(),after.size())&&before==after;
  for(unsigned i=28;i<aux.size();++i)targetTrial.canary&=aux[i]==0xcd;
@@ -316,7 +325,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(config.bridgeTrial)kfvr::native::WriteEyeBridgeReport(std::filesystem::path(config.reportPath).parent_path());
  if(config.stereoTrial)WriteStereo(std::filesystem::path(config.reportPath).parent_path());
  if(config.cameraTrial)kfvr::native::WriteCameraReport(std::filesystem::path(config.reportPath).parent_path());
- if(config.targetTrial){std::ofstream target(std::filesystem::path(config.reportPath).parent_path()/L"native-target.json");if(!targetTrial.ready.load(std::memory_order_acquire)){target<<"{\"ready\":false,\"render_replayed\":false,\"camera_written\":false}\n";}else target<<std::boolalpha<<"{\"attempted\":"<<targetTrial.attempted<<",\"ready\":"<<targetTrial.ready.load(std::memory_order_acquire)<<",\"hresult\":"<<targetTrial.result<<",\"width\":"<<targetTrial.width<<",\"height\":"<<targetTrial.height<<",\"format\":"<<targetTrial.format<<",\"samples\":"<<targetTrial.samples<<",\"distinct_surface\":"<<targetTrial.distinct<<",\"color_target_restored\":"<<targetTrial.targetsRestored<<",\"depth_target_restored\":"<<targetTrial.depthRestored<<",\"viewport_restored\":"<<targetTrial.viewportRestored<<",\"state_stack_restored\":"<<targetTrial.stackRestored<<",\"cached_state_restored\":"<<targetTrial.cacheRestored<<",\"constructor_canary_intact\":"<<targetTrial.canary<<",\"verified_pixels\":"<<targetTrial.pixelsVerified<<",\"render_replayed\":false,\"camera_written\":false}\n";}
+ if(config.targetTrial){std::ofstream target(std::filesystem::path(config.reportPath).parent_path()/L"native-target.json");if(!targetTrial.ready.load(std::memory_order_acquire)){target<<"{\"ready\":false,\"render_replayed\":false,\"camera_written\":false}\n";}else target<<std::boolalpha<<"{\"attempted\":"<<targetTrial.attempted<<",\"ready\":"<<targetTrial.ready.load(std::memory_order_acquire)<<",\"hresult\":"<<targetTrial.result<<",\"width\":"<<targetTrial.width<<",\"height\":"<<targetTrial.height<<",\"format\":"<<targetTrial.format<<",\"samples\":"<<targetTrial.samples<<",\"distinct_surface\":"<<targetTrial.distinct<<",\"color_target_restored\":"<<targetTrial.targetsRestored<<",\"depth_target_restored\":"<<targetTrial.depthRestored<<",\"viewport_restored\":"<<targetTrial.viewportRestored<<",\"viewport_before\":["<<targetTrial.viewportBefore.X<<","<<targetTrial.viewportBefore.Y<<","<<targetTrial.viewportBefore.Width<<","<<targetTrial.viewportBefore.Height<<","<<targetTrial.viewportBefore.MinZ<<","<<targetTrial.viewportBefore.MaxZ<<"],\"viewport_after\":["<<targetTrial.viewportAfter.X<<","<<targetTrial.viewportAfter.Y<<","<<targetTrial.viewportAfter.Width<<","<<targetTrial.viewportAfter.Height<<","<<targetTrial.viewportAfter.MinZ<<","<<targetTrial.viewportAfter.MaxZ<<"],\"state_stack_restored\":"<<targetTrial.stackRestored<<",\"cached_state_restored\":"<<targetTrial.cacheRestored<<",\"constructor_canary_intact\":"<<targetTrial.canary<<",\"verified_pixels\":"<<targetTrial.pixelsVerified<<",\"render_replayed\":false,\"camera_written\":false}\n";}
  if(capture.ready.load(std::memory_order_acquire)){
   const auto folder=std::filesystem::path(config.reportPath).parent_path();std::ofstream meta(folder/L"native-color.json");meta<<"{\"width\":"<<capture.width<<",\"height\":"<<capture.height<<",\"format\":"<<capture.format<<",\"samples\":"<<capture.samples<<",\"d3d9ex_known\":"<<(capture.exKnown?"true":"false")<<",\"d3d9ex\":"<<(capture.isEx?"true":"false")<<",\"hresult\":"<<capture.result<<"}\n";
   if(SUCCEEDED(capture.result)&&!capture.pixels.empty()){BITMAPFILEHEADER file{};BITMAPINFOHEADER info{};file.bfType=0x4d42;file.bfOffBits=sizeof(file)+sizeof(info);file.bfSize=file.bfOffBits+DWORD(capture.pixels.size());info.biSize=sizeof(info);info.biWidth=LONG(capture.width);info.biHeight=-LONG(capture.height);info.biPlanes=1;info.biBitCount=32;info.biCompression=BI_RGB;std::ofstream image(folder/L"native-color.bmp",std::ios::binary);image.write(reinterpret_cast<const char*>(&file),sizeof(file));image.write(reinterpret_cast<const char*>(&info),sizeof(info));image.write(reinterpret_cast<const char*>(capture.pixels.data()),capture.pixels.size());}
