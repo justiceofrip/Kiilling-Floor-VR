@@ -13,7 +13,7 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.Deagle | MagazineFed | 8 | 2.200000047683716 | Tracked fire, timed/physical reload, tactical 8+1, left hip slot |
 | KFMod.SeekerSixRocketLauncher | MultiTubeLauncher | 6 | 3.130000114440918 | Pending interaction/asset validation |
 | KFMod.FlareRevolver | Revolver | 6 | 3.200000047683716 | Pending interaction/asset validation |
-| KFMod.MK23Pistol | MagazineFed | 12 | 2.5999999046325684 | Pending interaction/asset validation |
+| KFMod.MK23Pistol | MagazineFed | 12 | 2.5999999046325684 | Opt-in MK23Test fixture: tracked fire, continuous physical magazine/slide reload and tactical12+1 pass desktop tests; regular inventory/shop/dual support pending |
 | KFMod.Syringe | Tool | 0 | 0.0 | Chest holster, tracked needle and stock self-healing pass live synthetic checks; teammate contact remains untested |
 | KFMod.Magnum44Pistol | Revolver | 6 | 2.5250000953674316 | Pending interaction/asset validation |
 | KFMod.M7A3MMedicGun | MagazineFed | 15 | 3.065999984741211 | Pending interaction/asset validation |

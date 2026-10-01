@@ -239,3 +239,10 @@ The 61-second sequence tries acquisition at the seated position, a measured over
 The alignment variant now drives upside-down, sideways and valid attempts along the same outside-to-seat path. This ensures the wrong-roll cases exercise angular rejection even when the approach/depth path would otherwise qualify. Releasing the rejected magazine still follows the existing discard accounting.
 
 `--hands` and `--inventory` in a separate fresh native-hand fixture cover hidden visual preload, hand poses, holsters, firing and accepted rifle support/grips. A fresh default-glove `--reload-interrupt` covers shared behavior without native magazine-palm offsets. All are synthetic controller tests in the real private game; they do not substitute for wearer comfort or surface-clipping acceptance.
+
+
+## MK23 development fixture
+
+`Start-KFVRDev.ps1 -Unattended -NativeHands -VRProfile -MK23Test` replaces the fixture Deagle with MK23 at the left hip. Wait for a living pawn and seven registered weapons, then run `native_bridge_trial.py --pid GAME_PID --game GAME_PATH --mk23-reload --reload-insertion --width 1280 --height 960`. Use a fresh fixture for `--reload-alignment`, or omit NativeHands and use `--reload-interrupt` for fallback presentation. Each full sequence spends ammunition; do not reuse the same pistol state as a fresh trial. Normal inventory-only diagnostics expect the regular Deagle fixture.
+
+Reload validation now independently reconstructs actual action-bone positions for full pull/return and, outside the stress variant, the partial pull. Magazine/action offsets are transformed through separately named installed parent frames. MK23's parent is rotated90 degrees and exposed the earlier scalar-only translation assumption. The longer held-grip dwell at stress phase20 preserves the requirement for coherent samples after seating.

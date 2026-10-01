@@ -73,3 +73,13 @@ The current single-pistol defaults arm at least 5 cm outside the seated root, fi
 The 128-byte tracking packet now separates game/presentation `Serial` from fresh-controller `InputSerial`. Repeated mailbox observations cannot shorten the insertion speed interval. Pose/focus/expiry loss still reaches the normal rig Tick and suspends the interaction; a reference-generation change delivers a neutral tick even when new eye/controller frames arrive together. Delivery uses request ABI14, with reflected package/layout verification before native writes.
 
 After seating, release the offhand grip before a fresh slide grab. Seating does not chamber a round; a retained chamber remains retained, and an empty chamber still needs the existing full slide stroke. No timed reload or animation completion credits ammunition.
+
+
+## Extending the pistol mechanism
+
+The MK23 development fixture reuses the same magazine ledger, insertion gate, socket sampler and hand-pose path. Its profile adds the installed Magazine/Slide/MK23 bones, reload insertion markers .61/.63, a stable magazine grasp at .51 and a provisional 46 mm mechanical slide stroke measured from the full reload. Its stock-derived weapon/fire adapters retain the installed fire trace implementation and add the existing tracked-muzzle and successful-consumption hooks. No new ammunition algorithm or magazine position offset is needed.
+
+Launch with `Start-KFVRDev.ps1 -Unattended -NativeHands -MK23Test -VRProfile`. This isolated seven-weapon fixture substitutes MK23 for Deagle at the left hip; the normal loadout and conversion list remain unchanged. It does not implement general sidearm-slot selection, MK23 shop/dual conversion, multiplayer or achievement credit for physical reloads. Use `--mk23-reload` with the normal, insertion, interruption or alignment receiver variant. Mixing it with `--deagle-reload` is rejected before startup.
+
+
+Mechanical translations now project model-space offsets into the measured installed parent frame before applying the engine's measured translation scale. Magazine rotation continues to follow the hand independently of that rest parent frame. Separate magazine/action parent selectors avoid assuming identical hierarchies on future profiles. The legacy dual-belt path remains unchanged until separately audited.

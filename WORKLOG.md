@@ -595,3 +595,28 @@ Completed shared-change regressions:
 All five restored entry/reset hooks and released resources, with no device reset or extra engine Tick inside Draw. Expired reads were64/60/52/60/58 and discarded pairs0/0/2/0/0, respectively. Native regression and fallback games closed normally; their saved logs contain no Accessed None, ScriptWarning, Critical, Error or profile-failure entries. No game/probe process remains at this checkpoint.
 
 Final source checks: x86 24/24 and x64 23/23; official SDK suites pass, including102 insertion checks,30,059 ammo checks and20 C++/script parity checkpoints. Python source parsing and diff checks pass. No assets were added to tracked files, no headset acceptance or publication is claimed. Subsequent MK23 adapter files are separate unbuilt work and are not part of this insertion checkpoint.
+
+
+## October1: MK23 extension and mechanical parent frames
+
+Continued after0763b53. The two agents audited installed MK23 animation geometry and authored stock-derived weapon/fire wrappers plus harness support; primary integrated profiles and coordinated all builds/game trials. Local exports and source/package hashes remain in ignored reports/mk23-reload-asset-audit.json and local/mk23-reload-audit.
+
+The isolated -MK23Test fixture replaces Deagle at the left hip, retaining seven weapons and the regular default loadout. It is explicitly unattended and does not enable general MK23 shop/dual/holster selection. MK23Fire.DoTrace remains inherited, as do stock damage, penetration, cadence and perk paths; physical ammunition mirrors successful stock consumption. Its profile uses chassisMK23, Magazine/Slide bones, Reload insertion markers.61/.63, stable grasp.51 and46mm slide travel. Existing9mm/Deagle grip markers and50mm travel are preserved.
+
+First live stress075339 / trace075340-142522 exposed a real shared presentation assumption: all ammunition/chamber/fire behavior passed, but a detached MK23 magazine was displaced by up to39.6818UU. Its parent frame is rotated90 degrees; SetBoneLocation consumed parent-space translation while the old code supplied a model-space offset divided only by scalar5. An independent fit over151 coherent held samples matched the installed parent rotation with maximum residual0.000471 modelUU. The slide had the same wrong-axis risk. The common visual now measures separately selected magazine/action parent frames and projects displacements into them. This uses installed frames rather than a hardcoded MK23 angle/position patch.
+
+The initial stress also lacked coherent seated samples at the end of phase20 (both settled rows crossed a Tick). Its push now finishes at600ms, leaving a longer held-grip dwell. The coherence requirement was retained. New actual-action checks verify model-X slide motion on full pull/return and the normal partial pull.
+
+Final evidence, private game and synthetic controllers,1280x960 per eye:
+
+-080235 / trace080236-303464: native MK23,50 reload +6 grip +10 status checks,2,019 pairs. Five stock shots, all insertion/interruption/recenter checks, tactical12+1 and actual slide motion passed. Maximum held-magazine error0.0001954UU; maximum independent socket error0.000000716m; full-slide position error0.00005785UU. These are internal engine agreement, not physical tracking accuracy.
+-080420 / trace080421-312581: native9mm interrupted regression,38 reload +6 grip +10 status checks,2,006 pairs; MK23 ledger unchanged.
+-080738 / trace080739-581111: ordinary native Deagle regression,34 reload +6 grip +10 status checks,2,224 pairs.
+-081014 / trace081015-429834: native MK23 wrong-roll strokes,19 alignment +6 grip +10 status checks,1,238 pairs.
+-081112 / trace081113-258797: fallback MK23 interrupted reload,36 reload +10 status checks,2,023 pairs.
+
+All final traces restored entry/reset hooks and released resources, without missing/malformed/busy input, device resets or extra engine ticks inside Draw. Expired reads58/60/54/54/58; discarded pairs1/2/2/1/2 in listed order. Actual MK23 insertion/slide captures were inspected. One readiness attempt raced EnumProcessModulesEx during initial process startup; no native injection occurred before retry.
+
+Games exited normally. Saved Deagle/alignment/fallback logs each contain one stock pickup InitDroppedPickupFor warning about unavailable SteamStatsAndAchievements during unattended inventory setup; no KFVR script exception or crash was observed. Original packages remain unchanged. Both architecture suites pass24/24 and23/23; official SDK suites, including102 insertion checks, pass. No headset acceptance or publication.
+
+Next issue identified by review: Level.TimeSeconds is scaled during ZED-time, so the physical-speed gate still needs an unscaled controller-sample timestamp. The new clock helper/tests and private time-dilation actor are separate unbuilt work, excluded from this MK23 checkpoint.

@@ -12,7 +12,8 @@ param(
  [switch]$NativeHands,
  [switch]$TraderTest,
  [switch]$GrenadeTest,
- [switch]$DualTest
+ [switch]$DualTest,
+ [switch]$MK23Test
 )
 $ErrorActionPreference='Stop'
 if($ArmTest -and $NativeHands){throw 'Choose NativeHands or the legacy ArmTest, not both.'}
@@ -22,6 +23,7 @@ if($ArmTest -and !$Unattended){throw 'ArmTest requires explicit Unattended mode.
 if($DoorTest -and !$Unattended){throw 'DoorTest requires explicit Unattended mode.'}
 if($HealTest -and !$Unattended){throw 'HealTest requires explicit Unattended mode.'}
 if($DualTest -and !$Unattended){throw 'DualTest requires explicit Unattended mode.'}
+if($MK23Test -and !$Unattended){throw 'MK23Test requires explicit Unattended mode.'}
 if($MeleeTest -and !$Unattended){throw 'MeleeTest requires explicit Unattended mode.'}
 $kfExe=[IO.Path]::GetFullPath((Join-Path $Game 'System\KillingFloor.exe'))
 if(@(Get-Process KillingFloor -ErrorAction SilentlyContinue | Where-Object {$_.Path -eq $kfExe}).Count){throw 'Close the existing KF process before loading the development package.'}
@@ -40,6 +42,7 @@ if($NativeHands){$kfUrl+='?KFVRNativeHands=1'}
 if($TraderTest){$kfUrl+='?KFVRTraderTest=1'}
 if($GrenadeTest){$kfUrl+='?KFVRGrenadeTest=1'}
 if($DualTest){$kfUrl+='?KFVRDualTest=1'}
+if($MK23Test){$kfUrl+='?KFVRMK23Test=1'}
 $kfSteam=(Get-ItemProperty HKCU:\Software\Valve\Steam).SteamExe
 $kfLaunchArgs=@('-applaunch','1250',$kfUrl,'-windowed')
 if($VRProfile){

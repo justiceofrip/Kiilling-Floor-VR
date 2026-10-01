@@ -5,7 +5,7 @@ def validate(folder,weapon="single",interrupted=False,insertion=False):
  folder=pathlib.Path(folder)
  controls=[json.loads(x) for x in (folder/'controls.jsonl').read_text().splitlines()]
  rows=[json.loads(x) for x in (folder/'weapon-observations.jsonl').read_text().splitlines()]
- gun_type={'single':'KFVRTrackedSingle','deagle':'KFVRTrackedDeagle'}[weapon]
+ gun_type={'single':'KFVRTrackedSingle','deagle':'KFVRTrackedDeagle','mk23':'KFVRTrackedMK23'}[weapon]
  gun_addresses={o['address'] for row in rows for o in row['objects'] if o['type']==gun_type}
  def objects(typ,selected=rows):return [o['values'] for row in selected for o in row['objects'] if o['type']==typ and not o['values'].get('bDeleteMe') and (typ!='KFVRManualReload' or o['values']['Gun'] in gun_addresses)]
  def phase(n,typ='KFVRManualReload'):
@@ -105,9 +105,30 @@ def validate(folder,weapon="single",interrupted=False,insertion=False):
 
 
 
+ # Compare the rendered action bone against a model-space pull, independently
+ # of the parent-bone translation basis used to apply the override in script.
+ from validate_grip_pose import rotate
+ action_metrics={}
+ for n in ((23,24) if insertion else (17,23,24)):
+  times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
+  action_errors=[];action_travel=[];missing_action_samples=0
+  for row in rows:
+   if not times or not min(times)+120<=row['uptime_ms']<=max(times) or not row.get('rig_sample_consistent'):continue
+   objs={o['address']:o for o in row['objects'] if not o['values'].get('bDeleteMe')}
+   rig=next((o['values'] for o in objs.values() if o['type']=='KFVRWeaponRig'),None)
+   if not rig or rig['Gun'] not in gun_addresses or not rig['bTracking'] or rig['bHolstered'] or rig['Tracking.Flags']&3!=3:continue
+   visual=objs.get(rig['Visual'],{}).get('values');manual=objs.get(rig['ManualReload'],{}).get('values')
+   if not visual or visual['bHidden'] or not manual or manual['Gun']!=rig['Gun']:continue
+   if 'MeasuredActionPosition' not in visual:
+    missing_action_samples+=1;continue
+   rest=[a+b for a,b in zip(visual['Location'],rotate([x*visual['DrawScale'] for x in visual['SlideLocal']],visual['Rotation']))]
+   travel=manual['SlideTravel'];distance=rig['Tracking.UnitsPerMetre']*visual['ActionTravelMetres']*travel
+   expected=[a-b*distance for a,b in zip(rest,rotate([1,0,0],visual['Rotation']))]
+   action_errors.append(math.dist(expected,visual['MeasuredActionPosition']));action_travel.append(travel)
+  action_metrics[str(n)]=dict(samples=len(action_errors),missing_samples=missing_action_samples,max_position_error_uu=max(action_errors,default=None),min_slide_travel=min(action_travel,default=None),max_slide_travel=max(action_travel,default=None))
+  checks['actual_action_position_phase_'+str(n)]=len(action_errors)>=3 and missing_action_samples==0 and all(math.isfinite(error) and error<.05 for error in action_errors)
  # A magazine seated in the gun must retain its full bone frame when physical
  # mode is toggled off and the controller subsequently turns on several axes.
- from validate_grip_pose import rotate
  rest_metrics={}
  for n in (53,55,57,58,59):
   times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
@@ -151,11 +172,11 @@ def validate(folder,weapon="single",interrupted=False,insertion=False):
     palm_tracking_errors.append(math.dist(hand['PalmWorld'],rig['Tracking.LeftPosition']))
   checks['native_magazine_grasp_is_measured_and_attached']=native_grip_samples>=5 and not missing_native_profiles and bool(mag_palm_errors) and max(mag_palm_errors)<.05
   checks['magazine_grasp_keeps_controller_palm']=bool(palm_tracking_errors) and max(palm_tracking_errors)<.005
- report=dict(max_socket_position_error_metres=max(socket_errors,default=None) if insertion else None,insertion_trial=insertion,interruption_trial=interrupted,inserted_magazine_frames=rest_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
+ report=dict(max_socket_position_error_metres=max(socket_errors,default=None) if insertion else None,insertion_trial=insertion,interruption_trial=interrupted,inserted_magazine_frames=rest_metrics,action_bone_positions=action_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
  (folder/'reload-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Reload checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report
 if __name__=='__main__':
  import argparse
- parser=argparse.ArgumentParser();parser.add_argument('folder');parser.add_argument('--weapon',choices=['single','deagle'],default='single');args=parser.parse_args()
+ parser=argparse.ArgumentParser();parser.add_argument('folder');parser.add_argument('--weapon',choices=['single','deagle','mk23'],default='single');args=parser.parse_args()
  print(json.dumps(validate(args.folder,args.weapon),indent=2))

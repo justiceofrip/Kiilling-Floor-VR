@@ -63,8 +63,8 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,deagleReload=false,reloadInterrupt=false,reloadAlignment=false,reloadInsertion=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;ReloadFixture reloadFixture;
- for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i]);else if(arg==L"--reload-insertion")reloadInsertion=reload=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload")deagleReload=reload=weapon=movement=true;else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,leftPistolReload=false,reloadInterrupt=false,reloadAlignment=false,reloadInsertion=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;ReloadFixture reloadFixture;std::wstring reloadSelector;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i]);else if(arg==L"--reload-insertion")reloadInsertion=reload=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload"||arg==L"--mk23-reload"){Require(reloadSelector.empty()||reloadSelector==arg,"Choose either --deagle-reload or --mk23-reload");reloadSelector=arg;leftPistolReload=reload=weapon=movement=true;}else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
  Require(!reload||reloadFixture.ready,"Reload trial requires its live measured fixture");
  Require(width>=64&&height>=64&&width<=4096&&height<=4096&&std::uint64_t(width)*height*40<=256*1024*1024,"Receiver dimensions exceed CPU bridge budget");
  const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
@@ -180,9 +180,9 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase==41||phase==42){lh.gripPose.position={.2f,-.36f,-.5f};lh.squeeze=1;}
      if(phase==42)rh.secondary=true;
      if(phase==43||phase==45)lh.primary=true;
-     if(phase==47||phase==48){rh.gripPose.position={deagleReload?-.22f:.22f,-.62f,.05f};rh.squeeze=phase==48?1.f:0.f;}
+     if(phase==47||phase==48){rh.gripPose.position={leftPistolReload?-.22f:.22f,-.62f,.05f};rh.squeeze=phase==48?1.f:0.f;}
      if(phase==49)rh.trigger=1;
-     if(phase==51||phase==52){rh.gripPose.position={deagleReload?-.22f:.22f,-.62f,.05f};rh.squeeze=phase==52?1.f:0.f;}
+     if(phase==51||phase==52){rh.gripPose.position={leftPistolReload?-.22f:.22f,-.62f,.05f};rh.squeeze=phase==52?1.f:0.f;}
      // All insertion points are derived from the live installed gun/palm
      // frames. The shared path has no copied per-pistol geometric offsets.
      const float push=-.10f*(1-std::min(1.f,float(elapsed%1000)/800.f));
@@ -206,7 +206,7 @@ int wmain(int argc,wchar_t** argv){try{
        if(phase==15)depth=-.06f+.035f*std::min(1.f,float(elapsed%1000)/800.f);
        if(phase==18)depth=-.06f;
        if(phase==19)depth=-.025f*(1-std::min(1.f,float(elapsed%1000)/600.f));
-       if(phase==20)depth=push;
+       if(phase==20)depth=-.10f*(1-std::min(1.f,float(elapsed%1000)/600.f));
        lh.gripPose.position=ReloadHand(reloadFixture,rh.gripPose,lh.gripPose.orientation,depth);
        if(phase==16&&elapsed%1000<350)rh.gripValid=rh.aimValid=false;
       }

@@ -60,7 +60,8 @@ def _capture(observer, snapshot, weapon):
 
     if not owned_by(rig, pc['address']):
         raise ValueError('Weapon rig is not owned by its bound controller')
-    target_class = 'KFVRTrackedSingle' if weapon == 'single' else 'KFVRTrackedDeagle'
+    target_class = {'single': 'KFVRTrackedSingle', 'deagle': 'KFVRTrackedDeagle',
+                    'mk23': 'KFVRTrackedMK23'}[weapon]
     gun = _one([o for o in objects if o['type'] == target_class
                 and o['values'].get('VRRig') == rig['address'] and owned_by(o, pawn['address'])],
                'owned ' + target_class)
@@ -130,8 +131,8 @@ def make_fixture(pid, game, folder, weapon='single') -> Path:
     This does not select a weapon or modify the game. The native trial runner
     still performs its normal private-world/viewport preflight before injection.
     """
-    if weapon not in ('single', 'deagle'):
-        raise ValueError('Insertion fixture weapon must be single or deagle')
+    if weapon not in ('single', 'deagle', 'mk23'):
+        raise ValueError('Insertion fixture weapon must be single, deagle or mk23')
     game, folder = Path(game), Path(folder)
     deadline = time.monotonic() + 10
     reason = 'No calibration snapshot'

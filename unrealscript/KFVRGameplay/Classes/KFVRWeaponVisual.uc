@@ -17,6 +17,9 @@ var name TipBone;
 var vector PalmLocal, TipLocal, MagazineLocal, SlideLocal;
 var float ModelUnitsPerMetre, BoneTranslationScale;
 var vector MagazineX,MagazineY,MagazineZ,SupportLocal;
+var coords MagazineTranslationFrame,ActionTranslationFrame;
+var bool bMagazineTranslationFrame,bActionTranslationFrame;
+var vector MeasuredActionPosition;
 var vector MeasuredMagazinePosition,MeasuredMagazineX,MeasuredMagazineY,MeasuredMagazineZ;
 var bool bCalibrated,bTranslationCalibrated,bTranslationProbe,bPhysicalProfile;
 var name MagazineBone,ActionBone;
@@ -41,7 +44,7 @@ simulated function coords GripBone(int Index) { return GripPose[Clamp(Index,0,31
 simulated function bool Initialize(Weapon Source)
 {
     local coords Palm,Tip,Part;
-    local name PoseSequence;
+    local name PoseSequence,ParentBone;
     bHidden=True;
     if (Source==None || Source.Mesh==None) return false;
     SourceWeapon=Source; LinkMesh(Source.Mesh); Skins=Source.Skins;
@@ -104,6 +107,10 @@ simulated function bool Initialize(Weapon Source)
         Part=GetBoneCoords(MagazineBone); MagazineLocal=Part.Origin;
         MagazineX=Normal(Part.XAxis); MagazineY=Normal(Part.YAxis); MagazineZ=Normal(Part.ZAxis);
         Part=GetBoneCoords(ActionBone); SlideLocal=Part.Origin;
+        ParentBone=class'KFVRWeaponProfile'.static.MagazineTranslationParent(KFWeapon(Source));
+        if (ParentBone!='') { MagazineTranslationFrame=GetBoneCoords(ParentBone); bMagazineTranslationFrame=True; }
+        ParentBone=class'KFVRWeaponProfile'.static.ActionTranslationParent(KFWeapon(Source));
+        if (ParentBone!='') { ActionTranslationFrame=GetBoneCoords(ParentBone); bActionTranslationFrame=True; }
         bPhysicalProfile=VSize(MagazineLocal)>1 && VSize(SlideLocal)>1 && VSize(MagazineLocal-PalmLocal)<300 && VSize(SlideLocal-PalmLocal)<300;
         Log("KFVR_MECHANICAL_CAL weapon=" $ Source.Class $ " magazine=" $ MagazineBone $ ":" $ MagazineLocal $ " action=" $ ActionBone $ ":" $ SlideLocal $ " valid=" $ bPhysicalProfile);
 
@@ -119,7 +126,7 @@ simulated function bool Initialize(Weapon Source)
     if (KFVRTrackedDualies(Source)!=None)
     { if (bOffhandGun) SetBoneScale(3,0.0,'9mm_Gun'); else SetBoneScale(3,0.0,'9mm_Gun01'); }
     if (bPhysicalProfile && KFVRWeaponRig(Owner)!=None && KFVRWeaponRig(Owner).bNativeHandTest
-        && (KFVRTrackedSingle(Source)!=None || KFVRTrackedDeagle(Source)!=None))
+        && class'KFVRWeaponProfile'.static.MagazineGraspFrame(KFWeapon(Source))>=0)
     {
         MagazineGrip=Spawn(class'KFVRMagazineGrip',self);
         if (MagazineGrip!=None && !MagazineGrip.InitializeMagazine(self))
@@ -190,6 +197,7 @@ simulated function SampleMagazinePose()
     Part=GetBoneCoords(MagazineBone);
     MeasuredMagazinePosition=Part.Origin;
     MeasuredMagazineX=Part.XAxis; MeasuredMagazineY=Part.YAxis; MeasuredMagazineZ=Part.ZAxis;
+    Part=GetBoneCoords(ActionBone); MeasuredActionPosition=Part.Origin;
 }
 simulated function vector MagazineRest() { return Location+((MagazineLocal*DrawScale)>>Rotation); }
 simulated function vector SlideRest() { return Location+((SlideLocal*DrawScale)>>Rotation); }
@@ -236,6 +244,20 @@ simulated function ClearMechanicalPose()
     SetBoneLocation(MagazineBone,vect(0,0,0),1.0);
     SetBoneLocation(ActionBone,vect(0,0,0),1.0);
 }
+// SetBoneLocation consumes an offset in the installed parent frame. World
+// overrides for a held part's rotation do not rotate this translation frame.
+simulated function vector MechanicalOffset(vector ModelOffset,optional bool Action)
+{
+    local coords Frame;
+    local vector Result;
+    if ((Action && !bActionTranslationFrame) || (!Action && !bMagazineTranslationFrame))
+        return ModelOffset/BoneTranslationScale;
+    if (Action) Frame=ActionTranslationFrame; else Frame=MagazineTranslationFrame;
+    Result.X=ModelOffset dot Frame.XAxis;
+    Result.Y=ModelOffset dot Frame.YAxis;
+    Result.Z=ModelOffset dot Frame.ZAxis;
+    return Result/BoneTranslationScale;
+}
 simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, float SlideTravel, optional rotator HandRotation)
 {
     local vector Offset;
@@ -256,8 +278,8 @@ simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, f
         SetBoneDirection(MagazineBone,Desired,vect(0,0,0),1.0,1);
     }
     else SetBoneDirection(MagazineBone,rot(0,0,0),,0.0,1);
-    SetBoneLocation(MagazineBone,Offset/BoneTranslationScale,1.0);
-    SetBoneLocation(ActionBone,vect(-1,0,0)*ModelUnitsPerMetre*ActionTravelMetres*SlideTravel/BoneTranslationScale,1.0);
+    SetBoneLocation(MagazineBone,MechanicalOffset(Offset),1.0);
+    SetBoneLocation(ActionBone,MechanicalOffset(vect(-1,0,0)*ModelUnitsPerMetre*ActionTravelMetres*SlideTravel,True),1.0);
     BoneRefresh();
 }
 defaultproperties

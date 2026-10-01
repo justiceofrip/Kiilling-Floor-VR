@@ -2,7 +2,7 @@
 // Only the normalized sampling time is authored here, not extracted pose data.
 class KFVRMagazineGrip extends KFVRWeaponVisual;
 var name SampleSequence;
-var float SampleFrame,SampleRate,SourcePalmDistance;
+var float SampleFrame,SampleRate,SourcePalmDistance,SampleMarker;
 var coords ReloadMagazine;
 simulated function bool InitializeMagazine(KFVRWeaponVisual Source)
 {
@@ -11,18 +11,20 @@ simulated function bool InitializeMagazine(KFVRWeaponVisual Source)
     local KFWeapon W;
     if (Source==None || Source.SourceWeapon==None || Source.MagazineBone=='') return False;
     W=KFWeapon(Source.SourceWeapon);
-    if (W==None || (KFVRTrackedSingle(W)==None && KFVRTrackedDeagle(W)==None)) return False;
+    if (W==None) return False;
+    SampleMarker=class'KFVRWeaponProfile'.static.MagazineGraspFrame(W);
+    if (SampleMarker<0 || SampleMarker>1) return False;
     SourceWeapon=W; LinkMesh(W.Mesh);
     SetLocation(vect(0,0,0)); SetRotation(rot(0,0,0));
     SetDrawScale(1); SetDrawScale3D(vect(1,1,1));
-    // Both installed reloads hold the replacement magazine steadily here.
+    // Each profile selects a measured stable replacement-magazine grasp.
     if (!HasAnim(W.ReloadAnim) || !PlayAnim(W.ReloadAnim,0,0,0)) return False;
-    EnableChannelNotify(0,0); SetAnimFrame(0.4,0,0); StopAnimating();
+    EnableChannelNotify(0,0); SetAnimFrame(SampleMarker,0,0); StopAnimating();
     GetAnimParams(0,SampleSequence,SampleFrame,SampleRate);
     BoneRefresh(); ReloadMagazine=GetBoneCoords(Source.MagazineBone);
     P=GetBoneCoords(class'KFVRHandPoseMath'.static.SourceBone(True,0));
     SourcePalmDistance=VSize(P.Origin-ReloadMagazine.Origin);
-    if (SampleSequence!=W.ReloadAnim || Abs(SampleFrame-0.4)>0.01 || SourcePalmDistance<5 || SourcePalmDistance>45) return False;
+    if (SampleSequence!=W.ReloadAnim || Abs(SampleFrame-SampleMarker)>0.01 || SourcePalmDistance<5 || SourcePalmDistance>45) return False;
     Rest.XAxis=Source.MagazineX; Rest.YAxis=Source.MagazineY; Rest.ZAxis=Source.MagazineZ;
     for (I=0;I<16;I++)
     {

@@ -9,7 +9,7 @@ def validate(folder, weapon="single"):
     folder = pathlib.Path(folder)
     controls = [json.loads(x) for x in (folder / "controls.jsonl").read_text().splitlines()]
     rows = [json.loads(x) for x in (folder / "weapon-observations.jsonl").read_text().splitlines()]
-    gun_type = {"single": "KFVRTrackedSingle", "deagle": "KFVRTrackedDeagle"}[weapon]
+    gun_type = {"single": "KFVRTrackedSingle", "deagle": "KFVRTrackedDeagle", "mk23": "KFVRTrackedMK23"}[weapon]
     addresses = {o["address"] for r in rows for o in r["objects"] if o["type"] == gun_type}
     def objects(kind, selected=rows):
         return [o["values"] for r in selected for o in r["objects"]
