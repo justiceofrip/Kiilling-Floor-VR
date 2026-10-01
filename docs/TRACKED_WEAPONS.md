@@ -106,3 +106,7 @@ October 1 wearer feedback accepts the improved actual-KF hands and basic locomot
 
 
 Physical gesture timing uses the controller pose clock. Magazine/belt insertion, grenade velocity, and knife motion are independent of game-time dilation and repeated presentation Ticks. Knife and grenade attack cooldowns remain on the game's clock. Clock discontinuities cancel pending gestures through ordinary neutral input before fresh samples resume. Engine tests cover normal, slow and recovering game clocks; full stock ZED effects and wearer behavior remain separate acceptance work.
+
+## Latest wearer feedback: reload acceptance and pistol aim
+
+The October 1 headset test of checkpoint `88f99da` accepted magnetic magazine insertion, Bullpup grip-and-pull removal and the conventional left slide grasp. The wearer reported that pistol bullets do not land where the pistol points, while the Bullpup aims correctly. Treat shot alignment as an open gameplay issue; the exact affected pistol and cause are not established yet. A separate slight pistol holding-orientation discomfort is recorded for later tuning, at the wearer's request. Keep future comfort offsets consistent across native hands, visible gun, sights and the actual shot ray. Two-hand pistol support remains pending.
