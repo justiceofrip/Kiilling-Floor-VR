@@ -39,7 +39,7 @@ void PointToolFixture(math::Pose& pose){
  constexpr float x=.39934945f,y=.04667560f,z=.02036291f,w=.91538339f;
  pose.orientation={a.w*x+a.x*w+a.y*z-a.z*y,a.w*y-a.x*z+a.y*w+a.z*x,a.w*z+a.x*y-a.y*x+a.z*w,a.w*w-a.x*x-a.y*y-a.z*z};
 }
-struct ReloadFixture {math::Vec3 root{},grasp{},axis{};bool ready=false;};
+struct ReloadFixture {math::Vec3 root{},grasp{},axis{},actionGrasp{},actionAxis{};float actionTravel=0;bool ready=false,authored=false;};
 math::Vec3 ToXr(math::Vec3 p){return {p.y,p.z,-p.x};}
 math::Vec3 FixtureRotate(math::Quaternion q,math::Vec3 v){
  const math::Vec3 t{2*(q.y*v.z-q.z*v.y),2*(q.z*v.x-q.x*v.z),2*(q.x*v.y-q.y*v.x)};
@@ -50,11 +50,21 @@ math::Vec3 ReloadHand(const ReloadFixture& f,const math::Pose& gun,math::Quatern
  const auto grasp=FixtureRotate(hand,ToXr(f.grasp));
  return {gun.position.x+root.x+grasp.x,gun.position.y+root.y+grasp.y,gun.position.z+root.z+grasp.z};
 }
-ReloadFixture ReadReloadFixture(const std::filesystem::path& path){
- std::ifstream in(path);std::array<float,9> v{};for(auto& x:v)Require(bool(in>>x)&&std::isfinite(x)&&std::abs(x)<=1,"Invalid live reload fixture");
+ReloadFixture ReadReloadFixture(const std::filesystem::path& path,bool authored=false){
+ std::ifstream in(path);std::array<float,16> v{};
+ for(unsigned i=0;i<(authored?16u:9u);++i)Require(bool(in>>v[i])&&std::isfinite(v[i])&&std::abs(v[i])<=1,"Invalid live reload fixture");
  std::string extra;Require(!(in>>extra),"Unexpected reload fixture fields");
  Require(std::abs(std::hypot(v[6],v[7],v[8])-1)<.001,"Invalid measured insertion axis");
- return {{v[0],v[1],v[2]},{v[3],v[4],v[5]},{v[6],v[7],v[8]},true};
+ ReloadFixture f;f.root={v[0],v[1],v[2]};f.grasp={v[3],v[4],v[5]};f.axis={v[6],v[7],v[8]};f.ready=true;f.authored=authored;
+ if(authored){
+  Require(std::abs(std::hypot(v[12],v[13],v[14])-1)<.001&&v[15]>=.01f&&v[15]<=.25f,"Invalid authored action rail");
+  f.actionGrasp={v[9],v[10],v[11]};f.actionAxis={v[12],v[13],v[14]};f.actionTravel=v[15];
+ }
+ return f;
+}
+math::Vec3 ActionHand(const ReloadFixture& f,const math::Pose& gun,float distance){
+ const auto delta=FixtureRotate(gun.orientation,ToXr({f.actionGrasp.x+f.actionAxis.x*distance,f.actionGrasp.y+f.actionAxis.y*distance,f.actionGrasp.z+f.actionAxis.z*distance}));
+ return {gun.position.x+delta.x,gun.position.y+delta.y,gun.position.z+delta.z};
 }
 void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixels,unsigned width,unsigned height){
  auto bgra=pixels;for(auto& p:bgra)p=(p&0xff00ff00)|((p&0xff)<<16)|((p>>16)&0xff);
@@ -63,11 +73,13 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,leftPistolReload=false,reloadInterrupt=false,reloadAlignment=false,reloadInsertion=false,reloadClock=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;ReloadFixture reloadFixture;std::wstring reloadSelector;
- for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i]);else if(arg==L"--reload-clock")reloadClock=reload=weapon=movement=true;else if(arg==L"--reload-insertion")reloadInsertion=reload=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload"||arg==L"--mk23-reload"){Require(reloadSelector.empty()||reloadSelector==arg,"Choose either --deagle-reload or --mk23-reload");reloadSelector=arg;leftPistolReload=reload=weapon=movement=true;}else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,leftPistolReload=false,rifleReload=false,reloadInterrupt=false,reloadAlignment=false,reloadInsertion=false,reloadClock=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;ReloadFixture reloadFixture;std::wstring reloadSelector;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--rifle-reload")rifleReload=reload=weapon=movement=true;else if(arg==L"--rifle-reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i],true);else if(arg==L"--reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i]);else if(arg==L"--reload-clock")reloadClock=reload=weapon=movement=true;else if(arg==L"--reload-insertion")reloadInsertion=reload=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload"||arg==L"--mk23-reload"){Require(reloadSelector.empty()||reloadSelector==arg,"Choose either --deagle-reload or --mk23-reload");reloadSelector=arg;leftPistolReload=reload=weapon=movement=true;}else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
  Require(unsigned(reloadInterrupt)+unsigned(reloadAlignment)+unsigned(reloadInsertion)+unsigned(reloadClock)<=1,"Choose one reload diagnostic variant per trial");
  reloadInsertion=reloadInsertion||reloadClock;
  Require(!reload||reloadFixture.ready,"Reload trial requires its live measured fixture");
+ Require(!reload||rifleReload==reloadFixture.authored,"Reload fixture/action family mismatch");
+ Require(!rifleReload||(!leftPistolReload&&!reloadInterrupt&&!reloadAlignment&&!reloadInsertion),"Rifle reload requires its own unmodified phase protocol");
  Require(width>=64&&height>=64&&width<=4096&&height<=4096&&std::uint64_t(width)*height*40<=256*1024*1024,"Receiver dimensions exceed CPU bridge budget");
  const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
  ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level{};const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_0};
@@ -78,9 +90,9 @@ int wmain(int argc,wchar_t** argv){try{
  ComPtr<ID3D11Texture2D> output,staging;Hr(device->CreateTexture2D(&desc,nullptr,&output),"Create receiving stereo targets");desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;desc.BindFlags=0;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;Hr(device->CreateTexture2D(&desc,nullptr,&staging),"Create receiving readback");
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
- const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::array<unsigned,64> phasePairs{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency,sourceStart;QueryPerformanceFrequency(&frequency);QueryPerformanceCounter(&sourceStart);
- const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reloadAlignment?37000:reload?62000:inventory?54700:7500;
- for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:reload||dual||dualBelt||heal||weld||arms||hands||hud?90000:inventory?90000:35000);++attempt){
+ const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,96> captured{};std::array<unsigned,96> phasePairs{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency,sourceStart;QueryPerformanceFrequency(&frequency);QueryPerformanceCounter(&sourceStart);
+ const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reloadAlignment?37000:rifleReload?83000:reload?62000:inventory?54700:7500;
+ for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:rifleReload?120000:reload||dual||dualBelt||heal||weld||arms||hands||hud?90000:inventory?90000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
   // GetTickCount64 may repeat across distinct receiver iterations (15 ms clock
@@ -107,6 +119,7 @@ int wmain(int argc,wchar_t** argv){try{
     auto reloadElapsed=elapsed;
     if(!reloadAlignment&&elapsed>=34000)reloadElapsed=elapsed<35000?33999:elapsed-1000;
     phase=reloadElapsed<10000?51u+unsigned(reloadElapsed/1000):std::min(50u,unsigned((reloadElapsed-10000)/1000));
+    if(rifleReload&&elapsed>=62000)phase=61u+std::min(20u,unsigned((elapsed-62000)/1000));
    }
    if(hands)phase=std::min(17u,unsigned(elapsed/2000));
    if(hud)phase=std::min(17u,unsigned(elapsed/1500));
@@ -209,6 +222,13 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase==47||phase==48){rh.gripPose.position={leftPistolReload?-.22f:.22f,-.62f,.05f};rh.squeeze=phase==48?1.f:0.f;}
      if(phase==49)rh.trigger=1;
      if(phase==51||phase==52){rh.gripPose.position={leftPistolReload?-.22f:.22f,-.62f,.05f};rh.squeeze=phase==52?1.f:0.f;}
+     if(rifleReload){
+      if(phase==59){rh.gripPose.position={-.25f,-.12f,-.75f};rh.gripPose.orientation={0,-.70710678f,0,.70710678f};}
+      if(phase==47||phase==48||phase==51||phase==52)
+       rh.gripPose.position={.22f,-.15f,.18f};
+      if(phase==16||phase==17||phase==18||phase==21||phase==22||phase==23||phase==24)
+       lh.gripPose.position=ActionHand(reloadFixture,rh.gripPose,phase==17?.02f:(phase==22||phase==23)?reloadFixture.actionTravel:0.f);
+     }
      // All insertion points are derived from the live installed gun/palm
      // frames. The shared path has no copied per-pistol geometric offsets.
      const float push=-.10f*(1-std::min(1.f,float(elapsed%1000)/800.f));
@@ -243,6 +263,23 @@ int wmain(int argc,wchar_t** argv){try{
       // the ordinary stress variant changes both eye/controller space instead.
       // Either transition near the seat must cancel the pending approach.
       if(phase>=19&&phase<=50){if(reloadClock)input.predictedNs-=2000000000LL;else input.spaceGeneration++;}
+     }
+     if(rifleReload&&phase>=61){
+      if(phase==61){lh.gripPose.position={-.2f,-.6f,-.12f};lh.squeeze=1;}
+      if(phase==62||phase==63){
+       lh.squeeze=phase==62?1.f:0.f;
+       lh.gripPose.position=ReloadHand(reloadFixture,rh.gripPose,lh.gripPose.orientation,phase==62?push:0);
+      }
+      if((phase>=64&&phase<=71)||(phase>=73&&phase<=75)||(phase>=77&&phase<=79)){
+       lh.trigger=1;lh.squeeze=(phase==68||phase==75||phase==79)?0.f:1.f;
+       const bool full=phase==65||phase==66||phase==67||phase==70||phase==74||phase==78;
+       lh.gripPose.position=ActionHand(reloadFixture,rh.gripPose,full?reloadFixture.actionTravel:0);
+       if(phase==66)lh.gripValid=lh.aimValid=false;
+       // Release outside the lateral capture envelope must cancel an armed
+       // stroke before the spring-return feed path can run.
+       if(phase==75)lh.gripPose.position.x+=.20f;
+      }
+      if(phase==72||phase==80)rh.trigger=1;
      }
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
@@ -447,7 +484,7 @@ int wmain(int argc,wchar_t** argv){try{
    }
    const auto sent=phase==8&&!weapon?ipc::ChannelResult::Timeout:channel.SendInput(input);
    const auto left=input.hands[0].gripPose.position;
-   controls<<"{\"uptime_ms\":"<<now<<",\"phase\":"<<phase<<",\"sent\":"<<(sent==ipc::ChannelResult::Ok?"true":"false")<<",\"predicted_ns\":"<<input.predictedNs<<",\"source_ns\":"<<sampleNs<<",\"space_generation\":"<<input.spaceGeneration<<",\"left_grip_position\":["<<left.x<<','<<left.y<<','<<left.z<<"],\"focused\":"<<(input.focused?"true":"false")<<",\"left_grip_valid\":"<<(input.hands[0].gripValid?"true":"false")<<",\"right_grip_valid\":"<<(input.hands[1].gripValid?"true":"false")<<",\"left_squeeze\":"<<input.hands[0].squeeze<<",\"right_squeeze\":"<<input.hands[1].squeeze<<",\"reload_phase_ms\":"<<(reload?elapsed%1000:0)<<"}\n";
+   controls<<"{\"uptime_ms\":"<<now<<",\"phase\":"<<phase<<",\"sent\":"<<(sent==ipc::ChannelResult::Ok?"true":"false")<<",\"predicted_ns\":"<<input.predictedNs<<",\"source_ns\":"<<sampleNs<<",\"space_generation\":"<<input.spaceGeneration<<",\"left_grip_position\":["<<left.x<<','<<left.y<<','<<left.z<<"],\"focused\":"<<(input.focused?"true":"false")<<",\"left_grip_valid\":"<<(input.hands[0].gripValid?"true":"false")<<",\"right_grip_valid\":"<<(input.hands[1].gripValid?"true":"false")<<",\"left_squeeze\":"<<input.hands[0].squeeze<<",\"right_squeeze\":"<<input.hands[1].squeeze<<",\"right_trigger\":"<<input.hands[1].trigger<<",\"reload_phase_ms\":"<<(reload?elapsed%1000:0)<<"}\n";
   }
   runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=0x200000001ULL;tracking.predictedNs=sampleNs;tracking.focused=tracking.headValid=true;
   if(reloadInsertion&&!reloadClock&&capturePhase>=19&&capturePhase<=50)tracking.spaceGeneration++;

@@ -98,4 +98,12 @@ Live single/dual adapters reconcile capacity after stock weapon updates and publ
 
 A manual magazine/action grasp reserves the offhand before two-handed weapon support chooses a pose. A fresh belt-grab attempt gets the same priority, using the current body-space belt location. Seating while the squeeze remains held cannot acquire support: release and squeeze again first. Tracking loss, switching and holstering also require a fresh release/press before support returns. Physical reload still updates after the weapon's current pose, so magazine/action contact uses the current frame.
 
-Magazine capability alone does not enable a complete physical reload. The Bullpup has measured magazine geometry but no independent action bone; it remains on timed reload until an explicit chambering presentation is available. Existing pistol slide travel and magazine state transitions are unchanged.
+Magazine capability alone does not enable a complete physical reload. The Bullpup has measured magazine geometry but no independent action bone. Its opt-in RifleReloadTest fixture now adds an authored chambering handle; ordinary launch retains timed reload. Existing pistol slide travel and magazine state transitions are unchanged.
+
+## Bullpup charging-handle prototype
+
+Use `Start-KFVRDev.ps1 -Unattended -NativeHands -VRProfile -RifleReloadTest` for the private prototype. Select the rifle at the right shoulder, then use the existing physical-mode toggle. Magazine release, native offhand magazine grasp, belt supply, continuous insertion and retained partial magazines reuse the shared system.
+
+For an empty chamber, release after seating, hold offhand grip plus trigger near the new receiver-side knob, pull it rearward through its 60 mm travel, and let it return or guide it forward. Tactical reloads preserve an existing chambered round; no extra rack is required. Tracking loss and moving the hand out of the capture envelope cancel a pull without chambering. Stock firing still handles cadence and damage.
+
+The knob is original prototype geometry attached as a separate part. Position, travel, finish and grasp comfort need wearer polish. This does not repair the original rifle's missing back surfaces, add a stock bolt animation, or enable other unaudited weapons.

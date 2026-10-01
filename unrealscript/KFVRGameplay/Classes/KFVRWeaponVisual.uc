@@ -23,6 +23,8 @@ var vector MeasuredActionPosition;
 var vector MeasuredMagazinePosition,MeasuredMagazineX,MeasuredMagazineY,MeasuredMagazineZ;
 var bool bCalibrated,bTranslationCalibrated,bTranslationProbe,bPhysicalProfile;
 var bool bMagazineProfile,bActionProfile;
+var bool bAuthoredActionProfile,bHiddenTranslationCalibrated;
+var KFVRActionVisual AuthoredAction;
 var name MagazineBone,ActionBone;
 var float ActionTravelMetres;
 simulated function bool CaptureGripPose(bool Left)
@@ -104,7 +106,7 @@ simulated function bool Initialize(Weapon Source)
     ActionTravelMetres=class'KFVRWeaponProfile'.static.ActionTravel(KFWeapon(Source));
     if (KFVRTrackedDualies(Source)!=None && bOffhandGun) { MagazineBone='9mm_Mag01'; ActionBone='9mm_slide01'; }
     // Magazine measurement does not imply that the installed mesh has a
-    // separate action. Keep full manual reload gated on both capabilities.
+    // separate native action. Authored parts have their own readiness check.
     if (MagazineBone!='')
     {
         Part=GetBoneCoords(MagazineBone); MagazineLocal=Part.Origin;
@@ -144,6 +146,16 @@ simulated function bool Initialize(Weapon Source)
         if (MagazineGrip!=None && !MagazineGrip.InitializeMagazine(self))
         { Log("KFVR_MAGAZINE_GRIP_ERROR weapon=" $ Source.Class); MagazineGrip.Destroy(); MagazineGrip=None; }
         if (MagazineGrip!=None) MagazineGrip.bHidden=True;
+    }
+    if (bMagazineProfile && class'KFVRWeaponProfile'.static.AuthoredActionAllowed(KFWeapon(Source),KFVRWeaponRig(Owner)))
+    {
+        AuthoredAction=Spawn(class'KFVRActionVisual',self);
+        if (AuthoredAction!=None)
+            bAuthoredActionProfile=AuthoredAction.Initialize(self,
+                MagazineLocal+class'KFVRWeaponProfile'.static.AuthoredActionOffset(KFWeapon(Source))*ModelUnitsPerMetre,
+                class'KFVRWeaponProfile'.static.AuthoredActionAxis(KFWeapon(Source)),
+                class'KFVRWeaponProfile'.static.AuthoredActionTravel(KFWeapon(Source)));
+        if (!bAuthoredActionProfile && AuthoredAction!=None) { AuthoredAction.Destroy(); AuthoredAction=None; }
     }
     if (bMagazineProfile && class'KFVRWeaponProfile'.static.InsertionChassis(KFWeapon(Source))!='')
     {
@@ -223,6 +235,42 @@ simulated function vector SlideRest()
     if (!bActionProfile) return vect(0,0,0);
     return Location+((SlideLocal*DrawScale)>>Rotation);
 }
+// Keep native and authored mechanisms distinct; no substitute bone writes.
+simulated function bool ManualActionReady()
+{
+    if (bActionProfile && ActionTravelMetres>0) return True;
+    return bAuthoredActionProfile && AuthoredAction!=None && !AuthoredAction.bDeleteMe && AuthoredAction.bInitialized;
+}
+simulated function bool ManualReloadReady()
+{
+    return bMagazineProfile && bTranslationCalibrated && bInsertionCalibrated && !bInsertionFailed && ManualActionReady();
+}
+simulated function float ManualActionTravel()
+{
+    if (bActionProfile) return ActionTravelMetres;
+    if (ManualActionReady()) return AuthoredAction.TravelMetres;
+    return 0;
+}
+simulated function vector ManualActionPoint(float Travel)
+{
+    local vector Point;
+    if (bActionProfile) return SlideRest();
+    if (!ManualActionReady()) return vect(0,0,0);
+    // Knob grasp is outboard of the part's base. Use the current weapon frame,
+    // not the previous Tick's child actor transform.
+    Point=AuthoredAction.AnchorLocal+vect(0,0.018,0)*ModelUnitsPerMetre
+        +AuthoredAction.PullAxisLocal*(AuthoredAction.TravelMetres*ModelUnitsPerMetre*FClamp(Travel,0,1));
+    return Location+((Point*DrawScale)>>Rotation);
+}
+simulated function SyncAuthoredAction()
+{
+    local KFVRManualReload Manual;
+    local float Travel;
+    if (AuthoredAction==None) return;
+    Manual=class'KFVRWeaponProfile'.static.Manual(KFWeapon(SourceWeapon));
+    if (Manual!=None && Manual.Ammo!=None) Travel=Manual.Ammo.Travel;
+    AuthoredAction.PoseAction(Travel);
+}
 simulated function vector HeldMagazinePosition(vector HandPosition,rotator HandRotation)
 {
     if (MagazineGrip!=None && MagazineGrip.bCalibrated)
@@ -252,6 +300,7 @@ simulated function Destroyed()
 {
     if (MagazineGrip!=None) MagazineGrip.Destroy();
     if (MagazineSocket!=None) MagazineSocket.Destroy();
+    if (AuthoredAction!=None) AuthoredAction.Destroy();
     Super.Destroyed();
 }
 // Queue removal of every mechanical override before the next evaluation.
@@ -259,6 +308,7 @@ simulated function Destroyed()
 // after physical mode exits, even as the gun follows subsequent wrist turns.
 simulated function ClearMechanicalPose()
 {
+    if (AuthoredAction!=None) AuthoredAction.PoseAction(0);
     if (MagazineGrip!=None) MagazineGrip.bHidden=True;
     if (bMagazineProfile)
     {

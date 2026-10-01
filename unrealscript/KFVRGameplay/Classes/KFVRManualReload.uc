@@ -4,6 +4,7 @@ var KFVRWeaponRig Rig;
 var KFWeapon Gun;
 var KFVRMagazineState Ammo;
 var KFVRMagazineInsertion Insertion;
+var KFVRActionRail ActionRail;
 var vector InsertionPosition;
 var float InsertionProgress,InsertionLastDelta,InsertionLastDistance;
 var int InsertionSpeedRejects,InsertionGapRejects;
@@ -19,10 +20,10 @@ var int CurrentCapacity,InsertedCapacity,HeldCapacity,CapacityChanges;
 function bool Initialize(KFVRWeaponRig R,KFWeapon W)
 {
     if (W==None || class'KFVRWeaponProfile'.static.Manual(W)!=None || W.bIsReloading) return False;
-    if (R==None || R.Visual==None || !R.Visual.bPhysicalProfile
-        || !R.Visual.bActionProfile || R.Visual.ActionTravelMetres<=0 || !R.Visual.bInsertionCalibrated) return False;
+    if (R==None || R.Visual==None || !R.Visual.ManualReloadReady()) return False;
     Rig=R; Gun=W; Ammo=new class'KFVRMagazineState';
     Insertion=new class'KFVRMagazineInsertion';
+    if (R.Visual.bAuthoredActionProfile) ActionRail=new class'KFVRActionRail';
     if (!Ammo.Initialize(W.MagCapacity,W.MagAmmoRemaining,W.AmmoAmount(0))) return False;
     class'KFVRWeaponProfile'.static.BindManual(Gun,self); Publish(); return True;
 }
@@ -51,6 +52,7 @@ function Suspend()
 {
     bLeftArmed=False; bLeftPrevious=False;
     if (Insertion!=None) Insertion.Reset();
+    if (ActionRail!=None) ActionRail.Cancel();
     InsertionProgress=0; bInsertionApproached=False;
     if (Ammo!=None && Ammo.Held>0)
     {
@@ -98,6 +100,15 @@ function bool ReservesOffhand()
     return bLeftArmed && Rig.Tracking.LeftGrip>0.7 && !bLeftPrevious && Ammo.Inserted==0
         && VSize(Rig.Tracking.LeftPosition-CurrentBeltLocation())<0.18*Rig.Tracking.UnitsPerMetre;
 }
+// Count a complete authored rail return whether the player releases the knob
+// or guides it forward while still gripping it. Cancellation never calls here.
+function MoveAuthoredAction(float Travel)
+{
+    local bool WasArmed;
+    WasArmed=Ammo.bFeedArmed; Ammo.MoveSlide(Travel);
+    if (WasArmed && !Ammo.bFeedArmed && Ammo.Travel<=0.1)
+    { RackCount++; Rig.PulseLeft(0.3,20); }
+}
 function Update(float Delta)
 {
     local vector Relative,Displacement;
@@ -109,7 +120,7 @@ function Update(float Delta)
     Reconcile();
     BeltLocation=CurrentBeltLocation();
     MagWell=Rig.Visual.MagazineRest(); SlideLocation=vect(0,0,0);
-    if (Rig.Visual.bActionProfile) SlideLocation=Rig.Visual.SlideRest();
+    if (Rig.Visual.ManualActionReady()) SlideLocation=Rig.Visual.ManualActionPoint(Ammo.Travel);
     Down=Rig.Tracking.LeftGrip>0.7;
     NearBelt=VSize(Rig.Tracking.LeftPosition-BeltLocation)<0.18*Rig.Tracking.UnitsPerMetre;
     MagazineTarget=Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation);
@@ -127,9 +138,14 @@ function Update(float Delta)
     if (!Down) bLeftArmed=True;
     if (bLeftArmed && Down && !bLeftPrevious && Ammo.Held==0)
     {
-        if (Rig.Visual.bActionProfile && Rig.Visual.ActionTravelMetres>0
+        if (Rig.Visual.ManualActionReady()
             && Rig.Tracking.LeftTrigger>0.5 && VSize(Rig.Tracking.LeftPosition-SlideLocation)<0.13*Rig.Tracking.UnitsPerMetre && Ammo.Inserted>0)
-        { bSlideHeld=True; SlideGrabLocal=Relative; }
+        {
+            if (Rig.Visual.bActionProfile) { bSlideHeld=True; SlideGrabLocal=Relative; }
+            else if (ActionRail!=None)
+                bSlideHeld=ActionRail.Begin(Relative/Rig.Tracking.UnitsPerMetre,
+                    Rig.Visual.AuthoredAction.PullAxisLocal,Rig.Visual.ManualActionTravel(),Ammo.Travel);
+        }
         else if (NearBelt && Ammo.GrabBelt()) { GrabCount++; Rig.PulseLeft(0.25,18); }
     }
     // Geometry supplies a one-shot event; the ledger alone transfers ownership.
@@ -141,16 +157,30 @@ function Update(float Delta)
     InsertionProgress=Insertion.Progress; bInsertionApproached=Insertion.bApproached;
     InsertionLastDelta=Insertion.LastDelta; InsertionLastDistance=Insertion.LastDistance;
     InsertionSpeedRejects=Insertion.SpeedRejects; InsertionGapRejects=Insertion.GapRejects;
-    if (bSlideHeld && (!Rig.Visual.bActionProfile || Rig.Visual.ActionTravelMetres<=0)) Suspend();
+    if (bSlideHeld && !Rig.Visual.ManualActionReady()) Suspend();
     if (bSlideHeld)
     {
-        Displacement=Relative-SlideGrabLocal;
-        if (Abs(Displacement.Y)>0.12*Rig.Tracking.UnitsPerMetre || Abs(Displacement.Z)>0.12*Rig.Tracking.UnitsPerMetre) Suspend();
-        else if (Down) Ammo.MoveSlide(-Displacement.X/(Rig.Visual.ActionTravelMetres*Rig.Tracking.UnitsPerMetre));
+        if (Rig.Visual.bAuthoredActionProfile)
+        {
+            if (ActionRail==None || !ActionRail.Move(Relative/Rig.Tracking.UnitsPerMetre)) Suspend();
+            else if (Down) MoveAuthoredAction(ActionRail.Progress);
+            else
+            {
+                // A release returns the spring; only an earlier held full pull
+                // can have armed feed. A bad/lost sample cancels without feeding.
+                MoveAuthoredAction(0); bSlideHeld=False; ActionRail.Cancel();
+            }
+        }
         else
         {
-            Before=float(Ammo.bFeedArmed); Ammo.MoveSlide(0); bSlideHeld=False;
-            if (Before>0) { RackCount++; Rig.PulseLeft(0.3,20); }
+            Displacement=Relative-SlideGrabLocal;
+            if (Abs(Displacement.Y)>0.12*Rig.Tracking.UnitsPerMetre || Abs(Displacement.Z)>0.12*Rig.Tracking.UnitsPerMetre) Suspend();
+            else if (Down) Ammo.MoveSlide(-Displacement.X/(Rig.Visual.ActionTravelMetres*Rig.Tracking.UnitsPerMetre));
+            else
+            {
+                Before=float(Ammo.bFeedArmed); Ammo.MoveSlide(0); bSlideHeld=False;
+                if (Before>0) { RackCount++; Rig.PulseLeft(0.3,20); }
+            }
         }
     }
     else if (bLeftArmed && !Down && bLeftPrevious && Ammo.Held>0)

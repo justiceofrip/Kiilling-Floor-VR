@@ -11,8 +11,25 @@ static function name ActionBone(KFWeapon W)
     if (KFVRTrackedSingle(W)!=None || KFVRTrackedDualies(W)!=None) return '9mm_slide';
     if (KFVRTrackedDeagle(W)!=None || KFVRTrackedMK23(W)!=None) return 'Slide';
     // This installed Bullpup skeleton has no independent action/bolt bone.
-    // Keep its physical action profile disabled until a presentation is authored.
+    // Its optional authored part never substitutes a native action-bone name.
     return '';
+}
+// The installed rifle has no independent bolt. Opt-in private fixture for an
+// original separate action part; its dimensions are authored, not stock motion.
+static function bool AuthoredActionAllowed(KFWeapon W,KFVRWeaponRig Rig)
+{
+    return KFVRTrackedBullpup(W)!=None && Rig!=None && Rig.bRifleReloadTest;
+}
+static function vector AuthoredActionOffset(KFWeapon W)
+{
+    if (KFVRTrackedBullpup(W)!=None) return vect(0.05,0.02,0.055);
+    return vect(0,0,0);
+}
+static function vector AuthoredActionAxis(KFWeapon W) { return vect(-1,0,0); }
+static function float AuthoredActionTravel(KFWeapon W)
+{
+    if (KFVRTrackedBullpup(W)!=None) return 0.06;
+    return 0;
 }
 // Authored normalized markers, sampled from the owner's installed Reload.
 // Geometry/axes are measured at runtime, not copied out of the game assets.

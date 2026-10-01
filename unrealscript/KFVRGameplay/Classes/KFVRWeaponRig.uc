@@ -44,7 +44,7 @@ var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
 var bool bManualArmed,bManualPrevious,bUseArmed,bUsePrevious;
 var int UseCount;
-var bool bMeleeTest,bArmTest,bNativeHandTest;
+var bool bMeleeTest,bArmTest,bNativeHandTest,bRifleReloadTest;
 var KFVRMeleeTarget MeleeTarget;
 var KFVRSupportGripState SupportGrip;
 var bool bSupportHeld,bSupportArmed,bSupportPrevious;
@@ -70,8 +70,13 @@ function PulseLeft(float Strength, int DurationMs)
 }
 function ToggleManualReload()
 {
-    if (Gun==None || Visual==None || !Visual.bPhysicalProfile || !Visual.bTranslationCalibrated || Gun.bIsReloading || bHolstered) return;
-    if (KFVRTrackedDualies(Gun)!=None) { KFVRTrackedDualies(Gun).ToggleBelt(); return; }
+    if (Gun==None || Visual==None || Gun.bIsReloading || bHolstered) return;
+    if (KFVRTrackedDualies(Gun)!=None)
+    {
+        if (Visual.bPhysicalProfile && Visual.bTranslationCalibrated) KFVRTrackedDualies(Gun).ToggleBelt();
+        return;
+    }
+    if (!Visual.ManualReloadReady()) return;
     if (ManualReload!=None)
     {
         if (!ManualReload.CanDisable()) return;
@@ -374,7 +379,12 @@ function EnsureHandVisuals()
 // This avoids displaying the previous weapon frame or a stale grasp role.
 function Tick(float Delta)
 {
+    local int I;
     UpdateRig(Delta);
+    // Also synchronize hides after tracking loss, switching or rig release.
+    // Child parts never advance mechanics or acquire their own Tick order.
+    for (I=0;I<InventoryCount;I++)
+        if (InventoryVisuals[I]!=None) InventoryVisuals[I].SyncAuthoredAction();
     if (bTracking) UpdateHands();
     PresentationSerial=Tracking.Serial;
 }
