@@ -2,6 +2,7 @@
 // the independent stereo world views. Asset coordinates are measured at runtime.
 class KFVRWeaponVisual extends Actor;
 var Weapon SourceWeapon;
+var KFVRMagazineGrip MagazineGrip;
 var coords GripPose[32]; // Left palm + 15 joints, then right palm + 15 joints.
 var bool bLeftGripPose,bRightGripPose;
 var vector BladeAxis,ToolAxis;
@@ -112,6 +113,13 @@ simulated function bool Initialize(Weapon Source)
     SetBoneScale(1,0.0,'Hands_RArmCollarbone');
     if (KFVRTrackedDualies(Source)!=None)
     { if (bOffhandGun) SetBoneScale(3,0.0,'9mm_Gun'); else SetBoneScale(3,0.0,'9mm_Gun01'); }
+    if (bPhysicalProfile && KFVRWeaponRig(Owner)!=None && KFVRWeaponRig(Owner).bNativeHandTest
+        && (KFVRTrackedSingle(Source)!=None || KFVRTrackedDeagle(Source)!=None))
+    {
+        MagazineGrip=Spawn(class'KFVRMagazineGrip',self);
+        if (MagazineGrip!=None && !MagazineGrip.InitializeMagazine(self))
+        { Log("KFVR_MAGAZINE_GRIP_ERROR weapon=" $ Source.Class); MagazineGrip.Destroy(); MagazineGrip=None; }
+    }
     return true;
 }
 simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units)
@@ -133,7 +141,12 @@ simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units
     SetDrawScale(Units/ModelUnitsPerMetre);
     SetRotation(ModelRotation);
     SetLocation(GripPosition-((PalmLocal*DrawScale)>>ModelRotation));
-    bHidden=False; BoneRefresh();
+    bHidden=False;
+    // Physical reload queues magazine/action overrides next. Evaluating now
+    // would cache last Tick's detached magazine through a sharp hand movement.
+    // Keep the initial translation calibration on its established two-Tick path.
+    if (bTranslationCalibrated && class'KFVRWeaponProfile'.static.Manual(KFWeapon(SourceWeapon))!=None) return;
+    BoneRefresh();
     if (bToolAligned)
     {
         Part=GetBoneCoords(TipBone);
@@ -160,11 +173,28 @@ simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units
 }
 simulated function vector MagazineRest() { return Location+((MagazineLocal*DrawScale)>>Rotation); }
 simulated function vector SlideRest() { return Location+((SlideLocal*DrawScale)>>Rotation); }
+simulated function vector HeldMagazinePosition(vector HandPosition,rotator HandRotation)
+{
+    if (MagazineGrip!=None && MagazineGrip.bCalibrated)
+        return HandPosition-((MagazineGrip.PalmLocal*DrawScale)>>HandRotation);
+    return HandPosition;
+}
+simulated function Destroyed()
+{
+    if (MagazineGrip!=None) MagazineGrip.Destroy();
+    Super.Destroyed();
+}
 simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, float SlideTravel, optional rotator HandRotation)
 {
     local vector Offset;
     local rotator Desired;
     SetBoneScale(2,float(Inserted || Held),MagazineBone);
+    if (MagazineGrip!=None)
+    {
+        MagazineGrip.bHidden=!Held;
+        if (Held) MagazineGrip.PoseAt(HandPosition,HandRotation,DrawScale*ModelUnitsPerMetre);
+    }
+    if (Held) HandPosition=HeldMagazinePosition(HandPosition,HandRotation);
     if (Held) Offset=((HandPosition-Location)<<Rotation)/DrawScale-MagazineLocal;
     if (!Held) HandRotation=Rotation;
     Desired=OrthoRotation(MagazineX>>HandRotation,MagazineY>>HandRotation,MagazineZ>>HandRotation);

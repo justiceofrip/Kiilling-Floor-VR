@@ -4,7 +4,7 @@ var KFVRWeaponRig Rig;
 var KFWeapon Gun;
 var KFVRMagazineState Ammo;
 var bool bLeftArmed,bLeftPrevious,bSlideHeld;
-var vector MagWell,SlideLocation,BeltLocation,SlideGrabLocal,MagazineWorld;
+var vector MagWell,SlideLocation,BeltLocation,SlideGrabLocal,MagazineWorld,MagazineTarget;
 var float MagazineError,SlideTravel,MagazineDirectionDot;
 var int EjectCount,GrabCount,SeatCount,StowCount,DropCount,RackCount;
 var int LoadedRounds,OwnedRounds,SpentRounds,DiscardedRounds,HeldMagazine,InsertedMagazine,Revision;
@@ -48,7 +48,7 @@ function EjectMagazine()
 {
     local bool Catch;
     if (Gun!=Rig.Gun || Rig.bHolstered || bSlideHeld) return;
-    Catch=(Rig.Tracking.Flags & 1)!=0 && Rig.Tracking.LeftGrip>0.55 && VSize(Rig.Tracking.LeftPosition-MagWell)<0.16*Rig.Tracking.UnitsPerMetre;
+    Catch=(Rig.Tracking.Flags & 1)!=0 && Rig.Tracking.LeftGrip>0.55 && VSize(Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation)-MagWell)<0.16*Rig.Tracking.UnitsPerMetre;
     if (Ammo.Eject(Catch))
     { EjectCount++; Rig.PulseRight(0.3,20); Publish(); }
 }
@@ -66,7 +66,8 @@ function Update(float Delta)
     MagWell=Rig.Visual.MagazineRest(); SlideLocation=Rig.Visual.SlideRest();
     Down=Rig.Tracking.LeftGrip>0.7;
     NearBelt=VSize(Rig.Tracking.LeftPosition-BeltLocation)<0.18*Rig.Tracking.UnitsPerMetre;
-    NearWell=VSize(Rig.Tracking.LeftPosition-MagWell)<0.12*Rig.Tracking.UnitsPerMetre;
+    MagazineTarget=Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation);
+    NearWell=VSize(MagazineTarget-MagWell)<0.12*Rig.Tracking.UnitsPerMetre;
     Relative=(Rig.Tracking.LeftPosition-Rig.Tracking.RightPosition)<<Rig.Tracking.RightRotation;
     if (!Down) bLeftArmed=True;
     if (bLeftArmed && Down && !bLeftPrevious && Ammo.Held==0)
@@ -98,7 +99,7 @@ function Update(float Delta)
     Part=Rig.Visual.GetBoneCoords(Rig.Visual.MagazineBone); MagazineWorld=Part.Origin;
     MagazineError=0;
     MagazineDirectionDot=Normal(Part.XAxis) dot (Rig.Visual.MagazineX>>Rig.Tracking.LeftRotation);
-    if (Ammo.Held>0) MagazineError=VSize(MagazineWorld-Rig.Tracking.LeftPosition);
+    if (Ammo.Held>0) MagazineError=VSize(MagazineWorld-MagazineTarget);
     Publish();
 }
 function Destroyed()

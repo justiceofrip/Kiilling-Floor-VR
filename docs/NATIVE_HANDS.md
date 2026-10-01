@@ -2,7 +2,7 @@
 
 The development source can build separate VR hands from the owner's installed `KF_Weapons_Trip.9mm_Trip` mesh. It retains the game's hand geometry, UVs and current character sleeve/hand material. These are actual KF assets, locally adapted for independent controllers. The ordinary launcher still uses KFVR's authored placeholder gloves; select `-NativeHands` explicitly for this prototype.
 
-The October 1 follow-up wearer session accepted the corrected thumb touch and weapon grips on build `20a6bd4`, and confirmed steady weapon presentation while walking. The wearer described the thumb as perfect and the grips as great. Individual weapon/art polish, the flat dark wrist closure and detached-magazine poses remain open. The existing capacitive controller inputs drive the fingers; this does not add arms or optical hand tracking.
+The October 1 follow-up wearer session accepted the corrected thumb touch and weapon grips on build `20a6bd4`, and confirmed steady weapon presentation while walking. The wearer described the thumb as perfect and the grips as great. Individual weapon/art polish and the flat dark wrist closure remain open. Detached-magazine grasps now have the desktop-tested path below, pending wearer review. The existing capacitive controller inputs drive the fingers; this does not add arms or optical hand tracking.
 
 ## Build and launch
 
@@ -41,4 +41,13 @@ With native hands enabled, the weapon proxy measures both palms and fifteen fing
 
 Thumb touch blends independently into the native resting thumb pose, or the held weapon's thumb pose. Release raises the three thumb joints along separate arcs; holding a gun no longer forces thumb curl. The gun index finger still layers trigger input over the grasp. All hand joint overrides are queued before skeletal evaluation, preventing the previous pose from surviving for a frame after a sharp wrist turn.
 
-Coverage includes single/dual 9mm, Deagle, Bullpup, knife, syringe and welder. The grenade's opposite-hand toss pose and detached magazine grasp retain provisional poses. The common 9mm hand anatomy differs slightly from other weapons, so matching joint frames is not exact surface contact. The follow-up wearer session accepted the new thumb/grip behavior overall; it does not establish exhaustive acceptance of every weapon, pose or controller profile. Some paper-like polygons appeared near holstered weapons in the office fixture; their source is unresolved and may be unrelated map geometry/effects. A sleeve material experiment did not change them and was discarded.
+Coverage includes single/dual 9mm, Deagle, Bullpup, knife, syringe and welder. The grenade's opposite-hand toss pose remains provisional; detached pistol magazines use the measured grasp described below. The common 9mm hand anatomy differs slightly from other weapons, so matching joint frames is not exact surface contact. The follow-up wearer session accepted the new thumb/grip behavior overall; it does not establish exhaustive acceptance of every weapon, pose or controller profile. Some paper-like polygons appeared near holstered weapons in the office fixture; their source is unresolved and may be unrelated map geometry/effects. A sleeve material experiment did not change them and was discarded.
+
+
+## Detached pistol magazines
+
+Native hands now measure a left-hand magazine grasp from the installed 9mm or Deagle reload animation at normalized frame 0.4. A hidden actor samples the original mesh once, with animation notifications disabled, and converts that grasp into the magazine's normal held frame. No exported pose data is bundled. The main weapon remains in its existing tracked pose.
+
+When a magazine is held, its position is offset so the measured grasp's palm stays at the tracked hand. The actual magazine position is used for catch/insertion proximity. The existing ammunition ledger, release gestures, orientation gate and slide-cycle rules remain in control. Thumb touch remains independent. Stock timed reloads, rifle support and dual belt reloads keep their existing paths; authored fallback gloves keep the generic magazine grasp.
+
+The magazine/action overrides are queued before evaluating the physical weapon skeleton. An early evaluation had left the magazine at its previous pose briefly during sharp controller changes, despite correct settled samples. The new independent readback check compares actual magazine bones with actual hand palms across those transitions. This magazine-specific change has desktop evidence only; the earlier wearer acceptance applies to the normal weapon grips and thumb behavior.

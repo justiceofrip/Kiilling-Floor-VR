@@ -207,3 +207,10 @@ Use separate fresh `-Unattended -NativeHands -DualTest` and default `-Unattended
 
 
 October 1 wearer follow-up: native-headset-20261001-052009 / native-trace-20261001-052010-850777 exercised build `20a6bd4` with the actual native hand option. The wearer explicitly accepted thumb touch, weapon grips and steady gun presentation while walking. The session-outcome.json records that feedback separately from raw host metrics, which cannot judge wearer experience. This closes those three pending wearer checks, while individual weapon/art polish and broader release acceptance remain open. See WORKLOG.md for the interrupted first attempt, streaming/focus loss and exact session counters.
+
+
+## Native detached-magazine grasp
+
+Run `--inventory`, then `--deagle-reload` and `--reload` in a fresh `-Unattended -NativeHands` match. The reload preface selects the requested pistol. This order also checks that one pistol's physical ledger survives testing the other. Use a fresh default-glove match for the fallback `--reload` check, because repeating the same reload sequence against an already depleted physical state is not its fixture.
+
+Both native reloads now require the correct measured magazine profile and compare actual magazine-bone and actual palm positions across coherent samples, including sharp transitions. The palm must stay at raw left tracking. `validate_grip_pose.py` additionally compares the actual left finger frames with the installed reload grasp and retains the normal right-hand checks. Existing ammo, chamber, interrupted reload, wrist rotation, switching and focus-release assertions remain. Inspect held-magazine captures separately; bone correspondence is not surface/comfort acceptance.

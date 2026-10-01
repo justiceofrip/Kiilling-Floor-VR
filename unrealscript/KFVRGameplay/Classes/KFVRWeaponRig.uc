@@ -299,7 +299,11 @@ function ReleaseInput()
     for (I=0;I<InventoryCount;I++) if (KFVRTrackedDualies(InventoryWeapons[I])!=None) KFVRTrackedDualies(InventoryWeapons[I]).ResetInput();
     if (KFVRTrackedKnife(Gun)!=None) KFVRTrackedKnife(Gun).ResetMotion();
     bReloadArmed=False; bReloadPrevious=False; bCycleArmed=False; bCyclePrevious=False;
-    for (I=0;I<InventoryCount;I++) if (InventoryVisuals[I]!=None) InventoryVisuals[I].bHidden=True;
+    for (I=0;I<InventoryCount;I++) if (InventoryVisuals[I]!=None)
+    {
+        InventoryVisuals[I].bHidden=True;
+        if (InventoryVisuals[I].MagazineGrip!=None) InventoryVisuals[I].MagazineGrip.bHidden=True;
+    }
     bTracking=False; bTriggerArmed=False; bGripArmed=False; bGripPrevious=False;
     if (bFiring && Gun!=None) Gun.StopFire(0);
     bFiring=False;
@@ -358,6 +362,7 @@ function UpdateHands()
         if (Gun.Class==class'Frag') RightGrasp=None;
         if (KFVRTrackedDualies(Gun)!=None) LeftGrasp=KFVRTrackedDualies(Gun).LeftVisual;
         else if (bSupportHeld) LeftGrasp=Visual;
+        else if (ManualReload!=None && ManualReload.HeldMagazine>0 && Visual!=None && !Visual.bHidden && (Tracking.Flags & 3)==3) LeftGrasp=Visual.MagazineGrip;
         LeftRole=HandGripRole(True); RightRole=HandGripRole(False);
     }
     if (LeftHand!=None)
@@ -422,7 +427,9 @@ function UpdateRig(float Delta)
     if (StatusDisplay!=None) StatusDisplay.UpdateDisplay();
     if ((Tracking.Flags & 2)==0)
     {
-        Visual.bHidden=True; bTriggerArmed=False; bGripArmed=False; bGripPrevious=False;
+        Visual.bHidden=True;
+        if (Visual.MagazineGrip!=None) Visual.MagazineGrip.bHidden=True;
+        bTriggerArmed=False; bGripArmed=False; bGripPrevious=False;
         if (bFiring) Gun.StopFire(0); bFiring=False;
         if (KFVRTrackedSyringe(Gun)!=None) KFVRTrackedSyringe(Gun).ResetInput();
         if (KFVRTrackedWelder(Gun)!=None) KFVRTrackedWelder(Gun).ResetInput();

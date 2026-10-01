@@ -6,6 +6,7 @@ event int Main(string Params)
     local vector Source,Target,X,Y,Z;
     local rotator R,Result;
     local int I;
+    local coords A,B;
     Source=vect(0.31,-0.06,0.04);
     for (I=0;I<360;I++)
     {
@@ -22,6 +23,13 @@ event int Main(string Params)
     GetAxes(Result,X,Y,Z); Check(Abs(X.X-0.707107)<0.001 && Abs(X.Y-0.707107)<0.001);
     Check(class'KFVRHandPoseMath'.static.SourceBone(True,10)=='Hands_LArmFinger32');
     Check(class'KFVRHandPoseMath'.static.SourceBone(False,15)=='Hands_RArmFinger44');
+    GetAxes(rot(5000,12000,-3000),A.XAxis,A.YAxis,A.ZAxis);
+    GetAxes(rot(-2000,-25000,6000),B.XAxis,B.YAxis,B.ZAxis);
+    Source=vect(3,-5,2);
+    Target=class'KFVRHandPoseMath'.static.ChangeBasis(Source,A,B);
+    Check(Abs(VSize(Target)-VSize(Source))<0.001);
+    Check(VSize(class'KFVRHandPoseMath'.static.ChangeBasis(Target,B,A)-Source)<0.001);
+    Check(VSize(class'KFVRHandPoseMath'.static.ChangeBasis(A.XAxis,A,B)-B.XAxis)<0.001);
     Log("KFVR_SUPPORT_TEST_RESULT checks=" $ Checks $ " failures=" $ Failures);
     if (Failures>0) return 1;
     return 0;

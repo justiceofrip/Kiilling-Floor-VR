@@ -1,5 +1,5 @@
 """Assert live physical magazine, slide, stock-shot and bone behavior."""
-import json,pathlib
+import json,pathlib,math
 
 def validate(folder,weapon="single"):
  folder=pathlib.Path(folder)
@@ -47,7 +47,33 @@ def validate(folder,weapon="single"):
     m=obj['values'];other_states.setdefault(m['Gun'],[]).append(tuple(m[k] for k in ['OwnedRounds','LoadedRounds','SpentRounds','DiscardedRounds','HeldMagazine','InsertedMagazine','Revision']))
  checks['other_physical_weapon_states_unchanged']=all(len(set(states))==1 for states in other_states.values())
  checks['input_released_at_stop']=not rigs[-1]['bTracking'] and not rigs[-1]['bFiring']
- report=dict(other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
+ # Independent actual magazine-bone to actual hand-palm comparison, including
+ # sharp transitions. Only completed, coherent rig updates can establish this.
+ native=any(r.get('bNativeHandTest') for r in rigs);mag_palm_errors=[];palm_tracking_errors=[];native_grip_samples=0;missing_native_profiles=0
+ if native:
+  from validate_grip_pose import rotate
+  for row in rows:
+   if not row.get('rig_sample_consistent'):continue
+   objs={o['address']:o for o in row['objects'] if not o['values'].get('bDeleteMe')}
+   rig=next((o['values'] for o in objs.values() if o['type']=='KFVRWeaponRig'),None)
+   if not rig or not rig['bTracking'] or rig['bHolstered'] or rig['Tracking.Flags']&3!=3:continue
+   hand=next((o['values'] for o in objs.values() if o['type']=='KFVRHandVisual' and o['values']['bLeftHand']),None)
+   if not hand or hand['bHidden']:continue
+   for obj in objs.values():
+    m=obj['values']
+    if obj['type']!='KFVRManualReload' or m['Gun'] not in gun_addresses or m['Gun']!=rig['Gun'] or not m['HeldMagazine']:continue
+    native_grip_samples+=1
+    profile=objs.get(hand.get('GripVisual'),{})
+    if profile.get('type')!='KFVRMagazineGrip' or not hand['bGripPose']:
+     missing_native_profiles+=1;continue
+    g=profile['values']
+    delta=rotate([x*g['DrawScale'] for x in g['GripPose.0.Origin']],g['Rotation'])
+    expected=[x+y for x,y in zip(m['MagazineWorld'],delta)]
+    mag_palm_errors.append(math.dist(expected,hand['PalmWorld']))
+    palm_tracking_errors.append(math.dist(hand['PalmWorld'],rig['Tracking.LeftPosition']))
+  checks['native_magazine_grasp_is_measured_and_attached']=native_grip_samples>=5 and not missing_native_profiles and bool(mag_palm_errors) and max(mag_palm_errors)<.05
+  checks['magazine_grasp_keeps_controller_palm']=bool(palm_tracking_errors) and max(palm_tracking_errors)<.005
+ report=dict(missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
  (folder/'reload-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Reload checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

@@ -7,6 +7,11 @@ static function name SourceBone(bool Left,int Index)
     if (Left) return default.LeftBones[Index];
     return default.RightBones[Index];
 }
+// Transform a direction between measured orthonormal frames. Origins are explicit.
+static function vector ChangeBasis(vector V,coords Source,coords Target)
+{
+    return Target.XAxis*(V dot Source.XAxis)+Target.YAxis*(V dot Source.YAxis)+Target.ZAxis*(V dot Source.ZAxis);
+}
 static function rotator BlendRotation(rotator A,rotator B,float Alpha)
 {
     if (Alpha<=0) return A;
