@@ -1,4 +1,7 @@
 // Position is the magazine well relative to the body-facing belt dock, in metres.
+// Now is cached, unscaled controller sample time. The caller resets on lost
+// tracking, reference/weapon changes and source-clock discontinuities. Repeated
+// or older timestamps cannot change any pending approach or measured travel.
 class KFVRBeltInsertion extends Object;
 var vector Previous;
 var float LastTime,Progress;

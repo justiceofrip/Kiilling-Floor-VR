@@ -8,6 +8,15 @@ function Reset()
 {
     Samples=0; Velocity=vect(0,0,0); bDiscontinuity=False;
 }
+// True means a fresh source sample was consumed, not that throw history is ready.
+// The caller owns the serial watermark so lifecycle resets can start a new host.
+function bool AddSource(vector Position,float SourceSeconds,int Serial,out int LastSerial)
+{
+    if (Serial<=0 || Serial<=LastSerial) return False;
+    LastSerial=Serial;
+    Add(Position,SourceSeconds);
+    return True;
+}
 function bool Add(vector Position,float Now)
 {
     local float Delta,Speed;

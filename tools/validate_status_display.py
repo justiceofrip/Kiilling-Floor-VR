@@ -28,16 +28,23 @@ def validate(folder,inventory=False,dual=False,belt=False):
     comparisons+=1;v=pawn['values'];correct &= p['DisplayedHealth']==v['Health'] and p['DisplayedArmor']==int(v['ShieldStrength'])
  checks['vitals_match_real_pawn']=comparisons>0 and correct
  checks['hidden_after_stop']=data[-1]['bHidden']
- hands=[o['values'] for r in rows for o in r['objects'] if o['type']=='KFVRHandVisual' and o['values']['PoseFrames']>0]
+ # PoseHand writes raw curls before applying the held-object grasp. The
+ # observer brackets completed rig presentations; crossed-Tick reads cannot
+ # establish a finished hand pose, even when an individual scalar looks valid.
+ hand_rows=[r for r in rows if r.get('rig_sample_consistent') is True]
+ hands=[o['values'] for r in hand_rows for o in r['objects'] if o['type']=='KFVRHandVisual' and o['values']['PoseFrames']>0]
  held=[h for h in hands if h.get('GripRole',0)>0 and h.get('InputGripCurl',1)<0.2]
- checks['held_objects_keep_a_resting_grasp']=bool(held) and all(h['GripCurl']>0.7 for h in held)
- checks['grasp_preserves_controller_palms']=bool(hands) and max(h['PalmError'] for h in hands)<0.05
+ checks['held_objects_keep_a_resting_grasp']=len(held)>=10 and all(h['GripCurl']>0.7 for h in held)
+ checks['grasp_preserves_controller_palms']=len(hands)>=10 and max(h['PalmError'] for h in hands)<0.05
  gunhands=[h for h in hands if h.get('GripRole')==1]
- checks['gun_index_keeps_capacitive_input']=bool(gunhands) and all(abs(h['IndexCurl']-h['InputIndexCurl'])<0.001 for h in gunhands)
+ checks['gun_index_keeps_capacitive_input']=len(gunhands)>=10 and all(abs(h['IndexCurl']-h['InputIndexCurl'])<0.001 for h in gunhands)
+ hand_samples=dict(coherent_rows=len(hand_rows),posed=len(hands),held=len(held),gun=len(gunhands))
  if inventory:
   free=[h for h in hands if h['bLeftHand'] and h.get('GripRole')==0 and h.get('InputGripCurl',1)<0.2]
-  checks['free_offhand_can_open']=bool(free) and all(h['GripCurl']<0.2 for h in free)
-  checks['rifle_support_has_object_grasp']=any(h['bLeftHand'] and h.get('GripRole')==3 for h in hands)
+  support=[h for h in hands if h['bLeftHand'] and h.get('GripRole')==3]
+  checks['free_offhand_can_open']=len(free)>=5 and all(h['GripCurl']<0.2 for h in free)
+  checks['rifle_support_has_object_grasp']=len(support)>=5
+  hand_samples.update(free_offhand=len(free),support=len(support))
 
  if inventory:
   at('visible_with_free_raised_offhand',0,lambda p:not p['bHidden'])
@@ -70,7 +77,7 @@ def validate(folder,inventory=False,dual=False,belt=False):
   at('shows_belt_seating_prompt',12,lambda p:p.get('ActionLine')=='LIFT PISTOL FROM BELT')
   at('shows_presented_magazines',9,lambda p:p.get('ActionLine')=='MAGAZINES AT BELT')
  if dual:checks['independent_dual_counts_observed']=any(p['bDual'] and p['DisplayedLeft']!=p['DisplayedRight'] for p in posed)
- report=dict(revealed_samples=sum(not p['bHidden'] for p in posed),passed=all(checks.values()),checks=checks,render_calls=data[-1]['RenderCalls'],texture_updates=data[-1]['TextureUpdates'],pawn_comparisons=comparisons,synthetic_controllers=True,live_game=True,headset_presented=False,pixel_inspection_separate=True)
+ report=dict(revealed_samples=sum(not p['bHidden'] for p in posed),passed=all(checks.values()),checks=checks,render_calls=data[-1]['RenderCalls'],texture_updates=data[-1]['TextureUpdates'],pawn_comparisons=comparisons,hand_samples=hand_samples,synthetic_controllers=True,live_game=True,headset_presented=False,pixel_inspection_separate=True)
  (folder/'status-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Status checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

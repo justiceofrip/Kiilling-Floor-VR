@@ -101,7 +101,8 @@ function Update(float Delta)
         else if (Ammo.Presented[I]>0)
         {
             GetAxes(V.Rotation,GX,GY,GZ);
-            if (Gates[I].Update(Relative,Level.TimeSeconds,GX.Z< -0.85 && (GY dot Y)>0.85) && Ammo.Seat(I))
+            // Cached source time ignores duplicate Ticks and stays physical in ZED time.
+            if (Gates[I].Update(Relative,Rig.Tracking.InputSeconds,GX.Z< -0.85 && (GY dot Y)>0.85) && Ammo.Seat(I))
             { SeatCount++; Pulse(I,0.45,30); }
         }
         else Gates[I].Reset();

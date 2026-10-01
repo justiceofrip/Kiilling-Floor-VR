@@ -7,11 +7,14 @@ var vector BladeTip,LastSweepFrom,LastSweepTo,LastImpact;
 var Actor LastHit;
 var bool bPhysicalOwned,bMotionArmed;
 var vector ArmPoint;
-var float ArmTime;
+var float ArmTime,LastMotionTime;
+var int LastMotionSerial;
+var bool bMotionSampled,bArmSettling;
 function ResetMotion()
 {
     if (Motion!=None) Motion.ResetTracking();
     WindowUntil=0; SwingSpeed=0; bPhysicalOwned=False; bMotionArmed=False; ArmTime=0;
+    bMotionSampled=False; bArmSettling=False; LastMotionSerial=0; LastMotionTime=0;
 }
 function UpdatePhysical(vector Tip)
 {
@@ -21,9 +24,15 @@ function UpdatePhysical(vector Tip)
     local float Now;
     if (VRRig==None || !VRRig.ActiveFor(self) || VRRig.bHolstered || (VRRig.Tracking.Flags & 2)==0)
     { ResetMotion(); return; }
+    Now=VRRig.Tracking.InputSeconds;
+    if (VRRig.Tracking.InputSerial<=0 || Now<0) { ResetMotion(); return; }
+    // A repeated presentation Tick must not reuse bMoved or sweep the old
+    // strike again. Native source-clock faults first emit neutral/reset input.
+    if (bMotionSampled && (VRRig.Tracking.InputSerial<=LastMotionSerial || Now<=LastMotionTime)) return;
+    bMotionSampled=True; LastMotionSerial=VRRig.Tracking.InputSerial; LastMotionTime=Now;
     if (!bPhysicalOwned)
     { StopFire(0); StopFire(1); FireMode[0].SetTimer(0,False); FireMode[1].SetTimer(0,False); }
-    bPhysicalOwned=True; BladeTip=Tip; Now=Level.TimeSeconds;
+    bPhysicalOwned=True; BladeTip=Tip;
     if (VSize(Tip-VRRig.Tracking.HeadPosition)>1.5*VRRig.Tracking.UnitsPerMetre) { ResetMotion(); return; }
     if (VSize(VRRig.Tracking.RightPosition-VRRig.DockPosition(3))<0.22*VRRig.Tracking.UnitsPerMetre)
     { ResetMotion(); return; }
@@ -33,11 +42,14 @@ function UpdatePhysical(vector Tip)
     Point=((Tip-Instigator.Location)<<VRRig.Tracking.BodyRotation)/VRRig.Tracking.UnitsPerMetre;
     if (!bMotionArmed)
     {
-        if (ArmTime==0 || VSize(Point-ArmPoint)>0.025) { ArmPoint=Point; ArmTime=Now; return; }
+        if (!bArmSettling || VSize(Point-ArmPoint)>0.025)
+        { bArmSettling=True; ArmPoint=Point; ArmTime=Now; return; }
         if (Now-ArmTime<0.15) return;
         bMotionArmed=True; Motion.ResetTracking();
     }
-    Strike=Motion.Sample(Point,Now,Mode.default.FireRate/FMax(0.1,Mode.GetFireSpeed()));
+    // Motion/settling/window use physical time; the stock firing cooldown
+    // remains in game time, including ZED-time and source-epoch resets.
+    Strike=Motion.Sample(Point,Now,Level.TimeSeconds,Mode.default.FireRate/FMax(0.1,Mode.GetFireSpeed()));
     SwingSpeed=Motion.Speed; RejectedJumps=Motion.RejectedJumps;
     if (Strike) { SwingCount++; WindowUntil=Now+0.15; Start=Motion.SweepFrom; }
     else Start=Motion.Previous;

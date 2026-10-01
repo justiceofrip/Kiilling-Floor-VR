@@ -6,7 +6,8 @@ var KFVRThrowMotion Motion;
 var Projectile LastProjectile;
 var bool bPinRemoved,bTriggerArmed,bGripHeld;
 var int LastSerial,ArmedCount,ThrowCount,CancelCount,BlockedCount,SpawnFailures,AmmoCount,AmmoBefore,AmmoAfter,MotionSamples;
-var float NextThrowTime,ReleaseSpeed;
+var int MotionUpdates,MotionResets;
+var float NextThrowTime,ReleaseSpeed,MotionSourceSeconds;
 var vector ReleaseOrigin,ReleaseVelocity,MeasuredVelocity;
 function Initialize(KFVRWeaponRig R)
 {
@@ -15,6 +16,8 @@ function Initialize(KFVRWeaponRig R)
 function ResetInput()
 {
     if (bPinRemoved) CancelCount++;
+    if (LastSerial>0 || MotionSamples>0) MotionResets++;
+    MotionSamples=0; MotionSourceSeconds=0; MeasuredVelocity=vect(0,0,0);
     bPinRemoved=False; bTriggerArmed=False; bGripHeld=False; LastSerial=0;
     if (Motion!=None) Motion.Reset();
 }
@@ -25,7 +28,7 @@ function bool Throw()
     local Projectile P;
     if (GrenadeWeapon==None || GrenadeWeapon.Class!=class'Frag' || GrenadeWeapon.Owner!=Rig.PC.Pawn
         || !Rig.ActiveFor(GrenadeWeapon) || Rig.bHolstered || GrenadeWeapon.AmmoAmount(0)<1 || Level.TimeSeconds<NextThrowTime
-        || !Motion.Ready(Level.TimeSeconds) || GrenadeWeapon.bTossActive || KFPawn(Rig.PC.Pawn).bThrowingNade) return False;
+        || !Motion.Ready(Rig.Tracking.InputSeconds) || GrenadeWeapon.bTossActive || KFPawn(Rig.PC.Pawn).bThrowingNade) return False;
     ReleaseOrigin=Rig.MuzzleLocation;
     if (VSize(ReleaseOrigin-Rig.Tracking.HeadPosition)>1.3*Rig.Tracking.UnitsPerMetre
         || Rig.PC.Pawn.Trace(Hit,NormalHit,ReleaseOrigin,Rig.Tracking.HeadPosition,True,vect(1,1,1))!=None)
@@ -65,12 +68,20 @@ function UpdateControls()
         || Rig.bHolstered || (Rig.Tracking.Flags & 2)==0)
     { ResetInput(); return; }
     AmmoCount=GrenadeWeapon.AmmoAmount(0);
-    if (Rig.Tracking.Serial!=LastSerial)
+    // Read the physical trajectory once per source pose, independently of
+    // presentation Tick cadence and game dilation. Repeated reads also cannot
+    // manufacture another arm/release edge while the game keeps simulating.
+    Relative=((Rig.Tracking.RightPosition-Rig.PC.Pawn.Location)<<Rig.Tracking.BodyRotation)/Rig.Tracking.UnitsPerMetre;
+    if (!Motion.AddSource(Relative,Rig.Tracking.InputSeconds,Rig.Tracking.InputSerial,LastSerial)) return;
+    MotionUpdates++; MotionSourceSeconds=Rig.Tracking.InputSeconds;
+    MotionSamples=Motion.Samples; MeasuredVelocity=Motion.Velocity;
+    if (Motion.bDiscontinuity)
     {
-        LastSerial=Rig.Tracking.Serial;
-        Relative=((Rig.Tracking.RightPosition-Rig.PC.Pawn.Location)<<Rig.Tracking.BodyRotation)/Rig.Tracking.UnitsPerMetre;
-        Motion.Add(Relative,Level.TimeSeconds); MotionSamples=Motion.Samples; MeasuredVelocity=Motion.Velocity;
-        if (Motion.bDiscontinuity) { ResetInput(); return; }
+        ResetInput();
+        // A local motion fault must not let duplicate reads restart its history.
+        // Full tracking/lifecycle resets still clear this for a new native host.
+        LastSerial=Rig.Tracking.InputSerial;
+        return;
     }
     if (Rig.Tracking.RightGrip>0.7) bGripHeld=True;
     if (Rig.Tracking.RightTrigger<0.15) bTriggerArmed=True;

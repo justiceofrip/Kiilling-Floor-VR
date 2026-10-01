@@ -5,6 +5,7 @@
 #include "kfvr/interaction/FingerPose.h"
 #include "kfvr/engine/Ue2Camera.h"
 #include "kfvr/interaction/TrackingMath.h"
+#include "kfvr/interaction/ControllerSampleClock.h"
 #include <Windows.h>
 #include <cmath>
 #include <numbers>
@@ -19,16 +20,20 @@ struct Packet {
  float leftTrigger=0,leftGrip=0,rightTrigger=0,rightGrip=0;
  float leftThumb=0,leftIndex=0,leftCurl=0,rightThumb=0,rightIndex=0,rightCurl=0;
  math::Vec3 headPosition{};ue2::Rotator bodyRotation{};float units=0;
- int flags=0,serial=0,inputSerial=0;
+ int flags=0,serial=0,inputSerial=0;float inputSeconds=0;
 };
-static_assert(sizeof(Packet)==128&&offsetof(Packet,headPosition)==88&&offsetof(Packet,serial)==120&&offsetof(Packet,inputSerial)==124);
+static_assert(sizeof(Packet)==132&&offsetof(Packet,headPosition)==88&&offsetof(Packet,serial)==120&&offsetof(Packet,inputSerial)==124&&offsetof(Packet,inputSeconds)==128);
 std::atomic<bool> stopped=false;std::atomic<unsigned> users=0;
 struct Use {Use(){users.fetch_add(1);}~Use(){users.fetch_sub(1);}};
 NativeProbeConfig config{};runtime::TrackingFrame tracking{};
 unsigned feedbackSerial=0,leftFeedbackSerial=0,rightFeedbackSerial=0,haptics=0,spaceResets=0;
-std::uint64_t controlSpace=0,lastInputSequence=0;int inputSerial=0;
+std::uint64_t controlSpace=0,lastClockFaultSequence=0;int inputSerial=0;
+interaction::ControllerSampleClock inputClock{};unsigned clockResets=0;
+interaction::ControllerClockFault lastClockFault=interaction::ControllerClockFault::None;
 DWORD thread=0;bool anchor=false;unsigned updates=0,valid=0,invalid=0,failed=0;int serial=0;
 struct Row {Packet packet;};std::array<Row,1000> rows{};unsigned count=0;
+struct ClockEvent {std::uint64_t uptimeMs=0,sequence=0;std::int64_t predictedNs=0;int serial=0,flags=0;unsigned fault=0;bool published=false;};
+std::array<ClockEvent,32> clockEvents{};unsigned clockEventCount=0,clockEventOverflow=0;
 bool Read(unsigned at,void* p,unsigned bytes){SIZE_T n=0;return at>=0x10000&&ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(at),p,bytes,&n)&&n==bytes;}
 unsigned U32(unsigned at){unsigned n=0;Read(at,&n,4);return n;}
 std::optional<ue2::Rotator> Rotation(const math::Matrix4& m){
@@ -49,18 +54,23 @@ void UpdateWeaponRig(void* actor,void* function,bool active)noexcept {
  if(U32(config.rig+4)!=config.rigIndex||U32(config.rig+0x28)!=config.rigClass||U32(config.rig+config.ownerOffset)!=config.controller||U32(config.rig+config.levelOffset)!=config.level)return;
  Packet packet{};packet.units=config.unitsPerMetre;packet.serial=++serial;++updates;
  const auto pawn=U32(config.controller+config.pawnOffset);int health=0;math::Vec3 location{};ue2::Rotator heading{};
- xr::ControllerFrame controls{};std::uint64_t sequence=0;
+ xr::ControllerFrame controls{};std::uint64_t sequence=0;bool clockEvent=false;
  const bool playing=active&&anchor&&thread==GetCurrentThreadId()&&pawn&&U32(pawn+config.pawnControllerOffset)==config.controller&&Read(pawn+config.healthOffset,&health,4)&&health>0&&!U32(config.level+config.pauserOffset)&&Read(pawn+config.locationOffset,&location,12)&&Read(config.controller+config.rotationOffset,&heading,12);
  if(playing&&ReadEyeBridgeControls(controls,sequence)&&controls.focused&&controls.spaceGeneration==tracking.spaceGeneration){
-  // Keep game/presentation ticks distinct from fresh controller samples.
-  // Re-reading a mailbox pose must not shorten the gesture travel interval.
-  if(sequence!=lastInputSequence){lastInputSequence=sequence;++inputSerial;}
+  // Source pose time remains real time during game slow motion. Validate every
+  // read, including duplicates: a mutated/replayed mailbox must stay neutral.
+  const auto sample=inputClock.Update(sequence,controls.predictedNs);
+  packet.inputSeconds=sample.seconds;
+  if(sample.valid&&sample.fresh)++inputSerial;
+  if(sample.neutralReset&&(sequence!=lastClockFaultSequence||sample.fault!=lastClockFault)){
+   ++clockResets;lastClockFaultSequence=sequence;lastClockFault=sample.fault;clockEvent=true;
+  }
   // Even if both new-space eyes/controllers arrive together, issue one
   // neutral game Tick so every pending gesture observes the recenter.
   const bool changedSpace=controlSpace&&controlSpace!=controls.spaceGeneration;
   controlSpace=controls.spaceGeneration;if(changedSpace)++spaceResets;
   const auto currentBody=ReadTrackedBody();
-  if(currentBody&&!changedSpace){
+  if(currentBody&&!changedSpace&&sample.valid&&!sample.neutralReset){
    packet.bodyRotation=currentBody->heading;const auto* body=&currentBody->camera;
    const auto head=interaction::SolveTrackedWeapon(*body,tracking.referenceHead,tracking.head,{},config.unitsPerMetre);if(head)packet.headPosition=head->fireOrigin;
    for(unsigned i=0;i<2;++i){const auto& hand=controls.hands[i];if(!hand.gripValid||!hand.aimValid)continue;
@@ -85,12 +95,18 @@ void UpdateWeaponRig(void* actor,void* function,bool active)noexcept {
  }
  SIZE_T wrote=0;const bool ok=WriteProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(config.rig+config.rigTrackingOffset),&packet,sizeof(packet),&wrote)&&wrote==sizeof(packet);
  if(!ok)++failed;else if(packet.flags&3)++valid;else ++invalid;
+ if(clockEvent){
+  if(clockEventCount<clockEvents.size())clockEvents[clockEventCount++]={GetTickCount64(),sequence,controls.predictedNs,packet.serial,packet.flags,static_cast<unsigned>(lastClockFault),ok};
+  else ++clockEventOverflow;
+ }
  if(count<rows.size())rows[count++].packet=packet;
 }
 bool StopWeaponRig()noexcept {stopped=true;const auto until=GetTickCount64()+1000;while(users.load()&&GetTickCount64()<until)Sleep(1);return users.load()==0;}
 void WriteWeaponRigReport(const std::filesystem::path& folder){
- if(!config.weaponTrial)return;std::ofstream out(folder/L"native-weapon.json");out<<"{\"updates\":"<<updates<<",\"valid\":"<<valid<<",\"invalid\":"<<invalid<<",\"failed\":"<<failed<<",\"haptic_events\":"<<haptics<<",\"reference_space_resets\":"<<spaceResets<<",\"input_samples\":"<<inputSerial<<",\"packets\":[";
- for(unsigned i=0;i<count;++i){const auto& p=rows[i].packet;if(i)out<<',';out<<"{\"serial\":"<<p.serial<<",\"input_serial\":"<<p.inputSerial<<",\"flags\":"<<p.flags<<",\"right\":["<<p.rightPosition.x<<','<<p.rightPosition.y<<','<<p.rightPosition.z<<"],\"rotation\":["<<p.rightRotation.pitch<<','<<p.rightRotation.yaw<<','<<p.rightRotation.roll<<"],\"trigger\":"<<p.rightTrigger<<",\"grip\":"<<p.rightGrip<<",\"fingers\":["<<p.rightThumb<<','<<p.rightIndex<<','<<p.rightCurl<<"]}";}
+ if(!config.weaponTrial)return;std::ofstream out(folder/L"native-weapon.json");out<<"{\"updates\":"<<updates<<",\"valid\":"<<valid<<",\"invalid\":"<<invalid<<",\"failed\":"<<failed<<",\"haptic_events\":"<<haptics<<",\"reference_space_resets\":"<<spaceResets<<",\"source_clock_resets\":"<<clockResets<<",\"last_clock_fault\":"<<static_cast<unsigned>(lastClockFault)<<",\"input_samples\":"<<inputSerial<<",\"packets\":[";
+ for(unsigned i=0;i<count;++i){const auto& p=rows[i].packet;if(i)out<<',';out<<"{\"serial\":"<<p.serial<<",\"input_serial\":"<<p.inputSerial<<",\"input_seconds\":"<<p.inputSeconds<<",\"flags\":"<<p.flags<<",\"right\":["<<p.rightPosition.x<<','<<p.rightPosition.y<<','<<p.rightPosition.z<<"],\"rotation\":["<<p.rightRotation.pitch<<','<<p.rightRotation.yaw<<','<<p.rightRotation.roll<<"],\"trigger\":"<<p.rightTrigger<<",\"grip\":"<<p.rightGrip<<",\"fingers\":["<<p.rightThumb<<','<<p.rightIndex<<','<<p.rightCurl<<"]}";}
+ out<<"],\"clock_fault_overflow\":"<<clockEventOverflow<<",\"clock_faults\":[";
+ for(unsigned i=0;i<clockEventCount;++i){const auto& e=clockEvents[i];if(i)out<<',';out<<"{\"uptime_ms\":"<<e.uptimeMs<<",\"sequence\":"<<e.sequence<<",\"predicted_ns\":"<<e.predictedNs<<",\"serial\":"<<e.serial<<",\"flags\":"<<e.flags<<",\"fault\":"<<e.fault<<",\"published\":"<<(e.published?"true":"false")<<'}';}
  out<<"]}\n";
 }
 }

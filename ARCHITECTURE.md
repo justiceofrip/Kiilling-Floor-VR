@@ -79,7 +79,7 @@ The default headset launch requests 100% of the runtime-recommended eye dimensio
 
 The new PhysicalReload ledger handles one or two closed-bolt detachable-magazine guns with persistent magazine identities and a shared supply. Geometry gates drive physical seating and partial/full action strokes; BeltReloadSession combines two independent docks with that one ledger. TrackedWeapon provides head-independent controller/model/muzzle transforms. The compiled KFVRReloadVisual samples four authored animation ranges on a presentation-only actor. These modules are not yet wired into live KF weapons. The physical ledger and old AmmoMachine/KFVRAmmoState must not both credit the same ammunition. See docs/MANUAL_RELOAD_INTERACTIONS.md for the exact current boundary and remaining calibration/server work.
 
-The September 27 standalone weapon increment is documented in docs/TRACKED_WEAPONS.md. Native request ABI v14 reflects a 128-byte game-thread tracking packet and a 28-byte script-to-native feedback packet. The live pistol adapters use standard WeaponFire ticking and ammo consumption, with a separate script magazine ledger in physical mode. Model/palm placement is independently measured from KF assets and separate hand actors render in both world views.
+The September 27 standalone weapon increment is documented in docs/TRACKED_WEAPONS.md. Native request ABI v15 reflects a 132-byte game-thread tracking packet and a 28-byte script-to-native feedback packet. The live pistol adapters use standard WeaponFire ticking and ammo consumption, with a separate script magazine ledger in physical mode. Model/palm placement is independently measured from KF assets and separate hand actors render in both world views.
 
 ## Live inventory and physical reload adapter
 
@@ -156,3 +156,15 @@ Single-pistol insertion compares the complete held magazine frame with its insta
 FrameChannel optionally returns rejected-input diagnostics (sequence, current QPC, expiry) while keeping failed output neutral. NativeEyeBridge counts missing/expired/malformed input and retains at most 128 coalesced fault intervals, with an overflow counter. Shared-memory layouts, 100 ms expiry and bounded mutex reads are unchanged. Diagnostic elapsed time is zero when the bridge never reached its first world callback.
 
 The native target preflight rejects a zero-sized D3D viewport before constructing or binding an auxiliary target. A minimized game was observed to enter with 0 x 0 while native PopState restored the 640 x 480 backbuffer extent. Reports now preserve before/after viewport values. This is early rejection, not support for rendering a minimized game; the desktop caller must restore the window without stealing focus.
+
+
+## Physical controller time
+
+The game-thread packet carries separate presentation `Serial`, fresh-controller `InputSerial`, and unscaled `InputSeconds`. `ControllerSampleClock` subtracts the first positive OpenXR predicted pose timestamp before converting nanoseconds to a bounded float. Repeated mailbox reads retain the same source time and input serial. Timestamp mutation, rollback, stalls or large jumps emit neutral input through the ordinary rig Tick; the script cancels pending gestures before a fresh source sample resumes. Reference-generation changes still emit a neutral Tick while preserving a valid source clock.
+
+Single-pistol and dual-belt insertion gates use source time for physical travel/speed. Game time dilation therefore cannot shorten the measured controller interval. Stock firing/animation/gameplay clocks retain their original roles. The existing 100 ms QPC mailbox expiry remains independent of both clocks. ABI15 verifies the 132-byte tracking layout, including `InputSeconds` at offset128; the 28-byte feedback and 1120-byte request sizes are unchanged. Native session lifetime is still bounded, with no persistent reconnect support.
+
+
+Grenade velocity sampling now admits each controller InputSerial once and uses InputSeconds for its physical history and freshness. Tracking/lifecycle resets clear velocity and sample identity; a local motion rejection preserves the rejected serial so duplicate reads cannot rebuild history. Arming/release edges are also handled only on fresh samples. Stock game-time throw cooldown, projectile factory, fuse and physics remain unchanged.
+
+Knife motion, settling and contact windows use source time, and repeated source samples return before strike/sweep processing. Its motion gate accepts a separate game timestamp for the stock-rate NextStrike deadline, which survives source-epoch and tracking resets. This avoids both inflated slow-motion swing velocity and a stale source-epoch cooldown. Damage, physical geometry and retraction requirements retain their existing paths.

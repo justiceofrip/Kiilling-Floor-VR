@@ -13,6 +13,7 @@ struct TrackingPacket
     var rotator BodyRotation;
     var float UnitsPerMetre;
     var int Flags, Serial, InputSerial;
+    var float InputSeconds;
 };
 struct FeedbackPacket
 {

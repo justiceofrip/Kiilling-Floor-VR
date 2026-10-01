@@ -108,7 +108,7 @@ function Update(float Delta)
     // A push can seat while grip stays held, without a release or animation timer.
     InsertionPosition=Rig.Visual.MagazineSocketPosition(MagazineTarget,Rig.Tracking.UnitsPerMetre);
     if (Insertion.Update(InsertionPosition,MagazineAlignment,Rig.Tracking.InputSerial,
-        Level.TimeSeconds,Ammo.Held,Down) && Ammo.Seat())
+        Rig.Tracking.InputSeconds,Ammo.Held,Down) && Ammo.Seat())
     { SeatCount++; Rig.PulseLeft(0.4,25); }
     InsertionProgress=Insertion.Progress; bInsertionApproached=Insertion.bApproached;
     InsertionLastDelta=Insertion.LastDelta; InsertionLastDistance=Insertion.LastDistance;

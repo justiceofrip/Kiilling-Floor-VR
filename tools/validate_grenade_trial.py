@@ -33,8 +33,32 @@ def validate(folder):
  before=phase(17,'KFHumanPawn');after=phase(19,'KFHumanPawn')
  checks['actual_locomotion_and_snap']=bool(before and after) and math.dist(before[-1]['Location'],after[-1]['Location'])>100 and before[-1]['Rotation'][1]!=after[-1]['Rotation'][1]
  checks['no_firearm_or_use_actions']=rigs[-1]['TraceCount']==rigs[0]['TraceCount'] and rigs[-1]['UseCount']==rigs[0]['UseCount']
+ # Bracketed snapshots independently verify the live source-clock boundary.
+ # Reset epochs may admit a new host's serials after clearing all motion history.
+ motion_rows=[];motion_errors=[];motion_pairs=[];previous=None
+ for row in rs:
+  if not row.get('rig_sample_consistent'):continue
+  objs={o['address']:o for o in row['objects'] if not o['values'].get('bDeleteMe')}
+  active=next((o for o in objs.values() if o['type']=='KFVRWeaponRig'),None)
+  if not active:continue
+  r=active['values']
+  if not r['bTracking'] or r['bHolstered'] or not r['Tracking.Flags']&2:continue
+  selected=[o for o in objs.values() if o['type']=='KFVRGrenadeControl'
+            and o['values']['Rig']==active['address'] and o['values']['GrenadeWeapon']==r['Gun']]
+  if len(selected)!=1:continue
+  obj=selected[0];g=obj['values']
+  if g['MotionSamples']<=0 or g['LastSerial']<=0:continue
+  source=r['Tracking.InputSeconds'];sample=g['MotionSourceSeconds']
+  motion_errors.append(abs(source-sample) if math.isfinite(source) and math.isfinite(sample) else math.inf)
+  motion_rows.append((g['LastSerial'],r['Tracking.InputSerial']))
+  current=(obj['address'],g['MotionResets'],g['LastSerial'],g['MotionUpdates'])
+  if previous and current[:2]==previous[:2]:
+   motion_pairs.append((current[2]-previous[2],current[3]-previous[3]))
+  previous=current
+ checks['grenade_motion_uses_controller_time']=len(motion_rows)>=10 and max(motion_errors,default=math.inf)<0.00001 and all(a==b for a,b in motion_rows)
+ checks['grenade_motion_consumes_each_source_at_most_once']=len(motion_pairs)>=10 and all(0<=updates<=samples for samples,updates in motion_pairs) and any(updates>0 for _,updates in motion_pairs)
  checks['clean_release']=bool(gs) and not gs[-1]['bPinRemoved'] and not rigs[-1]['bTracking'] and all(o['values']['bHidden'] for o in rs[-1]['objects'] if o['type'] in ['KFVRHandVisual','KFVRWeaponVisual'])
- report=dict(passed=all(checks.values()),checks=checks,grenade=gs[-1] if gs else {},damage=targets[-1] if targets else {},live_game=True,synthetic_controllers=True,headset_presented=False)
+ report=dict(passed=all(checks.values()),checks=checks,grenade=gs[-1] if gs else {},damage=targets[-1] if targets else {},motion_clock=dict(samples=len(motion_rows),successive_pairs=len(motion_pairs),max_source_time_error_seconds=max(motion_errors,default=None)),live_game=True,synthetic_controllers=True,headset_presented=False)
  (folder/'grenade-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Grenade checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report

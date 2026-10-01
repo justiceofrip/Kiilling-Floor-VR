@@ -20,7 +20,7 @@ target_include_directories(KFVRCore PUBLIC include include/kfvr/interaction incl
 add_executable(KFVRAmmoParity tools/AmmoParityMain.cpp)
 target_link_libraries(KFVRAmmoParity PRIVATE KFVRCore)
 if(BUILD_TESTING)
- foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy ControllerLocomotion RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine PhysicalReload ReloadGestures BeltReloadSession TrackedWeapon MeleeGate PoseWire Ue2Camera InputProtocol FingerPose TrackingReference)
+ foreach(name StereoCulling FrameProtocol PresentationPolicy SharedTextureProtocol CoreMath FrameCoordinator ActionPolicy ControllerLocomotion RigPose UiPointerSmoothing ArmPoleVectorMath AmmoMachine PhysicalReload ReloadGestures BeltReloadSession TrackedWeapon MeleeGate PoseWire Ue2Camera InputProtocol FingerPose TrackingReference ControllerSampleClock)
   add_executable(${name}Tests tests/${name}Tests.cpp)
   target_link_libraries(${name}Tests PRIVATE KFVRCore)
   add_test(NAME ${name} COMMAND ${name}Tests)

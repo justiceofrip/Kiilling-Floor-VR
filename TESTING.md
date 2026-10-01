@@ -4,7 +4,7 @@ Build.ps1 runs CTest for each architecture. Current deterministic coverage inclu
 
 New ammo tests exercise tactical full-mag-plus-chamber behavior, empty reload/charging, racking a live round, fire cadence, remove/stow/discard/partial magazines, switching/death/drop cancellation, stale ownership, replay/high-latency rejection, correction validation, tube feeding, manual cycling and 100,000 randomized actions with conservation checks. Melee tests include 10,000 wrist-waggle samples, retraction, cooldown, invalid tracking, teleports and range limits. Pose tests include all truncated packet lengths, invalid quaternions, quantization overflow, sequence wrap and server-clock gates.
 
-OpenXR controller tests use a fake API to cover bindings, predicted timing, focus/tracking loss, invalid samples, haptic limits, runtime errors and cleanup after partial initialization. Latest CTest results: x86 24/24, x64 23/23, including controller locomotion interruption, neutral rearm and separate grip/aim presentation coverage.
+OpenXR controller tests use a fake API to cover bindings, predicted timing, focus/tracking loss, invalid samples, haptic limits, runtime errors and cleanup after partial initialization. Latest CTest results: x86 25/25, x64 24/24, including controller locomotion interruption, neutral rearm and separate grip/aim presentation coverage.
 
 Hardware checks are separate from unit tests:
 
@@ -246,3 +246,15 @@ The alignment variant now drives upside-down, sideways and valid attempts along 
 `Start-KFVRDev.ps1 -Unattended -NativeHands -VRProfile -MK23Test` replaces the fixture Deagle with MK23 at the left hip. Wait for a living pawn and seven registered weapons, then run `native_bridge_trial.py --pid GAME_PID --game GAME_PATH --mk23-reload --reload-insertion --width 1280 --height 960`. Use a fresh fixture for `--reload-alignment`, or omit NativeHands and use `--reload-interrupt` for fallback presentation. Each full sequence spends ammunition; do not reuse the same pistol state as a fresh trial. Normal inventory-only diagnostics expect the regular Deagle fixture.
 
 Reload validation now independently reconstructs actual action-bone positions for full pull/return and, outside the stress variant, the partial pull. Magazine/action offsets are transformed through separately named installed parent frames. MK23's parent is rotated90 degrees and exposed the earlier scalar-only translation assumption. The longer held-grip dwell at stress phase20 preserves the requirement for coherent samples after seating.
+
+
+## Controller clock during slow motion
+
+Start a fresh `Start-KFVRDev.ps1 -Unattended -NativeHands -VRProfile -MK23Test -ReloadTimeTest` session, then run `tools/native_bridge_trial.py --pid GAME_PID --game GAME_PATH --mk23-reload --reload-clock --width 1280 --height 960`. The explicit private fixture applies 0.2 times the saved level dilation only while the first replacement magazine is held, and restores the exact saved value on release, tracking/ownership loss or destruction. It does not call SetGameSpeed or save configuration, and has an eight-game-second cumulative ceiling.
+
+The trial retains the continuous insertion, real magazine/chamber accounting, stock-shot and measured-bone checks. It sends a 10 cm push over 80 ms plus hold/dwell, and a two-second source timestamp rollback without a reference-space change. Evidence must show the actual transmitted stroke, game/source clock slope near 0.22, one timestamp rollback in phase 19 and one source-gap reset on focus recovery in phase 36, no reference reset, successful held-grip seating and exact dilation restoration. Missing new ABI fields yield failed assertions in the saved report, allowing an old-build baseline. This controls time dilation only; full stock ZED visual/perk behavior and headset acceptance require later checks.
+
+`ControllerSampleClockTests` runs in both architecture suites and covers large-timestamp precision, duplicate reads, stale/mutated IDs, stalled/backwards time, source gaps, epoch rebasing and dilation independence. The engine-run belt tests also compare the same fast physical stroke against normal, slow and changing game time, and require the old scaled-time path to fail.
+
+
+The extended official-SDK commandlets pass 10,500 melee, 4,512 throw and 34,661 dual-magazine checks. Fast and too-slow knife trajectories are compared across normal, slow and recovering game clocks; a rebased physical clock must retain the existing game-time cooldown. Throw cases require identical measured 5 m/s trajectories despite game dilation, skip repeated/replayed source samples and rebuild history after clock faults. These are engine-run state tests, distinct from the live collision/projectile fixtures.

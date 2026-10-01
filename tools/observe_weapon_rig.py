@@ -1,7 +1,7 @@
 """Read-only snapshots of our reflected script rig; never an input/write path."""
 import argparse,ctypes,json,pathlib,struct,time
 from observe_kf import Observer,unpack
-OWNERS={'KFVRMagazineGrip','KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedWelder','KFVRTraderPanel','KFVRGrenadeControl','KFVRTraderTest','KFVRDoorTest','KFVRTrackedDeagle','KFVRTrackedMK23','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget','Projectile','Grenade','Nade','Ammunition','KFWeapon'}
+OWNERS={'KFVRMagazineGrip','KFVRWeaponRig','KFVRHandVisual','KFVRWeaponVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedWelder','KFVRTraderPanel','KFVRGrenadeControl','KFVRTraderTest','KFVRDoorTest','KFVRReloadTimeTest','KFVRTrackedDeagle','KFVRTrackedMK23','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget','Projectile','Grenade','Nade','Ammunition','KFWeapon'}
 def layout(o):
  fields=[]
  for row in o.rows:
@@ -36,7 +36,7 @@ def layout(o):
  o.vr_fields=fields
  schema=[]
  for row in o.rows:
-  if row['class'] not in ['KFHumanPawn','KFVRMagazineGrip','KFVRWeaponRig','KFVRWeaponVisual','KFVRHandVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedWelder','KFVRTraderPanel','KFVRGrenadeControl','KFVRTraderTest','KFVRDoorTest','KFVRTrackedDeagle','KFVRTrackedMK23','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget','Nade','MedicNade','FlameNade','FragAmmo']:continue
+  if row['class'] not in ['KFHumanPawn','KFVRMagazineGrip','KFVRWeaponRig','KFVRWeaponVisual','KFVRHandVisual','KFVRTrackedSingle','KFVRTrackedSyringe','KFVRTrackedWelder','KFVRTraderPanel','KFVRGrenadeControl','KFVRTraderTest','KFVRDoorTest','KFVRReloadTimeTest','KFVRTrackedDeagle','KFVRTrackedMK23','KFVRTrackedBullpup','KFVRManualReload','KFVRTrackedKnife','KFVRTrackedDualies','KFVRDualBeltReload','KFVRStatusDisplay','KFVRMeleeTarget','Nade','MedicNade','FlameNade','FragAmmo']:continue
   schema.append(object_layout(o,row))
  return schema
 

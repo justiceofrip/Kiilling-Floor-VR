@@ -63,8 +63,10 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,leftPistolReload=false,reloadInterrupt=false,reloadAlignment=false,reloadInsertion=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;ReloadFixture reloadFixture;std::wstring reloadSelector;
- for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i]);else if(arg==L"--reload-insertion")reloadInsertion=reload=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload"||arg==L"--mk23-reload"){Require(reloadSelector.empty()||reloadSelector==arg,"Choose either --deagle-reload or --mk23-reload");reloadSelector=arg;leftPistolReload=reload=weapon=movement=true;}else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,leftPistolReload=false,reloadInterrupt=false,reloadAlignment=false,reloadInsertion=false,reloadClock=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;ReloadFixture reloadFixture;std::wstring reloadSelector;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i]);else if(arg==L"--reload-clock")reloadClock=reload=weapon=movement=true;else if(arg==L"--reload-insertion")reloadInsertion=reload=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload"||arg==L"--mk23-reload"){Require(reloadSelector.empty()||reloadSelector==arg,"Choose either --deagle-reload or --mk23-reload");reloadSelector=arg;leftPistolReload=reload=weapon=movement=true;}else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(unsigned(reloadInterrupt)+unsigned(reloadAlignment)+unsigned(reloadInsertion)+unsigned(reloadClock)<=1,"Choose one reload diagnostic variant per trial");
+ reloadInsertion=reloadInsertion||reloadClock;
  Require(!reload||reloadFixture.ready,"Reload trial requires its live measured fixture");
  Require(width>=64&&height>=64&&width<=4096&&height<=4096&&std::uint64_t(width)*height*40<=256*1024*1024,"Receiver dimensions exceed CPU bridge budget");
  const auto folder=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(folder);
@@ -76,11 +78,17 @@ int wmain(int argc,wchar_t** argv){try{
  ComPtr<ID3D11Texture2D> output,staging;Hr(device->CreateTexture2D(&desc,nullptr,&output),"Create receiving stereo targets");desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;desc.BindFlags=0;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;Hr(device->CreateTexture2D(&desc,nullptr,&staging),"Create receiving readback");
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
- const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::array<unsigned,64> phasePairs{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency;QueryPerformanceFrequency(&frequency);
+ const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,64> captured{};std::array<unsigned,64> phasePairs{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency,sourceStart;QueryPerformanceFrequency(&frequency);QueryPerformanceCounter(&sourceStart);
  const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reloadAlignment?37000:reload?61000:inventory?26700:7500;
  for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:reload||dual||dualBelt||heal||weld||arms||hands||hud?90000:inventory?60000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
+  // GetTickCount64 may repeat across distinct receiver iterations (15 ms clock
+  // granularity). Use measured QPC time for synthetic pose samples, as a real
+  // OpenXR frame uses its own predicted pose timestamp.
+  LARGE_INTEGER sourceNow;QueryPerformanceCounter(&sourceNow);
+  const auto sourceTicks=sourceNow.QuadPart-sourceStart.QuadPart;
+  const std::int64_t sampleNs=1000000000LL+(sourceTicks/frequency.QuadPart)*1000000000LL+(sourceTicks%frequency.QuadPart)*1000000000LL/frequency.QuadPart;
   if(movement){
    const auto elapsed=firstPair?now-firstPair:0;
    const unsigned ends[]={700,1300,1800,2400,3100,3800,4300,4900,5600,6300,7000,7500};unsigned phase=0;while(phase<11&&elapsed>=ends[phase])++phase;
@@ -98,7 +106,7 @@ int wmain(int argc,wchar_t** argv){try{
    if(hud)phase=std::min(17u,unsigned(elapsed/1500));
    if(cadence)phase=0;
    if(walkingAim)phase=std::min(14u,unsigned(elapsed/1500));
-   xr::ControllerFrame input{};input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;input.focused=phase!=4;input.hands[0].gripValid=input.hands[1].gripValid=true;
+   xr::ControllerFrame input{};input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;input.focused=phase!=4;input.hands[0].gripValid=input.hands[1].gripValid=true;
    if(phase==1||phase==4||phase==5||phase==9)input.hands[0].stickY=.4f;
    if(phase==3)input.hands[0].stickX=.4f;
    if(phase==7)input.hands[0].stickY=-.4f;
@@ -114,7 +122,7 @@ int wmain(int argc,wchar_t** argv){try{
     if(phase==3||phase==5||phase==6)right.squeeze=1;
     if(phase==2||phase==7||phase==9||phase==11)right.trigger=1;
     if(inventory){
-     input={};input.focused=phase!=23;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=23;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.2f,-.25f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;hand.thumbTouched=hand.triggerTouched=true;}
      if(phase<14||phase>17)input.hands[0].gripPose.orientation={0,-.70710678f,0,.70710678f};
      auto& selected=input.hands[1];
@@ -131,7 +139,7 @@ int wmain(int argc,wchar_t** argv){try{
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(reload){
-     input={};input.focused=phase!=35;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=35;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      auto& lh=input.hands[0];auto& rh=input.hands[1];
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.2f,-.25f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      if(phase==1||phase==54||phase==56)lh.secondary=true;
@@ -206,21 +214,22 @@ int wmain(int argc,wchar_t** argv){try{
        if(phase==15)depth=-.06f+.035f*std::min(1.f,float(elapsed%1000)/800.f);
        if(phase==18)depth=-.06f;
        if(phase==19)depth=-.025f*(1-std::min(1.f,float(elapsed%1000)/600.f));
-       if(phase==20)depth=-.10f*(1-std::min(1.f,float(elapsed%1000)/600.f));
+       if(phase==20)depth=reloadClock?-.10f*(1-std::clamp((float(elapsed%1000)-400.f)/80.f,0.f,1.f)):-.10f*(1-std::min(1.f,float(elapsed%1000)/600.f));
        lh.gripPose.position=ReloadHand(reloadFixture,rh.gripPose,lh.gripPose.orientation,depth);
        if(phase==16&&elapsed%1000<350)rh.gripValid=rh.aimValid=false;
       }
       // After seating with grip still down, release once before grabbing
       // the slide so the physical hand edges remain distinct operations.
       if(phase==21)lh.squeeze=elapsed%1000<200?0.f:1.f;
-      // Change both eye and controller space together while already near
-      // the seat, after an approach. Recenter must cancel that stroke.
-      if(phase>=19&&phase<=50)input.spaceGeneration++;
+      // The clock variant rolls back source time in the same reference space;
+      // the ordinary stress variant changes both eye/controller space instead.
+      // Either transition near the seat must cancel the pending approach.
+      if(phase>=19&&phase<=50){if(reloadClock)input.predictedNs-=2000000000LL;else input.spaceGeneration++;}
      }
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(melee){
-     input={};input.focused=phase!=9;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=9;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      const float t=float(elapsed%1000)/1000.f;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.2f,-.25f,-.35f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      auto& rh=input.hands[1];
@@ -239,7 +248,7 @@ int wmain(int argc,wchar_t** argv){try{
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(dual){
-     input={};input.focused=phase!=9;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=9;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.25f:-.28f,-.28f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      auto& rh=input.hands[1];auto& lh=input.hands[0];
      lh.gripPose.orientation={0,.3f,0,.9539392f};rh.gripPose.orientation={0,-.2f,0,.9797959f};
@@ -258,7 +267,7 @@ int wmain(int argc,wchar_t** argv){try{
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(dualBelt){
-     input={};input.focused=phase!=32;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=32;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      const float t=float(elapsed%1000)/1000.f;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.25f:-.28f,-.28f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      auto& rh=input.hands[1];auto& lh=input.hands[0];
@@ -282,7 +291,7 @@ int wmain(int argc,wchar_t** argv){try{
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(grenade){
-     input={};input.focused=phase!=11;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=11;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.28f,-.2f,-.35f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      auto& rh=input.hands[1];rh.squeeze=1;
      if(phase==0||phase==1||phase==7||phase==8||phase==14||phase==15||phase==23||phase==24)rh.gripPose.position={.22f,-.48f,.28f};
@@ -300,7 +309,7 @@ int wmain(int argc,wchar_t** argv){try{
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(trader){
-     input={};input.focused=phase!=15;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=15;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      unsigned row=0;
      if(phase>=7&&phase<=8)row=1;
      if(phase>=9&&phase<=10)row=5;
@@ -321,7 +330,7 @@ int wmain(int argc,wchar_t** argv){try{
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(arms){
-     input={};input.focused=phase!=7;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=7;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];const float side=h?1.f:-1.f;hand.gripValid=hand.aimValid=true;hand.gripPose.position={side*.25f,-.25f,-.4f};hand.triggerTouchActive=hand.thumbTouchActive=true;hand.triggerTouched=phase%2;hand.thumbTouched=phase%3;
       if(phase==1)hand.gripPose.position.z=-.65f;
       if(phase==12)hand.gripPose.position.z=-1.2f;
@@ -335,7 +344,7 @@ int wmain(int argc,wchar_t** argv){try{
      }
     }
     if(weld){
-     input={};input.focused=phase!=10;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=10;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position=h?math::Vec3{0,-.30f,-.72f}:math::Vec3{-.28f,-.28f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      auto& rh=input.hands[1];auto& lh=input.hands[0];
      if(phase==0||phase==1||phase==28||phase==29||phase==31||phase==32)rh.gripPose.position={.18f,-.28f,-.08f};
@@ -349,7 +358,7 @@ int wmain(int argc,wchar_t** argv){try{
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(heal){
-     input={};input.focused=!(phase==5&&elapsed%1000>=40);input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=!(phase==5&&elapsed%1000>=40);input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.25f:-.28f,-.28f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      auto& rh=input.hands[1];
      if(phase==0||phase==1||phase==20||phase==21||phase==23||phase==24)rh.gripPose.position={-.18f,-.28f,-.08f};
@@ -364,7 +373,7 @@ int wmain(int argc,wchar_t** argv){try{
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(hands){
-     input={};input.focused=phase!=11;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=11;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];const float side=h?1.f:-1.f;
       hand.gripValid=hand.aimValid=true;hand.gripPose.position={side*.18f,-.18f,-.38f};
       hand.triggerTouchActive=hand.thumbTouchActive=true;
@@ -389,7 +398,7 @@ int wmain(int argc,wchar_t** argv){try{
      }
     }
     if(hud){
-     input={};input.focused=phase!=9;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=9;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.2f,-.25f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      auto& left=input.hands[0];left.gripPose.orientation={0,-.70710678f,0,.70710678f};
      if(phase==0||phase==2||phase==14||phase==17)left.gripPose.orientation={};
@@ -405,7 +414,7 @@ int wmain(int argc,wchar_t** argv){try{
     if(walkingAim){
      // Hold the head/controllers fixed while the real pawn walks. No firing:
      // recoil must not be mistaken for locomotion-induced presentation drift.
-     input={};input.focused=phase!=14;input.spaceGeneration=0x200000001ULL;input.predictedNs=std::int64_t(now)*1000000;
+     input={};input.focused=phase!=14;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.2f,-.25f,-.5f};hand.thumbTouchActive=hand.triggerTouchActive=true;}
      if(phase<=1){right.gripPose.position={.22f,-.62f,.05f};right.squeeze=phase==1?1.f:0.f;}
      if(phase==7||phase==8){right.gripPose.position={.22f,-.15f,.18f};right.squeeze=phase==8?1.f:0.f;}
@@ -419,10 +428,11 @@ int wmain(int argc,wchar_t** argv){try{
     if(capturePhase!=phase||!capturePhaseStart){capturePhase=phase;capturePhaseStart=now;}
    }
    const auto sent=phase==8&&!weapon?ipc::ChannelResult::Timeout:channel.SendInput(input);
-   controls<<"{\"uptime_ms\":"<<now<<",\"phase\":"<<phase<<",\"sent\":"<<(sent==ipc::ChannelResult::Ok?"true":"false")<<"}\n";
+   const auto left=input.hands[0].gripPose.position;
+   controls<<"{\"uptime_ms\":"<<now<<",\"phase\":"<<phase<<",\"sent\":"<<(sent==ipc::ChannelResult::Ok?"true":"false")<<",\"predicted_ns\":"<<input.predictedNs<<",\"source_ns\":"<<sampleNs<<",\"space_generation\":"<<input.spaceGeneration<<",\"left_grip_position\":["<<left.x<<','<<left.y<<','<<left.z<<"],\"reload_phase_ms\":"<<(reload?elapsed%1000:0)<<"}\n";
   }
-  runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=0x200000001ULL;tracking.predictedNs=std::int64_t(now)*1000000+std::int64_t(attempt%1000);tracking.focused=tracking.headValid=true;
-  if(reloadInsertion&&capturePhase>=19&&capturePhase<=50)tracking.spaceGeneration++;
+  runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=0x200000001ULL;tracking.predictedNs=sampleNs;tracking.focused=tracking.headValid=true;
+  if(reloadInsertion&&!reloadClock&&capturePhase>=19&&capturePhase<=50)tracking.spaceGeneration++;
   if(dualBelt&&(capturePhase==8||capturePhase==9||capturePhase==24))tracking.head.orientation={-.537300f,0,0,.843391f};
   if(arms&&capturePhase==6)tracking.head.orientation={-.537300f,0,0,.843391f};
   if(arms&&capturePhase==4)tracking.head.orientation={.382683f,0,0,.923880f};

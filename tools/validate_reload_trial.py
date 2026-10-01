@@ -1,7 +1,68 @@
 """Assert live physical magazine, slide, stock-shot and bone behavior."""
 import json,pathlib,math
 
-def validate(folder,weapon="single",interrupted=False,insertion=False):
+
+def clock_evidence(controls,rows,native,gun_addresses):
+ """Read-only clock evidence; absent new fields yield failed checks on old builds."""
+ checks={
+  'clock_events_published_neutral':native.get('source_clock_resets')==2 and native.get('last_clock_fault')==7 and native.get('failed')==0 and native.get('clock_fault_overflow')==0 and len(native.get('clock_faults',[]))==2 and all(e.get('published') and e.get('flags')==0 for e in native.get('clock_faults',[])),
+  'clock_trial_preserved_reference_space':native.get('reference_space_resets')==0,
+ }
+ for phase_id,fault,label in [(19,6,'clock_rollback_forced_neutral_tick'),(36,7,'focus_gap_recovery_forced_neutral_tick')]:
+  times=[c['uptime_ms'] for c in controls if c['sent'] and c['phase']==phase_id]
+  events=[e for e in native.get('clock_faults',[]) if e.get('fault')==fault]
+  checks[label]=len(events)==1 and bool(times) and min(times)<=events[0].get('uptime_ms',0)<=max(times) and events[0].get('published') and events[0].get('flags')==0
+ fixtures=[o for r in rows for o in r['objects'] if o['type']=='KFVRReloadTimeTest' and not o['values'].get('bDeleteMe')]
+ fixture_values=[o['values'] for o in fixtures];last=fixture_values[-1] if fixture_values else {}
+ def finite(value):return isinstance(value,(float,int)) and math.isfinite(value)
+ applied=[v for v in fixture_values if v.get('bInitialized') and v.get('bApplied') and v.get('AppliedCount',0)>0 and v.get('BoundGun') in gun_addresses]
+ checks['time_fixture_applied']=bool(applied) and all(finite(v.get('SavedDilation')) and v['SavedDilation']>0 and finite(v.get('AppliedDilation')) and abs(v['AppliedDilation']-.2*v['SavedDilation'])<.00001 for v in applied)
+ checks['time_fixture_restored']=len({o['address'] for o in fixtures})==1 and last.get('AppliedCount',0)>0 and last.get('RestoredCount')==last.get('AppliedCount') and not last.get('bApplied',True) and not last.get('bExpired',True) and finite(last.get('CurrentDilation')) and finite(last.get('SavedDilation')) and abs(last['CurrentDilation']-last['SavedDilation'])<.00001
+ slopes={}
+ for n in (12,13,14,15):
+  times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']];groups={}
+  for row in rows:
+   if not times or not min(times)+120<=row['uptime_ms']<=max(times) or not row.get('rig_sample_consistent'):continue
+   objs={o['address']:o for o in row['objects'] if not o['values'].get('bDeleteMe')}
+   rig_obj=next((o for o in objs.values() if o['type']=='KFVRWeaponRig'),None)
+   if not rig_obj:continue
+   rig=rig_obj['values']
+   if rig.get('Gun') not in gun_addresses or not rig.get('bTracking') or rig.get('bHolstered') or rig.get('Tracking.Flags',0)&3!=3:continue
+   fixture=next((o for o in objs.values() if o['type']=='KFVRReloadTimeTest' and o['values'].get('Rig')==rig_obj['address']),None)
+   if not fixture:continue
+   f=fixture['values'];source=rig.get('Tracking.InputSeconds');game=f.get('GameTime');dilation=f.get('AppliedDilation')
+   if not f.get('bApplied') or f.get('BoundGun')!=rig.get('Gun') or f.get('BoundManual')!=rig.get('ManualReload') or not all(finite(v) for v in (source,game,dilation)):continue
+   group=groups.setdefault((fixture['address'],f.get('AppliedCount')),[])
+   if not group or source!=group[-1][0]:group.append((source,game,dilation))
+  points=max(groups.values(),key=len,default=[]);span=points[-1][0]-points[0][0] if points else 0;slope=None
+  monotonic=all(b[0]>a[0] for a,b in zip(points,points[1:]))
+  if len(points)>=3 and span>=.3 and monotonic:
+   xmean=sum(p[0] for p in points)/len(points);ymean=sum(p[1] for p in points)/len(points)
+   slope=sum((x-xmean)*(y-ymean) for x,y,_ in points)/sum((x-xmean)**2 for x,_,_ in points)
+  slopes[str(n)]=dict(samples=len(points),source_span_seconds=span,game_to_source_slope=slope,applied_dilation_min=min((p[2] for p in points),default=None),applied_dilation_max=max((p[2] for p in points),default=None))
+  checks['unscaled_input_during_slow_motion_phase_'+str(n)]=slope is not None and .18<=slope<=.26 and all(.18<=p[2]<=.26 and abs(slope-p[2])<.04 for p in points)
+ sent=[c for c in controls if c['sent']];stamped=[c for c in sent if isinstance(c.get('predicted_ns'),int)]
+ rollbacks=[(a,b) for a,b in zip(stamped,stamped[1:]) if b['predicted_ns']<a['predicted_ns']]
+ checks['sent_source_clock_rollback_measured']=len(stamped)==len(sent) and len(rollbacks)==1 and rollbacks[0][1]['phase']==19 and all(isinstance(c.get('source_ns'),int) for c in sent) and all(b['source_ns']>a['source_ns'] for a,b in zip(sent,sent[1:])) and rollbacks[0][1]['predicted_ns']-rollbacks[0][0]['predicted_ns']-(rollbacks[0][1]['source_ns']-rollbacks[0][0]['source_ns'])==-2000000000
+ spaces={c.get('space_generation') for c in sent}
+ checks['sent_clock_trial_used_one_space']=len(spaces)==1 and next(iter(spaces),0) not in (0,None)
+ stroke=[c for c in sent if c['phase']==20]
+ complete=[c for c in stroke if isinstance(c.get('predicted_ns'),int) and finite(c.get('reload_phase_ms')) and isinstance(c.get('left_grip_position'),list) and len(c['left_grip_position'])==3 and all(finite(v) for v in c['left_grip_position'])]
+ hold=[c for c in complete if c['reload_phase_ms']<=400];dwell=[c for c in complete if c['reload_phase_ms']>=480]
+ moving=[]
+ for a,b in zip(complete,complete[1:]):
+  distance=math.dist(a['left_grip_position'],b['left_grip_position'])
+  if distance>.001:moving.append(dict(delta=(b['predicted_ns']-a['predicted_ns'])*1e-9,distance=distance,first_ms=a['reload_phase_ms'],last_ms=b['reload_phase_ms']))
+ travel=math.dist(hold[-1]['left_grip_position'],dwell[0]['left_grip_position']) if hold and dwell else None
+ duration=(moving[-1]['last_ms']-moving[0]['first_ms'])/1000 if moving else None
+ stationary=bool(hold) and bool(dwell) and all(math.dist(c['left_grip_position'],hold[-1]['left_grip_position'])<.00001 for c in hold) and all(math.dist(c['left_grip_position'],dwell[0]['left_grip_position'])<.00001 for c in dwell)
+ checks['fast_stroke_sent_with_hold_and_dwell']=len(complete)==len(stroke) and len(hold)>=3 and len(dwell)>=3 and stationary and any(400<c['reload_phase_ms']<480 for c in complete) and travel is not None and .095<=travel<=.105 and duration is not None and .04<=duration<=.16
+ checks['fast_stroke_valid_in_source_time']=bool(moving) and all(0<p['delta']<=.15 and p['distance']<=4*p['delta']+.005 for p in moving)
+ checks['fast_stroke_exposes_scaled_clock_bug']=any(p['delta']>0 and p['distance']>4*p['delta']*.22+.005 for p in moving)
+ return checks,dict(native_source_clock_resets=native.get('source_clock_resets'),native_last_clock_fault=native.get('last_clock_fault'),fixture_samples=len(fixtures),fixture_final=last,slow_motion_slopes=slopes,sent_rollback_count=len(rollbacks),stroke_sent_samples=len(stroke),stroke_travel_metres=travel,stroke_duration_seconds=duration,moving_segments=moving)
+
+def validate(folder,weapon="single",interrupted=False,insertion=False,clock=False):
+ insertion=insertion or clock
  folder=pathlib.Path(folder)
  controls=[json.loads(x) for x in (folder/'controls.jsonl').read_text().splitlines()]
  rows=[json.loads(x) for x in (folder/'weapon-observations.jsonl').read_text().splitlines()]
@@ -11,7 +72,7 @@ def validate(folder,weapon="single",interrupted=False,insertion=False):
  def phase(n,typ='KFVRManualReload'):
   times=[c['uptime_ms'] for c in controls if c['phase']==n and c['sent']]
   return objects(typ,[r for r in rows if times and min(times)+(700 if interrupted and n==10 else 120)<=r['uptime_ms']<=max(times)])
- checks={};rigs=objects('KFVRWeaponRig');manuals=objects('KFVRManualReload');guns=objects(gun_type);capacity=guns[0]['MagCapacity']
+ checks={};clock_metrics={};rigs=objects('KFVRWeaponRig');manuals=objects('KFVRManualReload');guns=objects(gun_type);capacity=guns[0]['MagCapacity']
  if not manuals:raise ValueError('Physical mode was never observed')
  start,end=manuals[0],manuals[-1];shots=rigs[-1]['TraceCount']-rigs[0]['TraceCount'];initial=start['OwnedRounds']+start['SpentRounds']+start['DiscardedRounds']
  def at(name,n,predicate,typ='KFVRManualReload'):
@@ -55,7 +116,7 @@ def validate(folder,weapon="single",interrupted=False,insertion=False):
   at('interrupted_open_hand_retains_magazine_once',10,lambda m:m.get('RecoveryStowCount')==1 and m.get('HeldInterruptions',0)>=2 and not m.get('bRecoveryPending',True))
 
  if insertion:
-  for n,label in [(12,'acquisition_at_seat'),(14,'teleport_to_seat'),(15,'partial_stroke'),(17,'dominant_tracking_return'),(19,'recenter_inside_socket')]:
+  for n,label in [(12,'acquisition_at_seat'),(14,'teleport_to_seat'),(15,'partial_stroke'),(17,'dominant_tracking_return'),(19,'clock_rollback_inside_socket' if clock else 'recenter_inside_socket')]:
    at(label+'_cannot_insert',n,lambda m:m['HeldMagazine']==2 and m['InsertedMagazine']==0 and m['SeatCount']==0 and not m['bChambered'])
   at('outside_approach_observed',13,lambda m:m['bInsertionApproached'] and m['InsertionPosition'][2]<-.15)
   before_jump=phase(13);after_jump=phase(14)
@@ -65,7 +126,9 @@ def validate(folder,weapon="single",interrupted=False,insertion=False):
   at('fresh_approach_after_tracking_loss',18,lambda m:m['bInsertionApproached'] and m['HeldMagazine']==2)
   summary=json.loads((folder/'trace-summary.json').read_text())
   native=json.loads((pathlib.Path(summary['report']).parent/'native-weapon.json').read_text())
-  checks['reference_change_forced_neutral_tick']=native.get('reference_space_resets')==1 and native['failed']==0
+  if clock:
+   clock_checks,clock_metrics=clock_evidence(controls,rows,native,gun_addresses);checks.update(clock_checks)
+  else:checks['reference_change_forced_neutral_tick']=native.get('reference_space_resets')==1 and native['failed']==0
   delivered=native['packets']
   checks['fresh_controller_sequence_is_distinct_from_ticks']=0<native['input_samples']<native['updates'] and any(a['input_serial']>0 and a['input_serial']==b['input_serial'] and a['serial']!=b['serial'] for a,b in zip(delivered,delivered[1:]))
   at('complete_push_seats_while_grip_stays_held',21,lambda m:m['InsertedMagazine']==2 and m['HeldMagazine']==0 and m['SeatCount']==1)
@@ -172,11 +235,11 @@ def validate(folder,weapon="single",interrupted=False,insertion=False):
     palm_tracking_errors.append(math.dist(hand['PalmWorld'],rig['Tracking.LeftPosition']))
   checks['native_magazine_grasp_is_measured_and_attached']=native_grip_samples>=5 and not missing_native_profiles and bool(mag_palm_errors) and max(mag_palm_errors)<.05
   checks['magazine_grasp_keeps_controller_palm']=bool(palm_tracking_errors) and max(palm_tracking_errors)<.005
- report=dict(max_socket_position_error_metres=max(socket_errors,default=None) if insertion else None,insertion_trial=insertion,interruption_trial=interrupted,inserted_magazine_frames=rest_metrics,action_bone_positions=action_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
+ report=dict(clock_trial=clock,clock_evidence=clock_metrics,max_socket_position_error_metres=max(socket_errors,default=None) if insertion else None,insertion_trial=insertion,interruption_trial=interrupted,inserted_magazine_frames=rest_metrics,action_bone_positions=action_metrics,missing_native_profiles=missing_native_profiles,native_magazine_grip_samples=native_grip_samples,max_magazine_to_palm_error_uu=max(mag_palm_errors,default=None),max_palm_tracking_error_uu=max(palm_tracking_errors,default=None),other_physical_weapons_observed=len(other_states),weapon=weapon,capacity=capacity,passed=all(checks.values()),checks=checks,shots=shots,initial_rounds=initial,remaining_rounds=end['OwnedRounds'],maximum_magazine_error_uu=max((m['MagazineError'] for m in held),default=-1),synthetic_controllers=True,live_game=True,headset_presented=False)
  (folder/'reload-validation.json').write_text(json.dumps(report,indent=2)+'\n')
  if not report['passed']:raise ValueError('Reload checks failed: '+', '.join(k for k,v in checks.items() if not v))
  return report
 if __name__=='__main__':
  import argparse
- parser=argparse.ArgumentParser();parser.add_argument('folder');parser.add_argument('--weapon',choices=['single','deagle','mk23'],default='single');args=parser.parse_args()
- print(json.dumps(validate(args.folder,args.weapon),indent=2))
+ parser=argparse.ArgumentParser();parser.add_argument('folder');parser.add_argument('--weapon',choices=['single','deagle','mk23'],default='single');variant=parser.add_mutually_exclusive_group();variant.add_argument('--reload-interrupt',action='store_true');variant.add_argument('--reload-insertion',action='store_true');variant.add_argument('--reload-clock',action='store_true');args=parser.parse_args()
+ print(json.dumps(validate(args.folder,args.weapon,interrupted=args.reload_interrupt,insertion=args.reload_insertion,clock=args.reload_clock),indent=2))

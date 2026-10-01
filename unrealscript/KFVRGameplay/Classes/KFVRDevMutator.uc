@@ -5,6 +5,7 @@ var bool bUnattended,bDualTest,bMK23Test;
 var Pawn TestPawn;
 var KFVRDoorTest DoorTest;
 var KFVRTraderTest TraderTest;
+var KFVRReloadTimeTest ReloadTimeTest;
 var KFVRMeleeTarget GrenadeTarget;
 function PostBeginPlay()
 {
@@ -83,6 +84,13 @@ function Timer()
         if (Rig==None) return;
         Rig.bArmTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRARMTEST=1")>=0;
         Rig.bNativeHandTest=InStr(Caps(Level.GetLocalURL()),"KFVRNATIVEHANDS=1")>=0;
+        if (bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRRELOADTIMETEST=1")>=0
+            && Rig.BoundPawn==PC.Pawn && ReloadTimeTest==None)
+        {
+            ReloadTimeTest=Spawn(class'KFVRReloadTimeTest',Rig);
+            if (ReloadTimeTest!=None && !ReloadTimeTest.Initialize(Rig))
+            { ReloadTimeTest.Destroy(); ReloadTimeTest=None; }
+        }
         Rig.PC=PC; Rig.bMeleeTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRMELEETEST=1")>=0;
         for (I=PC.Pawn.Inventory; I!=None; I=I.Inventory)
         {
