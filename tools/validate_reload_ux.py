@@ -1,8 +1,8 @@
-"""Validate the 42-second live reload UX trial from recorded observations.
+"""Validate the 62-second live reload UX trial from recorded observations.
 
 No game reads, writes, inputs or injection occur here. Geometry uses completed
 rig snapshots and actual bone/palm observations; reported script error fields
-are not evidence. Bullpup has a magazine-only policy and no authored handle.
+are not evidence. Bullpup and SCAR have a magazine-only policy and no authored handle.
 """
 import json
 import math
@@ -11,7 +11,7 @@ from pathlib import Path
 from validate_grip_pose import rotate
 
 GUNS = dict(single='KFVRTrackedSingle', deagle='KFVRTrackedDeagle',
-            mk23='KFVRTrackedMK23', bullpup='KFVRTrackedBullpup')
+            mk23='KFVRTrackedMK23', bullpup='KFVRTrackedBullpup', scar='KFVRTrackedSCAR')
 AXES = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
 MIN_SAMPLES = 3
 # These controller phases deliberately add 2cm model-Y mismatch. Phase24's
@@ -216,13 +216,99 @@ def geometry(records, rifle, native):
                         action_capture_evidence=capture_evidence)
 
 
+def chest_anchor(r):
+    """Independent body-space reconstruction, not Manual.SupplyLocation."""
+    units, head, body = r['Tracking.UnitsPerMetre'], r['Tracking.HeadPosition'], r['Tracking.BodyRotation']
+    if not finite(units) or not 1 <= units <= 200 or not vector(head):
+        raise ValueError('Invalid chest head/scale')
+    if not isinstance(body, (list, tuple)) or len(body) != 3 or any(type(x) is not int for x in body):
+        raise ValueError('Missing body rotator')
+    return [x+y for x, y in zip(head, rotate([x*units for x in (.22, -.10, -.36)], body))]
+
+
+def supply_geometry(records):
+    errors = {k: [] for k in ('manual_anchor', 'actual_center', 'measured_center', 'orientation', 'radius_metres')}
+    issues = []; discovery_gaps = []; counts = dict(active=0, visible=0, hidden=0, discovery_gaps=0)
+    okay = dict(ownership=True, visibility=True, native_asset=True)
+    for rec in records:
+        r, m, objs = (rec[k] for k in ('r', 'm', 'objects'))
+        try:
+            # A suspended manual does not republish its stored anchor. Compare
+            # only after both tracked hands permit the ordinary update.
+            active = r['bTracking'] is True and r['bHolstered'] is False and (r['Tracking.Flags'] & 3) == 3
+            actor = objs.get(r['AmmoSupply'], {})
+            supplies = [o for o in objs.values() if o['type'] == 'KFVRAmmoSupplyVisual']
+            if active:
+                counts['active'] += 1
+                anchor = chest_anchor(r)
+                errors['manual_anchor'].append(distance(m['SupplyLocation'], anchor))
+            # At an empty well all owned non-chamber rounds are stored/loose
+            # supply. This reads the conserved ledger, not a visual flag.
+            available = (active and not m['bSlideHeld'] and m['InsertedMagazine'] == m['HeldMagazine'] == 0
+                         and m['OwnedRounds'] > m['LoadedRounds'])
+            if not actor:
+                okay['ownership'] &= not supplies
+                if r['AmmoSupply'] not in (None, '0x0', 0):
+                    # The observer discovers newly spawned actors separately
+                    # from coherent value reads. A non-null pointer whose
+                    # object is absent is unknown, not hidden/visible evidence.
+                    # Known visible and hidden rows still need full coverage.
+                    counts['discovery_gaps'] += 1
+                    if len(discovery_gaps) < 12:
+                        discovery_gaps.append(dict(uptime_ms=rec['row']['uptime_ms'], address=r['AmmoSupply'], available=available))
+                else:
+                    okay['visibility'] &= not available
+                continue
+            a = actor['values']
+            okay['ownership'] &= (actor['type'] == 'KFVRAmmoSupplyVisual' and len(supplies) == 1
+                                  and a['Owner'] == rec['rig'] and r['bAmmoSupplyFailed'] is False)
+            okay['native_asset'] &= (a['bInitialized'] is True and a['NativeAssetPath'] == 'KillingFloorStatics.L85Ammo'
+                                    and a['StaticMesh'] not in (None, '0x0', 0))
+            okay['visibility'] &= type(a['bHidden']) is bool and a['bHidden'] is (not available)
+            if a['bHidden'] is True:
+                counts['hidden'] += 1
+                continue
+            counts['visible'] += 1
+            anchor = chest_anchor(r)
+            units, radius, diameter, scale = r['Tracking.UnitsPerMetre'], a['LocalRadius'], a['DisplayDiameterMetres'], a['DrawScale']
+            if not all(map(finite, (radius, diameter, scale))) or not .01 < radius < 10000 or not .08 <= diameter <= .32 or scale <= 0:
+                raise ValueError('Invalid native supply bounds/scale')
+            errors['actual_center'].append(distance(world(a, a['LocalCenter']), anchor))
+            errors['measured_center'].append(distance(a['MeasuredCenter'], anchor))
+            errors['radius_metres'].append(abs(radius*scale/units-diameter*.5))
+            local = a['LocalDisplayRotation']
+            if not isinstance(local, (list, tuple)) or len(local) != 3 or any(type(x) is not int for x in local):
+                raise ValueError('Missing local supply rotator')
+            for axis in AXES:
+                errors['orientation'].append(distance(rotate(axis, a['Rotation']), rotate(rotate(axis, local), r['Tracking.BodyRotation'])))
+        except (KeyError, TypeError, ValueError, IndexError, ZeroDivisionError, OverflowError) as error:
+            if len(issues) < 12:
+                issues.append(dict(uptime_ms=rec['row']['uptime_ms'], error=str(error)))
+    def bounded(name, limit, count=10):
+        values = errors[name]
+        return len(values) >= count and all(finite(x) and x < limit for x in values)
+    checks = dict(chest_supply_has_required_observations=counts['active'] >= 20 and counts['visible'] >= 10 and counts['hidden'] >= 10 and not issues,
+        chest_supply_owned_by_current_rig=counts['visible'] >= 10 and okay['ownership'],
+        chest_supply_uses_audited_native_asset=counts['visible'] >= 10 and okay['native_asset'],
+        chest_supply_visibility_matches_available_magazines=counts['visible'] >= 10 and counts['hidden'] >= 10 and okay['visibility'],
+        chest_interaction_anchor_matches_independent_body_geometry=bounded('manual_anchor', .005, 20),
+        actual_native_supply_center_matches_chest=bounded('actual_center', .005) and bounded('measured_center', .005),
+        actual_supply_rotation_matches_body_and_local_tilt=bounded('orientation', .002, 30),
+        actual_supply_scale_matches_configured_metres=bounded('radius_metres', .00001))
+    return checks, dict(counts=counts, missing=issues, discovery_gaps=discovery_gaps,
+        unknown_asset_samples=counts['discovery_gaps'],
+        errors={k:dict(samples=len(v), maximum=max(v) if v and all(map(finite, v)) else None) for k, v in errors.items()},
+        authored_anchor_metres=[.22, -.10, -.36], interaction_radius_metres=.16,
+        native_mesh='KillingFloorStatics.L85Ammo', comfort_tested=False)
+
+
 def analyze(controls, rows, fixture, weapon='single'):
     if weapon not in GUNS:
         raise ValueError('Unsupported reload UX weapon: '+weapon)
-    rifle = weapon == 'bullpup'; checks = {}; metrics = {}; notes = []
+    rifle = weapon in ('bullpup', 'scar'); checks = {}; metrics = {}; notes = []
     records, rejected = collect(rows, GUNS[weapon])
     sent = [c for c in controls if c.get('sent') is True]
-    ranges = {n:[c['uptime_ms'] for c in sent if c.get('phase') == n] for n in range(42)}
+    ranges = {n:[c['uptime_ms'] for c in sent if c.get('phase') == n] for n in range(61)}
     def phase(n, settle=150):
         times = ranges[n]
         return [p for p in records if times and min(times)+settle <= p['row']['uptime_ms'] <= max(times)]
@@ -246,18 +332,18 @@ def analyze(controls, rows, fixture, weapon='single'):
         return data[-1] if data else dict(m={}, r={}, g={}, v={})
     def field(n, key):
         return last(n)['m'].get(key)
-    checks['all_controller_phases_sent'] = all(len(ranges[n]) >= 3 for n in range(42))
+    checks['all_controller_phases_sent'] = all(len(ranges[n]) >= 3 for n in range(61))
     checks['no_Y_mode_toggle_sent'] = bool(sent) and all(c.get('left_secondary') is False for c in sent)
     checks['left_trigger_unused'] = bool(sent) and all(finite(c.get('left_trigger')) and c['left_trigger'] == 0 for c in sent)
     checks['dominant_grip_unused_after_draw'] = bool(sent) and all(finite(c.get('right_squeeze')) and c['right_squeeze'] == 0 for c in sent if c.get('phase', -1) >= 2)
-    for n in (4, 37, 39):
+    for n in (4, 37, 39, 56):
         commands = [c for c in sent if c.get('phase') == n]
         checks['release_button_sent_phase_'+str(n)] = len(commands) >= 3 and all(c.get('right_secondary') is True for c in commands)
-    for n in (15, 16, 20, 21, 22, 26, 27, 29, 31, 32, 33):
+    for n in (15, 16, 20, 21, 22, 26, 27, 29, 31, 32, 33, 42, 43, 51, 52):
         commands = [c for c in sent if c.get('phase') == n]
         checks['grip_only_action_sent_phase_'+str(n)] = len(commands) >= 3 and all(finite(c.get('left_squeeze')) and c['left_squeeze'] > .7 and c.get('left_trigger') == c.get('right_squeeze') == 0 for c in commands)
     main = [p for p in records if ranges[2] and p['row']['uptime_ms'] >= min(ranges[2])+150
-            and ranges[41] and p['row']['uptime_ms'] <= max(ranges[41])]
+            and ranges[60] and p['row']['uptime_ms'] <= max(ranges[60])]
     for p in main:
         p['input_phase'] = max((n for n, times in ranges.items()
             if times and min(times) <= p['row']['uptime_ms']), default=None)
@@ -333,6 +419,87 @@ def analyze(controls, rows, fixture, weapon='single'):
     checks['discarded_magazine_has_visible_measured_motion'] = len(fall) >= 3 and all(vector(x) for x in positions) and finite(travel) and travel > .01*min((p['r'].get('Tracking.UnitsPerMetre', math.inf) for p in fall), default=math.inf)
     ma('discarded_visual_expires', 41, lambda m:m['bEjectedVisible'] is False)
     ma('exactly_one_uncaught_visual_and_two_releases', 41, lambda m:m['EjectedVisualCount'] == field(2, 'EjectedVisualCount')+1 and m['EjectCount'] == field(2, 'EjectCount')+2 and m['DropCount'] == field(2, 'DropCount'))
+    # The original trial ends at41; its exact drop/shot assertions above keep
+    # that baseline. These additional stages exercise the visible chest supply
+    # after an uncaught ejection and manipulation with an empty magazine well.
+    ma('partial_magazine_stowed_at_chest', 9, lambda m:m['ChestStowCount'] == field(2, 'ChestStowCount')+1)
+    ma('first_fresh_magazine_grab_uses_chest', 10, lambda m:m['ChestGrabCount'] == field(2, 'ChestGrabCount')+1)
+    for n in (8, 9, 10, 46, 47, 57, 59):
+        at('controller_reaches_independent_chest_phase_'+str(n), n,
+           lambda p:distance(p['r']['Tracking.LeftPosition'], chest_anchor(p['r'])) < .005)
+    if rifle:
+        for n in (42, 43, 44, 45, 46):
+            ma('empty_well_rifle_gesture_cannot_change_ledger_phase_'+str(n), n,
+               lambda m:all(m[k] == field(41, k) for k in ('HeldMagazine', 'InsertedMagazine', 'OwnedRounds', 'SpentRounds',
+                    'DiscardedRounds', 'LoadedRounds', 'bChambered', 'RackCount', 'SeatCount', 'Revision')))
+    else:
+        ma('empty_well_action_can_be_grabbed', 42, lambda m:m['InsertedMagazine'] == m['HeldMagazine'] == 0
+           and m['bSlideHeld'] and m['SlideTravel'] <= .1 and m['bChambered'] == field(41, 'bChambered'))
+        ma('empty_well_full_pull_extracts_only_chamber', 43, lambda m:m['InsertedMagazine'] == m['HeldMagazine'] == 0
+           and m['bSlideHeld'] and m['SlideTravel'] > .9 and m['LoadedRounds'] == 0 and not m['bChambered']
+           and m['DiscardedRounds'] == field(41, 'DiscardedRounds')+int(field(41, 'bChambered'))
+           and m['OwnedRounds'] == field(41, 'OwnedRounds')-int(field(41, 'bChambered'))
+           and m['SpentRounds'] == field(41, 'SpentRounds') and m['RackCount'] == field(41, 'RackCount'))
+        ma('empty_well_return_cannot_feed', 44, lambda m:m['InsertedMagazine'] == m['HeldMagazine'] == 0
+           and not m['bSlideHeld'] and m['SlideTravel'] <= .1 and not m['bChambered'] and m['LoadedRounds'] == 0
+           and m['RackCount'] == field(41, 'RackCount')+1
+           and all(m[k] == field(43, k) for k in ('OwnedRounds', 'SpentRounds', 'DiscardedRounds', 'SeatCount')))
+        at('empty_well_trigger_is_dry', 45, lambda p:p['m']['LoadedRounds'] == 0 and not p['m']['bChambered']
+           and p['m']['SpentRounds'] == field(44, 'SpentRounds') and p['r']['TraceCount'] == last(44)['r']['TraceCount'])
+    ma('empty_well_chest_is_ready', 46, lambda m:m['HeldMagazine'] == m['InsertedMagazine'] == 0
+       and not m['bSlideHeld'] and m['OwnedRounds'] > m['LoadedRounds']
+       and all(m[k] == field(44, k) for k in ('OwnedRounds', 'SpentRounds', 'DiscardedRounds', 'LoadedRounds', 'bChambered')))
+    ma('uncaught_reload_gets_fresh_chest_magazine', 47, lambda m:m['InsertedMagazine'] == 0 and m['HeldMagazine'] > 0
+       and m['GrabCount'] == field(46, 'GrabCount')+1 and m['ChestGrabCount'] == field(46, 'ChestGrabCount')+1
+       and all(m[k] == field(46, k) for k in ('OwnedRounds', 'SpentRounds', 'DiscardedRounds', 'LoadedRounds', 'bChambered', 'EjectCount', 'DropCount', 'SeatCount')))
+    chest_id = field(47, 'HeldMagazine')
+    ma('chest_magazine_seats_with_expected_feed_policy', 49, lambda m:m['InsertedMagazine'] == chest_id and m['HeldMagazine'] == 0
+       and m['SeatCount'] == field(47, 'SeatCount')+1 and m['bChambered'] is rifle
+       and m['LoadedRounds'] > int(m['bChambered'])
+       and all(m[k] == field(47, k) for k in ('OwnedRounds', 'SpentRounds', 'DiscardedRounds', 'DropCount', 'ChestGrabCount')))
+    checks['chest_magazine_seats_before_grip_release'] = any(p['m'].get('InsertedMagazine') == chest_id
+        and p['m'].get('SeatCount') == field(47, 'SeatCount')+1 and p['r'].get('Tracking.LeftGrip', 0) > .7 for p in phase(48, 0))
+    if not rifle:
+        ma('chest_seated_pistol_stays_dry_before_action', 51, lambda m:m['bSlideHeld'] and not m['bChambered']
+           and m['SpentRounds'] == field(49, 'SpentRounds') and m['LoadedRounds'] == field(49, 'LoadedRounds'))
+        ma('chest_reload_full_pull_awaits_return', 52, lambda m:m['bSlideHeld'] and m['SlideTravel'] > .9
+           and not m['bChambered'] and m['RackCount'] == field(44, 'RackCount')
+           and m['DiscardedRounds'] == field(49, 'DiscardedRounds'))
+        ma('chest_reload_return_feeds_once', 53, lambda m:not m['bSlideHeld'] and m['SlideTravel'] <= .1 and m['bChambered']
+           and m['RackCount'] == field(44, 'RackCount')+1 and m['LoadedRounds'] == field(49, 'LoadedRounds')
+           and m['DiscardedRounds'] == field(49, 'DiscardedRounds'))
+    for before, after, label, should_fire in ((49, 51, 'chest_seated', rifle), (53, 55, 'chest_completed', True)):
+        a, b = last(before), last(after)
+        try:
+            spent = b['m']['SpentRounds']-a['m']['SpentRounds']
+            trace = b['r']['TraceCount']-a['r']['TraceCount']
+            attempts = b['g']['VRFireAttempts']-a['g']['VRFireAttempts']
+            checks['actual_stock_fire_'+label] = coverage(phase(before)) and coverage(phase(after)) and spent == trace and attempts >= trace and (spent > 0 if should_fire else spent == 0)
+        except (KeyError, TypeError):
+            checks['actual_stock_fire_'+label] = False
+    ma('second_uncaught_eject_discards_exact_magazine_rounds', 56, lambda m:m['InsertedMagazine'] == m['HeldMagazine'] == 0
+       and m['EjectCount'] == field(55, 'EjectCount')+1 and m['EjectedVisualCount'] == field(55, 'EjectedVisualCount')+1
+       and m['DiscardedRounds']-field(55, 'DiscardedRounds') == field(55, 'LoadedRounds')-int(field(55, 'bChambered'))
+       and m['OwnedRounds'] == field(55, 'OwnedRounds')-(m['DiscardedRounds']-field(55, 'DiscardedRounds'))
+       and m['bChambered'] == field(55, 'bChambered') and m['SpentRounds'] == field(55, 'SpentRounds'))
+    ma('second_chest_grab_needs_no_catch', 57, lambda m:m['HeldMagazine'] > 0 and m['InsertedMagazine'] == 0
+       and m['ChestGrabCount'] == field(56, 'ChestGrabCount')+1 and m['GrabCount'] == field(56, 'GrabCount')+1
+       and all(m[k] == field(56, k) for k in ('OwnedRounds', 'SpentRounds', 'DiscardedRounds', 'SeatCount', 'DropCount', 'LoadedRounds', 'bChambered')))
+    at('lost_offhand_keeps_chest_magazine_without_seating', 58, lambda p:(p['r']['Tracking.Flags'] & 3) == 2
+       and p['m']['bRecoveryPending'] is True and p['m']['HeldInterruptions'] == field(57, 'HeldInterruptions')+1
+       and all(p['m'][k] == field(57, k) for k in ('HeldMagazine', 'InsertedMagazine', 'OwnedRounds', 'SpentRounds', 'DiscardedRounds', 'SeatCount', 'DropCount', 'LoadedRounds', 'bChambered'))
+       and p['objects'][pointer(p['r'], 'LeftHand')]['values']['bHidden'] is True)
+    ma('recovered_open_hand_stows_without_drop_or_feed', 59, lambda m:m['HeldMagazine'] == m['InsertedMagazine'] == 0
+       and m['bRecoveryPending'] is False and m['RecoveryStowCount'] == field(57, 'RecoveryStowCount')+1
+       and m['StowCount'] == field(57, 'StowCount')+1
+       and all(m[k] == field(57, k) for k in ('OwnedRounds', 'SpentRounds', 'DiscardedRounds', 'SeatCount', 'DropCount', 'ChestStowCount', 'ChestGrabCount', 'LoadedRounds', 'bChambered')))
+    ma('recovery_stow_does_not_repeat', 60, lambda m:all(m[k] == field(59, k) for k in ('HeldMagazine', 'InsertedMagazine',
+       'OwnedRounds', 'SpentRounds', 'DiscardedRounds', 'SeatCount', 'DropCount', 'StowCount', 'RecoveryStowCount', 'ChestStowCount', 'ChestGrabCount', 'LoadedRounds', 'bChambered', 'Revision')))
+    try:
+        a, b = last(2), last(60)
+        checks['extended_stock_shots_match_conserved_spent'] = coverage(phase(60)) and b['r']['TraceCount']-a['r']['TraceCount'] == b['m']['SpentRounds']-a['m']['SpentRounds'] > 0 and b['g']['VRFireAttempts']-a['g']['VRFireAttempts'] >= b['m']['SpentRounds']-a['m']['SpentRounds']
+    except (KeyError, TypeError):
+        checks['extended_stock_shots_match_conserved_spent'] = False
     vals = fixture.get('values')
     checks['live_fixture_provenance'] = (fixture.get('protocol') == 'kfvr-reload-v2' and fixture.get('weapon') == weapon and fixture.get('read_only') is True and fixture.get('generated_from_live_assets') is True and type(fixture.get('source_pid')) is int and fixture['source_pid'] > 0 and isinstance(vals, list) and len(vals) == 16 and all(map(finite, vals)))
     try:
@@ -349,10 +516,11 @@ def analyze(controls, rows, fixture, weapon='single'):
     except (KeyError, TypeError, ValueError, ZeroDivisionError):
         checks['fixture_matches_current_owned_weapon'] = False
     geo_checks, geo = geometry(main, rifle, native); checks.update(geo_checks)
+    supply_checks, supply = supply_geometry(main); checks.update(supply_checks)
     from validate_reload_trial import capacity_evidence
     capacity_checks, capacity = capacity_evidence(rows, GUNS[weapon]); checks.update(capacity_checks)
     quiet = [p for n in (2, 3, 5, 7, 9, 10, 12, 14, 17, 19, 20, 21, 23, 25,
-                         26, 27, 29, 30, 31, 32, 33, 34, 36, 38, 40, 41) for p in phase(n)]
+                         26, 27, 29, 30, 31, 32, 33, 34, 36, 38, 40, 41, 42, 43, 44, 46, 47, 49, 51, 52, 53, 55, 56, 57, 59, 60) for p in phase(n)]
     checks['settled_stock_total_matches_owned_rounds'] = len(quiet) >= 20 and all(p['g'].get('VRTotalAmmo') == p['m'].get('OwnedRounds') for p in quiet)
     other = {}
     for row in rows:
@@ -367,7 +535,7 @@ def analyze(controls, rows, fixture, weapon='single'):
     final_rigs = [o['values'] for o in rows[-1].get('objects', []) if o['type'] == 'KFVRWeaponRig' and not o['values'].get('bDeleteMe')] if rows else []
     checks['final_input_released'] = len(final_rigs) == 1 and final_rigs[0].get('bTracking') is False and final_rigs[0].get('bFiring') is False
     return dict(passed=all(checks.values()), weapon=weapon, checks=checks, phase_coverage=metrics,
-                geometry=geo, capacity_evidence=capacity, coherent_owned_samples=len(main), rejected_ownership_samples=rejected[:12],
+                geometry=geo, chest_supply=supply, capacity_evidence=capacity, coherent_owned_samples=len(main), rejected_ownership_samples=rejected[:12],
                 failed_sample_details=notes, initial_ammo_budget=budgets[0] if budgets else None,
                 discarded_magazine_travel_world_units=travel if finite(travel) else None,
                 live_game=True, synthetic_controllers=True, headset_presented=False,
@@ -378,7 +546,7 @@ def validate(folder, weapon='single'):
     folder = Path(folder)
     controls = [json.loads(s) for s in (folder/'controls.jsonl').read_text(encoding='utf-8').splitlines()]
     rows = [json.loads(s) for s in (folder/'weapon-observations.jsonl').read_text(encoding='utf-8').splitlines()]
-    fixture = json.loads((folder/('rifle-reload-fixture.json' if weapon == 'bullpup' else 'reload-fixture.json')).read_text(encoding='utf-8'))
+    fixture = json.loads((folder/('rifle-reload-fixture.json' if weapon in ('bullpup', 'scar') else 'reload-fixture.json')).read_text(encoding='utf-8'))
     report = analyze(controls, rows, fixture, weapon)
     (folder/'reload-ux-validation.json').write_text(json.dumps(report, indent=2, allow_nan=False)+'\n', encoding='utf-8')
     if not report['passed']:

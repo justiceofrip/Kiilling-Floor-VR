@@ -14,6 +14,7 @@ param(
  [switch]$GrenadeTest,
  [switch]$DualTest,
  [switch]$MK23Test,
+ [switch]$SCARTest,
  [switch]$ReloadTimeTest,
  [switch]$PhysicalReloads
 )
@@ -25,6 +26,7 @@ if($ArmTest -and !$Unattended){throw 'ArmTest requires explicit Unattended mode.
 if($DoorTest -and !$Unattended){throw 'DoorTest requires explicit Unattended mode.'}
 if($HealTest -and !$Unattended){throw 'HealTest requires explicit Unattended mode.'}
 if($DualTest -and !$Unattended){throw 'DualTest requires explicit Unattended mode.'}
+if($SCARTest -and !$Unattended){throw 'SCARTest requires explicit Unattended mode.'}
 if($MK23Test -and !$Unattended){throw 'MK23Test requires explicit Unattended mode.'}
 if($ReloadTimeTest -and !$Unattended){throw 'ReloadTimeTest requires explicit Unattended mode.'}
 if($PhysicalReloads -and !$Unattended){throw 'PhysicalReloads requires explicit Unattended mode.'}
@@ -47,6 +49,7 @@ if($TraderTest){$kfUrl+='?KFVRTraderTest=1'}
 if($GrenadeTest){$kfUrl+='?KFVRGrenadeTest=1'}
 if($DualTest){$kfUrl+='?KFVRDualTest=1'}
 if($MK23Test){$kfUrl+='?KFVRMK23Test=1'}
+if($SCARTest){$kfUrl+='?KFVRSCARTest=1'}
 if($ReloadTimeTest){$kfUrl+='?KFVRReloadTimeTest=1'}
 if($PhysicalReloads){$kfUrl+='?KFVRPhysicalReloads=1'}
 $kfSteam=(Get-ItemProperty HKCU:\Software\Valve\Steam).SteamExe

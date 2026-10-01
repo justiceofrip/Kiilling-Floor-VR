@@ -2,7 +2,7 @@
 
 96 KFWeapon-derived classes, including abstract bases, skins, story tools and legacy variants. This is not a count of trader weapons.
 
-Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm, dual 9mm, Deagle, Bullpup, knife, syringe, welder and stock frag grenade interactions with inventory holsters. Single pistols support physical magazines/slides, dual 9mm supports physical belt reloads, the Bullpup has a support-hand grip, and the knife uses physical swings. Other families remain inactive.
+Class names and inheritance come from the installed packages. Numerical defaults are read from loaded class-default buffers; they are not current perk-modified statistics. Candidate mechanical families need model/animation review before activation. This coverage ledger does not enable profiles. Standalone adapters enable 9mm, dual 9mm, Deagle, Bullpup, SCAR, knife, syringe, welder and stock frag grenade interactions with inventory holsters. Single pistols support physical magazines/slides, dual 9mm supports physical belt reloads, Bullpup and SCAR have support-hand grips, and the knife uses physical swings. Other families remain inactive.
 
 | Class | Candidate family | Capacity | Reload seconds | Notes |
 | --- | --- | ---: | ---: | --- |
@@ -42,7 +42,7 @@ Class names and inheritance come from the installed packages. Numerical defaults
 | KFMod.ZEDMKIIWeapon | EnergyWeapon | 30 | 1.899999976158142 | Pending interaction/asset validation |
 | KFMod.AA12AutoShotgun | MagazineFed | 20 | 3.132999897003174 | Pending interaction/asset validation |
 | KFMod.BenelliShotgun | TubeFedShotgun | 6 | 0.8999999761581421 | Pending interaction/asset validation |
-| KFMod.SCARMK17AssaultRifle | MagazineFed | 20 | 2.9660000801086426 | Pending interaction/asset validation |
+| KFMod.SCARMK17AssaultRifle | MagazineFed | 20 | 2.9660000801086426 | Tracked stock-derived adapter, native magazine insertion/grasp and shoulder support; SCARTest fixture; modeled handle/side-slap interaction deferred |
 | KFMod.Huskgun | ChargeWeapon | 1 | 0.009999999776482582 | Pending interaction/asset validation |
 | KFMod.SPSniperRifle | LeverAction | 10 | 2.865999937057495 | Pending interaction/asset validation |
 | KFMod.Dual44Magnum | DualRevolver | 12 | 4.466700077056885 | Pending interaction/asset validation |

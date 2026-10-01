@@ -75,6 +75,15 @@ function bool Drop()
     if (Held==0) return False;
     Discarded+=Rounds[Held-1]; Rounds[Held-1]=0; Held=0; Revision++; return True;
 }
+// Read-only supply preview. The visual never allocates a magazine or credits ammo.
+function int SupplyRounds()
+{
+    local int I,Best;
+    Best=Min(Capacity,Reserve);
+    for (I=0;I<MagazineCount;I++)
+        if (I+1!=Inserted && I+1!=Held) Best=Max(Best,Rounds[I]);
+    return Best;
+}
 function bool GrabBelt()
 {
     local int I,Best,Empty,Fresh;

@@ -37,6 +37,8 @@ var bool bReloadArmed, bReloadPrevious, bCycleArmed, bCyclePrevious;
 var KFVRWeaponVisual Visual;
 var KFVRHandVisual LeftHand, RightHand;
 var KFVRStatusDisplay StatusDisplay;
+var KFVRAmmoSupplyVisual AmmoSupply;
+var bool bAmmoSupplyFailed;
 var KFVRTraderPanel Trader;
 var KFVRGrenadeControl GrenadeControl;
 var bool bStatusFailed,bLeftHandFailed,bRightHandFailed;
@@ -266,7 +268,7 @@ function rotator SupportedRotation()
     local int PreviousGrabs;
     Result=Tracking.RightRotation;
     Down=Tracking.LeftGrip>0.7;
-    ValidSupport=KFVRTrackedBullpup(Gun)!=None && !bHolstered && (Tracking.Flags & 3)==3;
+    ValidSupport=class'KFVRWeaponProfile'.static.SupportsOffhand(Gun) && !bHolstered && (Tracking.Flags & 3)==3;
     if (ManualReload!=None) Reserved=ManualReload.ReservesOffhand();
     if (SupportGrip==None) SupportGrip=new class'KFVRSupportGripState';
     if (ValidSupport && !Reserved)
@@ -328,6 +330,7 @@ function ParkForTrader()
         if (KFVRTrackedKnife(InventoryWeapons[I])!=None) KFVRTrackedKnife(InventoryWeapons[I]).ResetMotion();
     }
     if (StatusDisplay!=None) StatusDisplay.HideDisplay();
+    if (AmmoSupply!=None) AmmoSupply.HideDisplay();
 }
 function ReleaseInput()
 {
@@ -354,6 +357,7 @@ function ReleaseInput()
     if (LeftHand!=None) LeftHand.bHidden=True;
     if (RightHand!=None) RightHand.bHidden=True;
     if (StatusDisplay!=None) StatusDisplay.HideDisplay();
+    if (AmmoSupply!=None) AmmoSupply.HideDisplay();
 }
 function int HandGripRole(bool Left)
 {
@@ -390,10 +394,29 @@ function EnsureHandVisuals()
 function Tick(float Delta)
 {
     UpdateRig(Delta);
+    UpdateAmmoSupply();
     // Also synchronize hides after tracking loss, switching or rig release.
     if (LeftHand!=None) LeftHand.bActionAttached=False;
     if (bTracking) UpdateHands();
     PresentationSerial=Tracking.Serial;
+}
+// One presentation per rig; the magazine ledger alone owns supply and ammo.
+function UpdateAmmoSupply()
+{
+    if (!bTracking || bHolstered || (Tracking.Flags & 3)!=3 || Gun==None || Visual==None
+        || Visual.bHidden || (Trader!=None && Trader.bOpen) || ManualReload==None
+        || ManualReload.Gun!=Gun || ManualReload.Ammo==None || ManualReload.bSlideHeld
+        || ManualReload.Ammo.Inserted>0 || ManualReload.Ammo.Held>0
+        || ManualReload.Ammo.SupplyRounds()<=0)
+    { if (AmmoSupply!=None) AmmoSupply.HideDisplay(); return; }
+    if (AmmoSupply==None && !bAmmoSupplyFailed)
+    {
+        AmmoSupply=Spawn(class'KFVRAmmoSupplyVisual',self);
+        if (AmmoSupply==None) bAmmoSupplyFailed=True;
+        else if (!AmmoSupply.Initialize()) { AmmoSupply.Destroy(); AmmoSupply=None; bAmmoSupplyFailed=True; }
+    }
+    if (AmmoSupply!=None)
+        AmmoSupply.PoseAt(ManualReload.CurrentSupplyLocation(),Tracking.BodyRotation,Tracking.UnitsPerMetre);
 }
 function UpdateHands()
 {
@@ -599,6 +622,7 @@ function Destroyed()
     ReleaseInput();
     if (MeleeTarget!=None) MeleeTarget.Destroy();
     if (StatusDisplay!=None) StatusDisplay.Destroy();
+    if (AmmoSupply!=None) AmmoSupply.Destroy();
     if (Trader!=None) Trader.Destroy();
     if (GrenadeControl!=None) GrenadeControl.Destroy();
     for (I=0;I<InventoryCount;I++)

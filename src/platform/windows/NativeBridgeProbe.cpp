@@ -92,7 +92,7 @@ int wmain(int argc,wchar_t** argv){try{
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
  const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,96> captured{};std::array<unsigned,96> phasePairs{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency,sourceStart;QueryPerformanceFrequency(&frequency);QueryPerformanceCounter(&sourceStart);
- const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reloadUx?42000:reloadAlignment?37000:rifleReload?83000:reload?62000:inventory?54700:7500;
+ const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reloadUx?62000:reloadAlignment?37000:rifleReload?83000:reload?62000:inventory?54700:7500;
  for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:rifleReload?120000:reload||dual||dualBelt||heal||weld||arms||hands||hud?90000:inventory?90000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
@@ -122,7 +122,8 @@ int wmain(int argc,wchar_t** argv){try{
     phase=reloadElapsed<10000?51u+unsigned(reloadElapsed/1000):std::min(50u,unsigned((reloadElapsed-10000)/1000));
     if(rifleReload&&elapsed>=62000)phase=61u+std::min(20u,unsigned((elapsed-62000)/1000));
    }
-   if(reloadUx)phase=std::min(41u,unsigned(elapsed/1000));
+   // Hold neutral phase40 for two seconds to observe unchanged post-eject state.
+   if(reloadUx)phase=std::min(60u,unsigned((elapsed<41000?elapsed:elapsed-1000)/1000));
    if(hands)phase=std::min(17u,unsigned(elapsed/2000));
    if(hud)phase=std::min(17u,unsigned(elapsed/1500));
    if(cadence)phase=0;
@@ -291,9 +292,9 @@ int wmain(int argc,wchar_t** argv){try{
      for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.2f,-.25f,-.5f};hand.triggerTouchActive=hand.thumbTouchActive=true;}
      if(phase==0||phase==1){rh.gripPose.position=rifleReload?math::Vec3{.22f,-.15f,.18f}:math::Vec3{leftPistolReload?-.22f:.22f,-.62f,.05f};rh.squeeze=phase==1?1.f:0.f;}
      if(phase==3||phase==4){lh.squeeze=1;lh.gripPose.position=ReloadHand(reloadFixture,rh.gripPose,lh.gripPose.orientation,0);}
-     if(phase==4||phase==37||phase==39)rh.secondary=true;
+     if(phase==4||phase==37||phase==39||phase==56)rh.secondary=true;
      if(phase>=5&&phase<=7){lh.squeeze=1;lh.gripPose.position={-.1f,-.25f,-.5f};lh.gripPose.orientation={0,0,.3826834f,.9238795f};}
-     if(phase==8||phase==9||phase==10){lh.gripPose.position={-.2f,-.6f,-.12f};lh.squeeze=phase==9?0.f:1.f;}
+     if(phase==8||phase==9||phase==10){lh.gripPose.position={-.10f,-.36f,-.22f};lh.squeeze=phase==9?0.f:1.f;}
      if(phase==11||phase==12){lh.squeeze=phase==11?1.f:0.f;const float push=-.10f*(1-std::min(1.f,float(elapsed%1000)/800.f));lh.gripPose.position=ReloadHand(reloadFixture,rh.gripPose,lh.gripPose.orientation,phase==11?push:0.f);}
      if(phase==6||phase==7||phase==13||phase==18||phase==22||phase==24||phase==35)rh.trigger=(!rifleReload||elapsed%1000<200)?1.f:0.f;
      // Rotate the weapon through the second action sequence. All grasp and
@@ -311,6 +312,23 @@ int wmain(int argc,wchar_t** argv){try{
      if(!rifleReload&&phase==24&&elapsed%1000>=50){
       lh.squeeze=1;lh.gripPose.position=ActionHand(reloadFixture,rh.gripPose,0);
      }
+     // Empty-well action remains usable, then acquire a fresh chest magazine
+     // without catching the discarded one. A later tracking loss must stow
+     // the held identity rather than manufacture a seated magazine.
+     if((phase>=42&&phase<=44)||(phase>=51&&phase<=53)){
+      lh.squeeze=(phase==44||phase==53)?0.f:1.f;
+      lh.gripPose.position=ActionHand(reloadFixture,rh.gripPose,(phase==43||phase==52)?reloadFixture.actionTravel:0.f);
+     }
+     if(phase==46||phase==47||phase==57||phase==58||phase==59){
+      lh.gripPose.position={-.10f,-.36f,-.22f};lh.squeeze=(phase==46||phase==59)?0.f:1.f;
+      if(phase==58)lh.gripValid=lh.aimValid=false;
+     }
+     if(phase==48||phase==49){
+      lh.squeeze=phase==48?1.f:0.f;
+      const float push=-.10f*(1-std::min(1.f,float(elapsed%1000)/400.f));
+      lh.gripPose.position=ReloadHand(reloadFixture,rh.gripPose,lh.gripPose.orientation,phase==48?push:0.f);
+     }
+     if((phase==45&&!rifleReload)||phase==50||phase==54)rh.trigger=(!rifleReload||elapsed%1000<200)?1.f:0.f;
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
     if(melee){
@@ -518,6 +536,7 @@ int wmain(int argc,wchar_t** argv){try{
   }
   runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=0x200000001ULL;tracking.predictedNs=sampleNs;tracking.focused=tracking.headValid=true;
   if(reloadInsertion&&!reloadClock&&capturePhase>=19&&capturePhase<=50)tracking.spaceGeneration++;
+  if(reloadUx&&(capturePhase==9||capturePhase==46||capturePhase==60))tracking.head.orientation={-.537300f,0,0,.843391f};
   if(dualBelt&&(capturePhase==8||capturePhase==9||capturePhase==24))tracking.head.orientation={-.537300f,0,0,.843391f};
   if(arms&&capturePhase==6)tracking.head.orientation={-.537300f,0,0,.843391f};
   if(arms&&capturePhase==4)tracking.head.orientation={.382683f,0,0,.923880f};

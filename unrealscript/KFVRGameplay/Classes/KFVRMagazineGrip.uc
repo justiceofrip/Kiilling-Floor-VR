@@ -24,7 +24,7 @@ simulated function bool InitializeMagazine(KFVRWeaponVisual Source)
     BoneRefresh(); ReloadMagazine=GetBoneCoords(Source.MagazineBone);
     P=GetBoneCoords(class'KFVRHandPoseMath'.static.SourceBone(True,0));
     SourcePalmDistance=VSize(P.Origin-ReloadMagazine.Origin);
-    if (SampleSequence!=W.ReloadAnim || Abs(SampleFrame-SampleMarker)>0.01 || SourcePalmDistance<5 || SourcePalmDistance>45) return False;
+    if (SampleSequence!=W.ReloadAnim || Abs(SampleFrame-SampleMarker)>0.01 || SourcePalmDistance<5 || SourcePalmDistance>class'KFVRWeaponProfile'.static.MagazineGraspLimit(W)*Source.ModelUnitsPerMetre) return False;
     Rest.XAxis=Source.MagazineX; Rest.YAxis=Source.MagazineY; Rest.ZAxis=Source.MagazineZ;
     for (I=0;I<16;I++)
     {

@@ -1,7 +1,7 @@
 // Standalone-only development entry point. No player config or original package edits.
 class KFVRDevMutator extends Mutator;
 var KFVRWeaponRig Rig;
-var bool bUnattended,bDualTest,bMK23Test;
+var bool bUnattended,bDualTest,bMK23Test,bSCARTest;
 var Pawn TestPawn;
 var KFVRDoorTest DoorTest;
 var KFVRTraderTest TraderTest;
@@ -14,6 +14,7 @@ function PostBeginPlay()
     bUnattended=InStr(Caps(Level.GetLocalURL()),"KFVRUNATTENDED=1")>=0;
     bDualTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRDUALTEST=1")>=0;
     bMK23Test=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRMK23TEST=1")>=0;
+    bSCARTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRSCARTEST=1")>=0;
     SetTimer(0.5,True);
 }
 function class<KFWeapon> Replacement(KFWeapon W)
@@ -25,6 +26,7 @@ function class<KFWeapon> Replacement(KFWeapon W)
     if (W.Class==class'Single') return class'KFVRTrackedSingle';
     if (W.Class==class'Deagle') return class'KFVRTrackedDeagle';
     if (bMK23Test && W.Class==class'MK23Pistol') return class'KFVRTrackedMK23';
+    if (W.Class==class'SCARMK17AssaultRifle') return class'KFVRTrackedSCAR';
     if (W.Class==class'Bullpup') return class'KFVRTrackedBullpup';
     return None;
 }
@@ -45,6 +47,8 @@ function bool AttachRig(KFWeapon W)
     { KFVRTrackedMK23(W).VRRig=Rig; Rig.RegisterWeapon(W,1); return True; }
     if (KFVRTrackedDeagle(W)!=None)
     { KFVRTrackedDeagle(W).VRRig=Rig; Rig.RegisterWeapon(W,1); return True; }
+    if (KFVRTrackedSCAR(W)!=None)
+    { KFVRTrackedSCAR(W).VRRig=Rig; Rig.RegisterWeapon(W,2); return True; }
     if (KFVRTrackedBullpup(W)!=None)
     { KFVRTrackedBullpup(W).VRRig=Rig; Rig.RegisterWeapon(W,2); return True; }
     return False;
@@ -131,7 +135,9 @@ function Timer()
             if (bMK23Test) NewGun=Spawn(class'MK23Pistol',PC.Pawn);
             else NewGun=Spawn(class'Deagle',PC.Pawn);
             if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
-            NewGun=Spawn(class'Bullpup',PC.Pawn); if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
+            if (bSCARTest) NewGun=Spawn(class'SCARMK17AssaultRifle',PC.Pawn);
+            else NewGun=Spawn(class'Bullpup',PC.Pawn);
+            if (NewGun!=None) NewGun.GiveTo(PC.Pawn);
             if (Previous!=None) { PC.Pawn.PendingWeapon=Previous; PC.Pawn.ChangedWeapon(); }
         }
         return;

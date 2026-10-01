@@ -18,7 +18,8 @@ var int InsertionSpeedRejects,InsertionGapRejects;
 var bool bInsertionApproached;
 var bool bLeftArmed,bLeftPrevious,bSlideHeld,bRecoveryPending;
 var int HeldInterruptions,RecoveryStowCount;
-var vector MagWell,SlideLocation,BeltLocation,MagazineWorld,MagazineTarget;
+var vector MagWell,SlideLocation,BeltLocation,SupplyLocation,MagazineWorld,MagazineTarget;
+var int ChestGrabCount,ChestStowCount;
 var float MagazineError,SlideTravel,MagazineDirectionDot,MagazineAlignment;
 var int EjectCount,GrabCount,SeatCount,StowCount,DropCount,RackCount;
 var int LoadedRounds,OwnedRounds,SpentRounds,DiscardedRounds,HeldMagazine,InsertedMagazine,Revision;
@@ -126,7 +127,7 @@ function UpdateEjectedVisual(float Delta)
 }
 function bool ActionInReach()
 {
-    return Rig!=None && Ammo!=None && Ammo.Held==0 && Ammo.Inserted>0
+    return Rig!=None && Ammo!=None && Ammo.Held==0
         && (Rig.Tracking.Flags & 3)==3 && (Rig.Tracking.Flags & 32)==0
         && Rig.Visual!=None && Rig.Visual.ManualActionReady()
         && VSize(Rig.Tracking.LeftPosition-Rig.Visual.ManualActionPoint(Ammo.Travel))<0.08*Rig.Tracking.UnitsPerMetre;
@@ -142,6 +143,17 @@ function UpdateActionPalm()
     if (!bSlideHeld) return;
     ActionPalmWorld=Rig.Visual.ManualActionPoint(Ammo.Travel);
     ActionPalmRotation=OrthoRotation(ActionPalmX>>Rig.Visual.Rotation,ActionPalmY>>Rig.Visual.Rotation,ActionPalmZ>>Rig.Visual.Rotation);
+}
+// Chest is the visible primary supply. Keep the old belt reach as a secondary
+// stow/supply zone for existing users and isolated legacy diagnostics.
+function vector CurrentSupplyLocation()
+{
+    return class'KFVRAmmoSupplyState'.static.ChestPosition(Rig.Tracking.HeadPosition,
+        Rig.Tracking.BodyRotation,Rig.Tracking.UnitsPerMetre);
+}
+function bool NearSupply(vector Point)
+{
+    return VSize(Point-CurrentSupplyLocation())<0.16*Rig.Tracking.UnitsPerMetre;
 }
 // Current body-space belt position is shared by intent reservation and acquisition.
 function vector CurrentBeltLocation()
@@ -159,7 +171,7 @@ function bool ReservesOffhand()
     if (Ammo.Held>0 || bSlideHeld || (Rig.Tracking.Flags & 32)!=0) return True;
     if (bLeftArmed && Rig.Tracking.LeftGrip>0.7 && !bLeftPrevious && ActionInReach()) return True;
     return bLeftArmed && Rig.Tracking.LeftGrip>0.7 && !bLeftPrevious && Ammo.Inserted==0
-        && VSize(Rig.Tracking.LeftPosition-CurrentBeltLocation())<0.18*Rig.Tracking.UnitsPerMetre;
+        && (NearSupply(Rig.Tracking.LeftPosition) || VSize(Rig.Tracking.LeftPosition-CurrentBeltLocation())<0.18*Rig.Tracking.UnitsPerMetre);
 }
 // Count a complete installed action return whether the player releases the knob
 // or guides it forward while still gripping it. Cancellation never calls here.
@@ -173,16 +185,17 @@ function MoveAction(float Travel)
 function Update(float Delta)
 {
     local vector Relative;
-    local bool Down,NearBelt;
+    local bool Down,NearBelt,AtSupply;
     local coords Part;
     if (Rig.Gun!=Gun || !Rig.Active() || Rig.bHolstered || (Rig.Tracking.Flags & 3)!=3)
     { Suspend(); return; }
     Reconcile();
-    BeltLocation=CurrentBeltLocation();
+    BeltLocation=CurrentBeltLocation(); SupplyLocation=CurrentSupplyLocation();
     MagWell=Rig.Visual.MagazineRest(); SlideLocation=vect(0,0,0);
     if (Rig.Visual.ManualActionReady()) SlideLocation=Rig.Visual.ManualActionPoint(Ammo.Travel);
     Down=Rig.Tracking.LeftGrip>0.7;
     NearBelt=VSize(Rig.Tracking.LeftPosition-BeltLocation)<0.18*Rig.Tracking.UnitsPerMetre;
+    AtSupply=NearSupply(Rig.Tracking.LeftPosition);
     MagazineTarget=Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation);
     MagazineAlignment=Rig.Visual.MagazineAlignmentCos(Rig.Tracking.LeftRotation);
     // Current supported firearm model axes coincide with controller aim.
@@ -207,7 +220,8 @@ function Update(float Delta)
                     Rig.Visual.ActionPullAxis,Rig.Visual.ManualActionTravel(),Ammo.Travel);
             if (bSlideHeld) CaptureActionPalm();
         }
-        else if (NearBelt && Ammo.GrabBelt()) { GrabCount++; Rig.PulseLeft(0.25,18); }
+        else if ((AtSupply || NearBelt) && Ammo.GrabBelt())
+        { GrabCount++; if (AtSupply) ChestGrabCount++; Rig.PulseLeft(0.25,18); }
     }
     // Geometry supplies a one-shot event; the ledger alone transfers ownership.
     // A push can seat while grip stays held, without a release or animation timer.
@@ -238,7 +252,8 @@ function Update(float Delta)
     }
     else if (bLeftArmed && !Down && bLeftPrevious && Ammo.Held>0)
     {
-        if (NearBelt && Ammo.Stow()) { StowCount++; Rig.PulseLeft(0.2,15); }
+        if ((AtSupply || NearBelt) && Ammo.Stow())
+        { StowCount++; if (AtSupply) ChestStowCount++; Rig.PulseLeft(0.2,15); }
         else if (Ammo.Drop()) { DropCount++; BeginEjectedVisual(MagazineTarget,Rig.Tracking.LeftRotation); }
     }
     bLeftPrevious=Down;

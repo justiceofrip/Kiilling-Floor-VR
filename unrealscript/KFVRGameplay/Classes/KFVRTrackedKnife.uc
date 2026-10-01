@@ -2,8 +2,13 @@ class KFVRTrackedKnife extends Knife;
 var KFVRWeaponRig VRRig;
 var KFVRMeleeState Motion;
 var int SwingCount,HitCount,WorldHitCount,RejectedJumps;
+var int LastHitSwing,SwingSoundCount,ContactTraceCount,BlockedContacts,CancelledWindows;
+var int LastDamage,StockMeleeDamage;
+var bool bLastBackstab,bSwingSoundReady;
+var float StockFireSpeed,StockFireInterval;
+var float BladeLengthMetres,ContactRadiusMetres;
 var float SwingSpeed,WindowUntil;
-var vector BladeTip,LastSweepFrom,LastSweepTo,LastImpact;
+var vector BladeTip,BladeBase,LastSweepFrom,LastSweepTo,LastSweepBaseFrom,LastSweepBaseTo,LastImpact;
 var Actor LastHit;
 var bool bPhysicalOwned,bMotionArmed;
 var vector ArmPoint;
@@ -18,21 +23,28 @@ function ResetMotion()
 }
 function UpdatePhysical(vector Tip)
 {
-    local vector Point,Start;
+    local vector Point,Start,BasePoint,BaseStart;
     local bool Strike;
     local KFVRKnifeFire Mode;
-    local float Now;
-    if (VRRig==None || !VRRig.ActiveFor(self) || VRRig.bHolstered || (VRRig.Tracking.Flags & 2)==0)
+    local float Now,SweepSeconds;
+    if (VRRig==None || Instigator==None || !VRRig.ActiveFor(self) || VRRig.bHolstered || (VRRig.Tracking.Flags & 2)==0)
     { ResetMotion(); return; }
+    if (VRRig.Visual==None || !VRRig.Visual.bCalibrated
+        || !class'KFVRMeleeGeometry'.static.BoundedVector(Tip,100000000)
+        || !(BladeLengthMetres>0 && BladeLengthMetres<=1.5)) { ResetMotion(); return; }
+    // Rendered endpoint diagnostics stay current on duplicate presentation
+    // Ticks; only the later source-admitted branch can advance motion/damage.
+    BladeTip=Tip;
+    BladeBase=Tip-(VRRig.Visual.BladeAxis>>VRRig.Visual.Rotation)*(BladeLengthMetres*VRRig.Tracking.UnitsPerMetre);
     Now=VRRig.Tracking.InputSeconds;
-    if (VRRig.Tracking.InputSerial<=0 || Now<0) { ResetMotion(); return; }
+    if (VRRig.Tracking.InputSerial<=0 || !(Now>=0 && Now<=1000000000)) { ResetMotion(); return; }
     // A repeated presentation Tick must not reuse bMoved or sweep the old
     // strike again. Native source-clock faults first emit neutral/reset input.
     if (bMotionSampled && (VRRig.Tracking.InputSerial<=LastMotionSerial || Now<=LastMotionTime)) return;
     bMotionSampled=True; LastMotionSerial=VRRig.Tracking.InputSerial; LastMotionTime=Now;
     if (!bPhysicalOwned)
     { StopFire(0); StopFire(1); FireMode[0].SetTimer(0,False); FireMode[1].SetTimer(0,False); }
-    bPhysicalOwned=True; BladeTip=Tip;
+    bPhysicalOwned=True;
     if (VSize(Tip-VRRig.Tracking.HeadPosition)>1.5*VRRig.Tracking.UnitsPerMetre) { ResetMotion(); return; }
     if (VSize(VRRig.Tracking.RightPosition-VRRig.DockPosition(3))<0.22*VRRig.Tracking.UnitsPerMetre)
     { ResetMotion(); return; }
@@ -40,6 +52,7 @@ function UpdatePhysical(vector Tip)
     Mode=KFVRKnifeFire(FireMode[0]);
     if (Mode==None) return;
     Point=((Tip-Instigator.Location)<<VRRig.Tracking.BodyRotation)/VRRig.Tracking.UnitsPerMetre;
+    BasePoint=((BladeBase-Instigator.Location)<<VRRig.Tracking.BodyRotation)/VRRig.Tracking.UnitsPerMetre;
     if (!bMotionArmed)
     {
         if (!bArmSettling || VSize(Point-ArmPoint)>0.025)
@@ -49,15 +62,28 @@ function UpdatePhysical(vector Tip)
     }
     // Motion/settling/window use physical time; the stock firing cooldown
     // remains in game time, including ZED-time and source-epoch resets.
-    Strike=Motion.Sample(Point,Now,Level.TimeSeconds,Mode.default.FireRate/FMax(0.1,Mode.GetFireSpeed()));
+    StockMeleeDamage=Mode.MeleeDamage; StockFireSpeed=Mode.GetFireSpeed(); bSwingSoundReady=Mode.PreparePhysicalSound();
+    StockFireInterval=Mode.default.FireRate/FMax(0.1,StockFireSpeed);
+    Strike=Motion.Sample(Point,Now,Level.TimeSeconds,StockFireInterval,BasePoint);
     SwingSpeed=Motion.Speed; RejectedJumps=Motion.RejectedJumps;
-    if (Strike) { SwingCount++; WindowUntil=Now+0.15; Start=Motion.SweepFrom; }
-    else Start=Motion.Previous;
-    if ((Strike || Motion.bMoved) && Now<WindowUntil && Motion.Speed>=1.2)
+    if (Strike)
+    {
+        SwingCount++; WindowUntil=Now+0.15;
+        Start=Motion.SweepFrom; BaseStart=Motion.SweepBase; SweepSeconds=Motion.SweepSeconds;
+        Mode.BeginPhysicalSwing();
+    }
+    else
+    {
+        Start=Motion.Previous; BaseStart=Motion.PreviousBase; SweepSeconds=Motion.StepSeconds;
+        if (Now<WindowUntil && !Motion.ContactEligible()) { WindowUntil=0; CancelledWindows++; }
+    }
+    if ((Strike || Motion.ContactEligible()) && Now<WindowUntil)
     {
         LastSweepFrom=Instigator.Location+((Start*VRRig.Tracking.UnitsPerMetre)>>VRRig.Tracking.BodyRotation);
         LastSweepTo=Tip;
-        if (Mode.Sweep(LastSweepFrom,Tip,VRRig.Tracking.RightPosition)) WindowUntil=0;
+        LastSweepBaseFrom=Instigator.Location+((BaseStart*VRRig.Tracking.UnitsPerMetre)>>VRRig.Tracking.BodyRotation);
+        LastSweepBaseTo=BladeBase;
+        if (Mode.Sweep(LastSweepFrom,Tip,VRRig.Tracking.RightPosition,LastSweepBaseFrom,BladeBase,SweepSeconds)) WindowUntil=0;
     }
 }
 simulated function bool StartFire(int Mode)
@@ -67,9 +93,13 @@ simulated function bool StartFire(int Mode)
 }
 simulated event RenderOverlays(Canvas Canvas)
 {
-    if (VRRig==None || !VRRig.ActiveFor(self)) Super.RenderOverlays(Canvas);
+    if (VRRig==None || Instigator==None || !VRRig.ActiveFor(self)) Super.RenderOverlays(Canvas);
 }
 defaultproperties
 {
     FireModeClass(0)=class'KFVRKnifeFire'
+    // Matches the current visual's authored 20 cm endpoint and former 1.5 UU
+    // trace extent at the nominal 50 UU/m scale. Wearer calibration is pending.
+    BladeLengthMetres=0.20
+    ContactRadiusMetres=0.03
 }

@@ -61,7 +61,7 @@ def _capture(observer, snapshot, weapon):
     if not owned_by(rig, pc['address']):
         raise ValueError('Weapon rig is not owned by its bound controller')
     target_class = {'single': 'KFVRTrackedSingle', 'deagle': 'KFVRTrackedDeagle',
-                    'mk23': 'KFVRTrackedMK23', 'bullpup':'KFVRTrackedBullpup'}[weapon]
+                    'mk23': 'KFVRTrackedMK23', 'bullpup':'KFVRTrackedBullpup', 'scar':'KFVRTrackedSCAR'}[weapon]
     gun = _one([o for o in objects if o['type'] == target_class
                 and o['values'].get('VRRig') == rig['address'] and owned_by(o, pawn['address'])],
                'owned ' + target_class)
@@ -112,9 +112,9 @@ def _capture(observer, snapshot, weapon):
                ['InsertionSampleTravel', 'InsertionEndDistance', 'InsertionRestError']}
     if any(value < 0 for value in metrics.values()):
         raise ValueError('Negative insertion calibration distance')
-    if weapon == 'bullpup':
+    if weapon in ('bullpup','scar'):
         if not v.get('bFeedOnSeat') or v.get('bActionProfile') or v.get('bPhysicalProfile'):
-            raise ValueError('Bullpup must use its installed magazine-only reload')
+            raise ValueError('Selected rifle must use its installed magazine-only reload')
         if not v.get('bHiddenTranslationCalibrated'):
             raise _NotReady('Hidden magazine translation calibration is pending')
         action_grasp, pull, travel = [0., 0., 0.], [-1., 0., 0.], 0.
@@ -145,8 +145,8 @@ def make_fixture(pid, game, folder, weapon='single') -> Path:
     This does not select a weapon or modify the game. The native trial runner
     still performs its normal private-world/viewport preflight before injection.
     """
-    if weapon not in ('single', 'deagle', 'mk23', 'bullpup'):
-        raise ValueError('Insertion fixture weapon must be single, deagle, mk23 or bullpup')
+    if weapon not in ('single', 'deagle', 'mk23', 'bullpup', 'scar'):
+        raise ValueError('Insertion fixture weapon must be single, deagle, mk23, bullpup or scar')
     game, folder = Path(game), Path(folder)
     deadline = time.monotonic() + 10
     reason = 'No calibration snapshot'
@@ -175,7 +175,7 @@ def make_fixture(pid, game, folder, weapon='single') -> Path:
         time.sleep(min(0.1, remaining))
     metadata['captured_utc'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     folder.mkdir(parents=True, exist_ok=True)
-    (folder/('rifle-reload-fixture.json' if weapon=='bullpup' else 'reload-fixture.json')).write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
-    path = folder/('rifle-reload-fixture.txt' if weapon=='bullpup' else 'reload-fixture.txt')
+    (folder/('rifle-reload-fixture.json' if weapon in ('bullpup','scar') else 'reload-fixture.json')).write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
+    path = folder/('rifle-reload-fixture.txt' if weapon in ('bullpup','scar') else 'reload-fixture.txt')
     path.write_text(' '.join(format(value, '.9g') for value in metadata['values']) + '\n', encoding='ascii')
     return path

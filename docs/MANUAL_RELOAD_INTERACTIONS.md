@@ -1,6 +1,6 @@
 # Physical reload pipeline
 
-The **9mm and Deagle now have live physical reloads** in the standalone development mutator: catch or discard its magazine, retain a partial magazine at the belt, take and insert a replacement, then physically cycle the slide when needed. It uses a game-thread script ledger and the installed model's magazine/slide bones. See [controls and coverage](TRACKED_WEAPONS.md). This has live native-game synthetic-controller evidence, separate from wearer acceptance.
+The **9mm and Deagle now have live physical reloads** in the standalone development mutator: catch or discard its magazine, retain a partial magazine at the chest or belt, take a fresh chest magazine and insert it, then physically cycle the slide when needed. It uses a game-thread script ledger and the installed model's magazine/slide bones. See [controls and coverage](TRACKED_WEAPONS.md). This has live native-game synthetic-controller evidence, separate from wearer acceptance.
 
 The reusable C++ mechanics below also cover dual-gun belt reloads and stricter continuous insertion geometry. The live dual-9mm adapter now provides the same shared-supply belt interaction through a game-thread script ledger; the four-stage authored-animation adapter remains a separate foundation.
 
@@ -48,7 +48,7 @@ The older AmmoMachine and KFVRAmmoState remain the separately tested timed/tube-
 
 The live single-pistol adapter now seats a magazine through a continuous push while the offhand grip remains held. KFVRMagazineInsertion supplies a one-shot gesture event to KFVRMagazineState; only that ledger moves ammunition. Appearing at the final position, an incomplete push, an over-speed jump, wrong orientation, or a return inside the socket after tracking/recenter interruption cannot seat. Updated wearer acceptance is still pending. Other weapon mechanisms, server inventory and ergonomic refinement remain separate work.
 
-The live standalone pistol adapter now supports both 9mm and Deagle through KFVRWeaponProfile. Independent inventory ledgers preserve each chamber and partial magazines across switches. Bullpup physical cycling is deferred because its installed skeleton has no separate action bone; it retains stock timed reload. See WORKLOG.md for consecutive same-process Deagle/9mm acceptance evidence.
+The live standalone pistol adapter now supports both 9mm and Deagle through KFVRWeaponProfile. Independent inventory ledgers preserve each chamber and partial magazines across switches. Bullpup has an explicit magazine-only physical profile: seating completes its reload without an invented action. Timed reload remains available outside physical mode. See WORKLOG.md for consecutive same-process Deagle/9mm acceptance evidence.
 
 The live dual belt gate requires a fresh aligned approach and continuous movement through seating depth; a hand appearing inside the dock after focus/tracking loss cannot seat. The chosen convenience rule assists any empty chamber with one actual magazine round, including a chamber fired after its magazine was removed. A latched pistol cannot fire until withdrawn. Ejection retains partial magazines, and holstering stores presented magazines without adding ammunition. Disabling physical mode requires both magazines seated and both guns clear; it clamps any plus-one loaded count to the stock capacity while preserving the total owned rounds.
 
@@ -96,16 +96,18 @@ Live single/dual adapters reconcile capacity after stock weapon updates and publ
 
 ## Support and reload ownership
 
-A manual magazine/action grasp reserves the offhand before two-handed weapon support chooses a pose. A fresh belt-grab attempt gets the same priority, using the current body-space belt location. Seating while the squeeze remains held cannot acquire support: release and squeeze again first. Tracking loss, switching and holstering also require a fresh release/press before support returns. Physical reload still updates after the weapon's current pose, so magaMagazine capability alone does not imply an action exists. The installed Bullpup has a magazine and no separate reload action. Its explicit magazine-only policy finishes an empty reload on a successful seat, moving one existing round into the chamber. A retained chamber remains untouched. Unknown weapons receive neither an invented part nor an automatic feed policy.
+A manual magazine/action grasp reserves the offhand before two-handed weapon support chooses a pose. A fresh chest/belt supply-grab attempt gets the same priority, using the current body frame. Seating while the squeeze remains held cannot acquire support: release and squeeze again first. Tracking loss, switching and holstering also require a fresh release/press before support returns. Physical reload still updates after the weapon's current pose, so magazine and action gestures use that completed weapon pose.
+
+Magazine capability alone does not imply an action exists. The installed Bullpup has a magazine and no separate reload action. Its explicit magazine-only policy finishes an empty reload on a successful seat, moving one existing round into the chamber. A retained chamber remains untouched. Unknown weapons receive neither an invented part nor an automatic feed policy.
 
 ## Current controls
 
 Use `Start-KFVRDev.ps1 -Unattended -NativeHands -VRProfile -PhysicalReloads` for the current private test. Supported non-dual guns enter physical mode automatically; Y is not needed. Without that option, the legacy Y toggle remains available. Dual pistols retain their separate Y belt-mode toggle.
 
-- Right B releases the magazine. Hold left grip near its measured magazine grasp to catch it; otherwise the native magazine briefly falls from the gun.
-- Keep holding the caught magazine to move it. Release at the belt to retain its contents, then grip the belt for supply and push the magazine along its measured insertion path.
+- Right B releases the magazine. Catching is optional: left grip near the chest supply takes a replacement after ejection. Hold left grip near the gun's measured magazine grasp during ejection only when you want to retain the old magazine.
+- Grip the chest supply with the left hand, carry the magazine to the magwell and push it along the measured insertion path. Release a held partial magazine at the chest to retain it; the old belt zone remains available as a secondary supply/stow location.
 - For a pistol with an empty chamber, release left grip once after seating, squeeze it near the slide, pull fully and release or guide it forward. Neither left trigger nor right grip is required. The visible native hand attaches to the slide during this grasp.
-- Bullpup ends at magazine insertion; there is no handle or chambering gesture.
+- Bullpup and the current SCAR adapter finish at magazine insertion. SCAR has a modeled charging handle, stationary during Reload; its side-slap/bolt-release interaction is expressly deferred.
 
 The uncaught magazine presentation is temporary and cannot be picked back up. It disappears when replaced by a held/seated magazine, when tracking/switch cancels it, or after 2.5 seconds. This adds visible release feedback, not dropped-item persistence. Exact palm contact and appearance still need wearer assessment.
 
@@ -117,7 +119,7 @@ An October 1 read-only audit examined the installed mesh weights, animation trac
 |---|---|---|
 | Bullpup | Magazine replacement, no reload action | Current explicit seat-completion policy |
 | AK47 | Native bolt after magazine replacement | Magazine grasp/root calibration, then installed rail |
-| SCAR | Bolt exists but does not move in Reload | Magazine-only policy; do not infer a rack from its bone name |
+| SCAR | Modeled handle stays still; wearer reference shows a side slap | Current magazine-only adapter; future bolt-release/side-slap interaction deferred |
 | M4 | Two magazine meshes plus handle, latch and bolt | Replacement-magazine handoff and coupled action parts |
 | AA12 | Handle operates before magazine replacement | Action-before-magazine sequence |
 | Pump shotgun | Individual shells, pump and charging handle move together | Tube ledger and coupled pump action |
@@ -125,4 +127,19 @@ An October 1 read-only audit examined the installed mesh weights, animation trac
 | KSG | Modified stock loading piece plus pump | Audit its actual loading geometry; do not substitute real-world assumptions |
 | BoomStick | Hinge, latch and shell tracks in Fire_Both/Fire_Last, no Reload clip | Two chambers and hinged breech; block stock timed refill |
 
-This is an implementation map, not enabled weapon coverage. AK47/SCAR grasps exceed the current palm-to-mag-root guard, and M4 switches between two magazine meshes. Simply supplying bone names would produce incorrect interactions. Current 9mm/Deagle 50 mm interaction strokes and action-palm contacts remain provisional; measured reload slide motion is about 38.66/32.60 mm, versus MK23's measured 45.86 mm. All metre values assume the current 300 model-units/metre presentation scale.
+Except for the Bullpup and SCAR adapters described below, this is an implementation map, not enabled weapon coverage. AK47 still needs its grasp/root calibration; SCAR now has the measured per-profile bound below. M4 switches between two magazine meshes. Simply supplying bone names would produce incorrect interactions. Current 9mm/Deagle 50 mm interaction strokes and action-palm contacts remain provisional; measured reload slide motion is about 38.66/32.60 mm, versus MK23's measured 45.86 mm. All metre values assume the current 300 model-units/metre presentation scale.
+
+
+## Chest supply and empty-magwell operation
+
+`KFVRAmmoSupplyState` places the shared supply 22 cm forward, 10 cm left and 36 cm below the head in the body frame, with a 16 cm interaction radius. These are provisional ergonomic dimensions. `KFVRAmmoSupplyVisual` loads the installed textured `KillingFloorStatics.L85Ammo` magazine cluster and measures its bounds at runtime. Its 22 cm bounding-sphere diameter and tilt are presentation settings; the pair pictured does not represent an ammunition count. No game mesh or texture is copied into the mod.
+
+The marker appears while the active physical gun has an empty magazine well, a free tracked offhand and stored/loose ammunition. It hides while carrying a magazine, operating the slide, holstered, shopping or missing tracking. The ledger alone supplies ammunition. Taking a replacement before ejecting the inserted magazine remains unsupported because this presentation still shares the gun's single native magazine bone.
+
+A pistol slide can be grabbed and cycled with no magazine inserted. A full pull can extract a chambered round; returning an empty well cannot feed from reserve or stored magazines. The action rail, native palm attachment and tracking-loss cancellation remain shared across pistol profiles.
+
+The SCAR adapter inherits `SCARMK17AssaultRifle` and `SCARMK17Fire`, retaining stock ammunition, damage and Commando ancestry. Installed insertion markers .63/.66 and native magazine grasp .58 reuse the common reload pipeline. Its magazine origin lies farther from the authored palm, so only this audited profile permits a 19 cm root-to-palm bound; others retain 15 cm. This is supported by native finger/surface measurements, not a global tolerance increase. `-SCARTest` substitutes SCAR for the diagnostic Bullpup at the right shoulder. The normal VR trader catalog and multiple-rifle slot selection remain separate work.
+
+## Chambered launchers and flip closure: planned
+
+The [Demolitions audit](DEMOLITIONS_RELOAD_PLAN.md) specifies individual live/spent/empty chambers and chest-supplied rounds. M32 needs a sideways flick to close its native side-opening receiver while preserving the separately indexed cylinder and each round's identity. M79 and BoomStick need a shared break-action flip-close gesture with their own measured hinge basis. Closing empty, partly loaded or full must only close the mechanism; it cannot refill ammunition, reset chamber selection or bypass stock firing/reload timing. These adapters and gestures are not enabled in the current build.

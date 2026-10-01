@@ -187,11 +187,32 @@ function CheckSeatedFeed()
     RejectSeatedFeed(A,"spent magazine cannot create another chamber round");
 }
 
+function EmptyWellActionAndSupply()
+{
+    local KFVRMagazineState A;
+    local int Revision;
+    local string Before;
+    A=new class'KFVRMagazineState';
+    Check(A.Initialize(15,15,60),"empty well action seed");
+    Before=Contents(A); Revision=A.Revision;
+    Check(A.SupplyRounds()==15 && Contents(A)==Before && A.Revision==Revision,"supply preview is read-only");
+    Check(A.Eject(False) && A.Inserted==0 && A.Held==0 && A.bChamber,"optional uncaught ejection retains chamber");
+    Check(A.MoveSlide(1) && !A.bChamber && A.Discarded==15,"empty-well pull extracts one chambered round");
+    Check(A.MoveSlide(0) && !A.bChamber && !A.bFeedArmed && A.Loaded()==0,"empty-well return cannot feed");
+    Check(!A.ConsumeShot(),"empty-well dry fire consumes nothing");
+    Before=Contents(A);
+    Check(A.MoveSlide(1) && A.MoveSlide(0) && A.Valid() && A.Discarded==15 && A.Total()==45,"repeated empty rack cannot manufacture rounds");
+    Check(A.GrabBelt() && A.Held>0 && A.GetMagazineRounds(A.Held)==15,"supply works without catching previous magazine");
+    Check(A.Seat() && !A.bChamber,"seating pistol still awaits slide");
+    Check(A.MoveSlide(1) && A.MoveSlide(0) && A.bChamber && A.Loaded()==15,"full rack feeds supplied magazine");
+    Check(A.ConsumeShot() && A.Total()+A.Spent+A.Discarded==60,"new magazine firing conserves original budget");
+}
 event int Main(string Params)
 {
     local KFVRMagazineState A;
     local int I,Seed,Choice,Identity;
     A=new class'KFVRMagazineState'; Check(A.Initialize(15,15,100),"initialize stock total");
+    EmptyWellActionAndSupply();
     Check(A.Eject(True) && A.Loaded()==1 && A.Held==1 && A.Total()==100,"catch retains chamber");
     Check(A.ConsumeShot() && !A.CanFire() && A.Total()==99,"one chamber shot with no magazine");
     Check(A.Stow() && A.GrabBelt() && A.Held!=1,"preserve partial identity, choose fresh");
