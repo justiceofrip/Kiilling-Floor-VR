@@ -19,7 +19,8 @@ var int CurrentCapacity,InsertedCapacity,HeldCapacity,CapacityChanges;
 function bool Initialize(KFVRWeaponRig R,KFWeapon W)
 {
     if (W==None || class'KFVRWeaponProfile'.static.Manual(W)!=None || W.bIsReloading) return False;
-    if (R==None || R.Visual==None || !R.Visual.bInsertionCalibrated) return False;
+    if (R==None || R.Visual==None || !R.Visual.bPhysicalProfile
+        || !R.Visual.bActionProfile || R.Visual.ActionTravelMetres<=0 || !R.Visual.bInsertionCalibrated) return False;
     Rig=R; Gun=W; Ammo=new class'KFVRMagazineState';
     Insertion=new class'KFVRMagazineInsertion';
     if (!Ammo.Initialize(W.MagCapacity,W.MagAmmoRemaining,W.AmmoAmount(0))) return False;
@@ -80,18 +81,35 @@ function EjectMagazine()
     if (Ammo.Eject(Catch))
     { EjectCount++; Insertion.Reset(); Rig.PulseRight(0.3,20); Publish(); }
 }
+// Current body-space belt position is shared by intent reservation and acquisition.
+function vector CurrentBeltLocation()
+{
+    local vector X,Y,Z;
+    GetAxes(Rig.Tracking.BodyRotation,X,Y,Z);
+    return Rig.Tracking.HeadPosition+(-Y*0.2-Z*0.60+X*0.12)*Rig.Tracking.UnitsPerMetre;
+}
+// Read-only: support must yield before it can rotate the weapon or choose a hand
+// grasp. Reserve a fresh belt attempt even if supply is empty; never mutate the
+// magazine ledger speculatively while deciding which interaction owns the hand.
+function bool ReservesOffhand()
+{
+    if (Rig==None || Ammo==None || Gun!=Rig.Gun) return False;
+    if (Ammo.Held>0 || bSlideHeld || Rig.Tracking.LeftTrigger>0.5) return True;
+    return bLeftArmed && Rig.Tracking.LeftGrip>0.7 && !bLeftPrevious && Ammo.Inserted==0
+        && VSize(Rig.Tracking.LeftPosition-CurrentBeltLocation())<0.18*Rig.Tracking.UnitsPerMetre;
+}
 function Update(float Delta)
 {
-    local vector X,Y,Z,Relative,Displacement;
+    local vector Relative,Displacement;
     local bool Down,NearBelt;
     local float Before;
     local coords Part;
     if (Rig.Gun!=Gun || !Rig.Active() || Rig.bHolstered || (Rig.Tracking.Flags & 3)!=3)
     { Suspend(); return; }
     Reconcile();
-    GetAxes(Rig.Tracking.BodyRotation,X,Y,Z);
-    BeltLocation=Rig.Tracking.HeadPosition+(-Y*0.2-Z*0.60+X*0.12)*Rig.Tracking.UnitsPerMetre;
-    MagWell=Rig.Visual.MagazineRest(); SlideLocation=Rig.Visual.SlideRest();
+    BeltLocation=CurrentBeltLocation();
+    MagWell=Rig.Visual.MagazineRest(); SlideLocation=vect(0,0,0);
+    if (Rig.Visual.bActionProfile) SlideLocation=Rig.Visual.SlideRest();
     Down=Rig.Tracking.LeftGrip>0.7;
     NearBelt=VSize(Rig.Tracking.LeftPosition-BeltLocation)<0.18*Rig.Tracking.UnitsPerMetre;
     MagazineTarget=Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation);
@@ -109,7 +127,8 @@ function Update(float Delta)
     if (!Down) bLeftArmed=True;
     if (bLeftArmed && Down && !bLeftPrevious && Ammo.Held==0)
     {
-        if (Rig.Tracking.LeftTrigger>0.5 && VSize(Rig.Tracking.LeftPosition-SlideLocation)<0.13*Rig.Tracking.UnitsPerMetre && Ammo.Inserted>0)
+        if (Rig.Visual.bActionProfile && Rig.Visual.ActionTravelMetres>0
+            && Rig.Tracking.LeftTrigger>0.5 && VSize(Rig.Tracking.LeftPosition-SlideLocation)<0.13*Rig.Tracking.UnitsPerMetre && Ammo.Inserted>0)
         { bSlideHeld=True; SlideGrabLocal=Relative; }
         else if (NearBelt && Ammo.GrabBelt()) { GrabCount++; Rig.PulseLeft(0.25,18); }
     }
@@ -122,6 +141,7 @@ function Update(float Delta)
     InsertionProgress=Insertion.Progress; bInsertionApproached=Insertion.bApproached;
     InsertionLastDelta=Insertion.LastDelta; InsertionLastDistance=Insertion.LastDistance;
     InsertionSpeedRejects=Insertion.SpeedRejects; InsertionGapRejects=Insertion.GapRejects;
+    if (bSlideHeld && (!Rig.Visual.bActionProfile || Rig.Visual.ActionTravelMetres<=0)) Suspend();
     if (bSlideHeld)
     {
         Displacement=Relative-SlideGrabLocal;

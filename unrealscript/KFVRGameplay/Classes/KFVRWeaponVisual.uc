@@ -22,6 +22,7 @@ var bool bMagazineTranslationFrame,bActionTranslationFrame;
 var vector MeasuredActionPosition;
 var vector MeasuredMagazinePosition,MeasuredMagazineX,MeasuredMagazineY,MeasuredMagazineZ;
 var bool bCalibrated,bTranslationCalibrated,bTranslationProbe,bPhysicalProfile;
+var bool bMagazineProfile,bActionProfile;
 var name MagazineBone,ActionBone;
 var float ActionTravelMetres;
 simulated function bool CaptureGripPose(bool Left)
@@ -102,19 +103,30 @@ simulated function bool Initialize(Weapon Source)
     ActionBone=class'KFVRWeaponProfile'.static.ActionBone(KFWeapon(Source));
     ActionTravelMetres=class'KFVRWeaponProfile'.static.ActionTravel(KFWeapon(Source));
     if (KFVRTrackedDualies(Source)!=None && bOffhandGun) { MagazineBone='9mm_Mag01'; ActionBone='9mm_slide01'; }
-    if (MagazineBone!='' && ActionBone!='')
+    // Magazine measurement does not imply that the installed mesh has a
+    // separate action. Keep full manual reload gated on both capabilities.
+    if (MagazineBone!='')
     {
         Part=GetBoneCoords(MagazineBone); MagazineLocal=Part.Origin;
         MagazineX=Normal(Part.XAxis); MagazineY=Normal(Part.YAxis); MagazineZ=Normal(Part.ZAxis);
-        Part=GetBoneCoords(ActionBone); SlideLocal=Part.Origin;
+        bMagazineProfile=VSize(MagazineLocal)>1 && VSize(MagazineLocal-PalmLocal)<300;
         ParentBone=class'KFVRWeaponProfile'.static.MagazineTranslationParent(KFWeapon(Source));
-        if (ParentBone!='') { MagazineTranslationFrame=GetBoneCoords(ParentBone); bMagazineTranslationFrame=True; }
-        ParentBone=class'KFVRWeaponProfile'.static.ActionTranslationParent(KFWeapon(Source));
-        if (ParentBone!='') { ActionTranslationFrame=GetBoneCoords(ParentBone); bActionTranslationFrame=True; }
-        bPhysicalProfile=VSize(MagazineLocal)>1 && VSize(SlideLocal)>1 && VSize(MagazineLocal-PalmLocal)<300 && VSize(SlideLocal-PalmLocal)<300;
-        Log("KFVR_MECHANICAL_CAL weapon=" $ Source.Class $ " magazine=" $ MagazineBone $ ":" $ MagazineLocal $ " action=" $ ActionBone $ ":" $ SlideLocal $ " valid=" $ bPhysicalProfile);
-
+        if (bMagazineProfile && ParentBone!='') { MagazineTranslationFrame=GetBoneCoords(ParentBone); bMagazineTranslationFrame=True; }
     }
+    ParentBone=class'KFVRWeaponProfile'.static.ActionTranslationParent(KFWeapon(Source));
+    // Never use an empty name, the root, the magazine or its chassis as a
+    // substitute slide. A supported action must be an independent part.
+    if (ActionBone!='' && ActionBone!='RootBone' && ActionBone!=MagazineBone
+        && ActionBone!=ParentBone && ActionBone!=class'KFVRWeaponProfile'.static.InsertionChassis(KFWeapon(Source))
+        && ActionTravelMetres>0)
+    {
+        Part=GetBoneCoords(ActionBone); SlideLocal=Part.Origin;
+        bActionProfile=VSize(SlideLocal)>1 && VSize(SlideLocal-PalmLocal)<300;
+        if (bActionProfile && ParentBone!='') { ActionTranslationFrame=GetBoneCoords(ParentBone); bActionTranslationFrame=True; }
+    }
+    bPhysicalProfile=bMagazineProfile && bActionProfile;
+    if (MagazineBone!='' || ActionBone!='')
+        Log("KFVR_MECHANICAL_CAL weapon=" $ Source.Class $ " magazine=" $ MagazineBone $ ":" $ MagazineLocal $ " magazine_valid=" $ bMagazineProfile $ " action=" $ ActionBone $ ":" $ SlideLocal $ " action_valid=" $ bActionProfile $ " valid=" $ bPhysicalProfile);
     bCalibrated=VSize(PalmLocal)>1.0 && VSize(TipLocal)>1.0 && VSize(TipLocal-PalmLocal)>20.0 && VSize(TipLocal-PalmLocal)<400.0;
     if (Source.Class==class'Frag') bCalibrated=VSize(PalmLocal)>1 && VSize(TipLocal)>1 && VSize(TipLocal-PalmLocal)<150;
     Log("KFVR_WEAPON_CAL weapon=" $ Source.Class $ " palm=" $ PalmLocal $ " tip=" $ TipLocal $ " valid=" $ bCalibrated);
@@ -125,14 +137,15 @@ simulated function bool Initialize(Weapon Source)
     SetBoneScale(1,0.0,'Hands_RArmCollarbone');
     if (KFVRTrackedDualies(Source)!=None)
     { if (bOffhandGun) SetBoneScale(3,0.0,'9mm_Gun'); else SetBoneScale(3,0.0,'9mm_Gun01'); }
-    if (bPhysicalProfile && KFVRWeaponRig(Owner)!=None && KFVRWeaponRig(Owner).bNativeHandTest
+    if (bMagazineProfile && KFVRWeaponRig(Owner)!=None && KFVRWeaponRig(Owner).bNativeHandTest
         && class'KFVRWeaponProfile'.static.MagazineGraspFrame(KFWeapon(Source))>=0)
     {
         MagazineGrip=Spawn(class'KFVRMagazineGrip',self);
         if (MagazineGrip!=None && !MagazineGrip.InitializeMagazine(self))
         { Log("KFVR_MAGAZINE_GRIP_ERROR weapon=" $ Source.Class); MagazineGrip.Destroy(); MagazineGrip=None; }
+        if (MagazineGrip!=None) MagazineGrip.bHidden=True;
     }
-    if (bPhysicalProfile && class'KFVRWeaponProfile'.static.InsertionChassis(KFWeapon(Source))!='')
+    if (bMagazineProfile && class'KFVRWeaponProfile'.static.InsertionChassis(KFWeapon(Source))!='')
     {
         MagazineSocket=Spawn(class'KFVRMagazineSocket',self);
         if (MagazineSocket==None) bInsertionFailed=True;
@@ -174,6 +187,8 @@ simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units
     }
     // BoneRefresh does not invalidate the same-frame animation cache. Measure
     // a unit translation on the following ordinary Tick, after it has rendered.
+    // Magazine-only profiles stay at rest until a complete interaction needs
+    // translation calibration; avoid a visible probe on a timed-reload rifle.
     if (bPhysicalProfile && KFVRHandVisual(self)==None && !bTranslationCalibrated)
     {
         if (bTranslationProbe)
@@ -193,14 +208,21 @@ simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units
 simulated function SampleMagazinePose()
 {
     local coords Part;
-    if (!bPhysicalProfile) return;
-    Part=GetBoneCoords(MagazineBone);
-    MeasuredMagazinePosition=Part.Origin;
-    MeasuredMagazineX=Part.XAxis; MeasuredMagazineY=Part.YAxis; MeasuredMagazineZ=Part.ZAxis;
-    Part=GetBoneCoords(ActionBone); MeasuredActionPosition=Part.Origin;
+    if (bMagazineProfile)
+    {
+        Part=GetBoneCoords(MagazineBone);
+        MeasuredMagazinePosition=Part.Origin;
+        MeasuredMagazineX=Part.XAxis; MeasuredMagazineY=Part.YAxis; MeasuredMagazineZ=Part.ZAxis;
+    }
+    if (bActionProfile) { Part=GetBoneCoords(ActionBone); MeasuredActionPosition=Part.Origin; }
+    else MeasuredActionPosition=vect(0,0,0);
 }
 simulated function vector MagazineRest() { return Location+((MagazineLocal*DrawScale)>>Rotation); }
-simulated function vector SlideRest() { return Location+((SlideLocal*DrawScale)>>Rotation); }
+simulated function vector SlideRest()
+{
+    if (!bActionProfile) return vect(0,0,0);
+    return Location+((SlideLocal*DrawScale)>>Rotation);
+}
 simulated function vector HeldMagazinePosition(vector HandPosition,rotator HandRotation)
 {
     if (MagazineGrip!=None && MagazineGrip.bCalibrated)
@@ -237,12 +259,14 @@ simulated function Destroyed()
 // after physical mode exits, even as the gun follows subsequent wrist turns.
 simulated function ClearMechanicalPose()
 {
-    if (!bPhysicalProfile) return;
     if (MagazineGrip!=None) MagazineGrip.bHidden=True;
-    SetBoneScale(2,1.0,MagazineBone);
-    SetBoneDirection(MagazineBone,rot(0,0,0),,0.0,1);
-    SetBoneLocation(MagazineBone,vect(0,0,0),1.0);
-    SetBoneLocation(ActionBone,vect(0,0,0),1.0);
+    if (bMagazineProfile)
+    {
+        SetBoneScale(2,1.0,MagazineBone);
+        SetBoneDirection(MagazineBone,rot(0,0,0),,0.0,1);
+        SetBoneLocation(MagazineBone,vect(0,0,0),1.0);
+    }
+    if (bActionProfile) SetBoneLocation(ActionBone,vect(0,0,0),1.0);
 }
 // SetBoneLocation consumes an offset in the installed parent frame. World
 // overrides for a held part's rotation do not rotate this translation frame.
@@ -250,6 +274,7 @@ simulated function vector MechanicalOffset(vector ModelOffset,optional bool Acti
 {
     local coords Frame;
     local vector Result;
+    if ((Action && !bActionProfile) || (!Action && !bMagazineProfile)) return vect(0,0,0);
     if ((Action && !bActionTranslationFrame) || (!Action && !bMagazineTranslationFrame))
         return ModelOffset/BoneTranslationScale;
     if (Action) Frame=ActionTranslationFrame; else Frame=MagazineTranslationFrame;
@@ -262,6 +287,11 @@ simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, f
 {
     local vector Offset;
     local rotator Desired;
+    if (!bMagazineProfile)
+    {
+        if (MagazineGrip!=None) MagazineGrip.bHidden=True;
+        return;
+    }
     SetBoneScale(2,float(Inserted || Held),MagazineBone);
     if (MagazineGrip!=None)
     {
@@ -279,7 +309,8 @@ simulated function PoseMagazine(bool Inserted, bool Held, vector HandPosition, f
     }
     else SetBoneDirection(MagazineBone,rot(0,0,0),,0.0,1);
     SetBoneLocation(MagazineBone,MechanicalOffset(Offset),1.0);
-    SetBoneLocation(ActionBone,MechanicalOffset(vect(-1,0,0)*ModelUnitsPerMetre*ActionTravelMetres*SlideTravel,True),1.0);
+    if (bActionProfile)
+        SetBoneLocation(ActionBone,MechanicalOffset(vect(-1,0,0)*ModelUnitsPerMetre*ActionTravelMetres*SlideTravel,True),1.0);
     BoneRefresh();
 }
 defaultproperties

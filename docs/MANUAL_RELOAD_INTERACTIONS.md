@@ -91,4 +91,11 @@ Each physical magazine records its own capacity. The weapon's current perk-adjus
 
 Binding an existing stock weapon preserves all observed loaded rounds, including a chambered plus-one or a larger load retained after a perk decrease. The initial identity limit is the larger of current supply capacity and observed magazine rounds, within the ledger's existing hard bounds. Later supply uses the current stock capacity. Ordinary mode exit keeps its existing policy: loaded rounds are clamped to the current timed-feed capacity while the total remains conserved as loaded plus reserve.
 
-Live single/dual adapters reconcile capacity after stock weapon updates and publish current and per-slot limits for read-only inspection. Script magazine limits remain 1–100 rounds (up to 101 loaded including chamber); the separate portable prototype retains its 1–1000 bound. The portable identity ledger and engine-run single/dual ledgers have separate regression suites; the existing AmmoMachine parity stream is a different model and is not evidence of identity-ledger parity.
+Live single/dual adapters reconcile capacity after stock weapon updates and publish current and per-slot limits for read-only inspection. Script magazine limits remain 1â€“100 rounds (up to 101 loaded including chamber); the separate portable prototype retains its 1â€“1000 bound. The portable identity ledger and engine-run single/dual ledgers have separate regression suites; the existing AmmoMachine parity stream is a different model and is not evidence of identity-ledger parity.
+
+
+## Support and reload ownership
+
+A manual magazine/action grasp reserves the offhand before two-handed weapon support chooses a pose. A fresh belt-grab attempt gets the same priority, using the current body-space belt location. Seating while the squeeze remains held cannot acquire support: release and squeeze again first. Tracking loss, switching and holstering also require a fresh release/press before support returns. Physical reload still updates after the weapon's current pose, so magazine/action contact uses the current frame.
+
+Magazine capability alone does not enable a complete physical reload. The Bullpup has measured magazine geometry but no independent action bone; it remains on timed reload until an explicit chambering presentation is available. Existing pistol slide travel and magazine state transitions are unchanged.

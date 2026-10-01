@@ -21,9 +21,10 @@ static function name InsertionChassis(KFWeapon W)
     if (KFVRTrackedSingle(W)!=None) return '9mm_Gun';
     if (KFVRTrackedDeagle(W)!=None) return 'Gun';
     if (KFVRTrackedMK23(W)!=None) return 'MK23';
+    if (KFVRTrackedBullpup(W)!=None) return 'Bullpup';
     return '';
 }
-// These audited single-pistol parts are direct children of their chassis.
+// These audited magazine/slide parts are direct children of their chassis.
 // Keep separate parent selectors so future assets need not share a hierarchy.
 // Other mechanisms retain their existing translation path until audited.
 static function name MagazineTranslationParent(KFWeapon W)
@@ -32,6 +33,7 @@ static function name MagazineTranslationParent(KFWeapon W)
 }
 static function name ActionTranslationParent(KFWeapon W)
 {
+    if (ActionBone(W)=='') return '';
     return InsertionChassis(W);
 }
 static function vector InsertionFrames(KFWeapon W)
@@ -39,6 +41,7 @@ static function vector InsertionFrames(KFWeapon W)
     if (KFVRTrackedSingle(W)!=None) return vect(0.55,0.60,0);
     if (KFVRTrackedDeagle(W)!=None) return vect(0.62,0.66,0);
     if (KFVRTrackedMK23(W)!=None) return vect(0.61,0.63,0);
+    if (KFVRTrackedBullpup(W)!=None) return vect(0.62,0.76,0);
     return vect(0,0,0);
 }
 // A negative marker means no measured native magazine grasp is available.
@@ -46,11 +49,12 @@ static function float MagazineGraspFrame(KFWeapon W)
 {
     if (KFVRTrackedSingle(W)!=None || KFVRTrackedDeagle(W)!=None) return 0.4;
     if (KFVRTrackedMK23(W)!=None) return 0.51;
+    if (KFVRTrackedBullpup(W)!=None) return 0.62;
     return -1;
 }
 static function float ActionTravel(KFWeapon W)
 {
-    if (KFVRTrackedBullpup(W)!=None) return 0.07;
+    if (ActionBone(W)=='') return 0;
     if (KFVRTrackedMK23(W)!=None) return 0.046;
     return 0.05;
 }

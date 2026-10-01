@@ -171,3 +171,12 @@ Knife motion, settling and contact windows use source time, and repeated source 
 
 
 Physical magazine capacity belongs to the magazine identity. Trusted capacity updates change the supply policy and revision only; retained rounds, ownership, chambers, mechanical travel and cooldowns remain unchanged. New magazines and refilled empty stored shells receive the current supply limit. The stock-derived live adapters reconcile the installed weapon's current MagCapacity, while per-identity limits keep old larger magazines valid after a perk decrease. No controller action can request an arbitrary capacity or round count.
+
+
+## Offhand support ownership and separate mechanical capabilities
+
+The support-grip state owns release/press arming and held lifetime; the rig keeps its existing measured support geometry and AlignSupport transform. Before support can claim an edge or rotate a weapon, the manual controller reserves an existing magazine/action grasp or a fresh belt-grab attempt. Reservation is read-only, uses the same current-body belt position as acquisition, and does not consume ammunition or speculate on a ledger action. An unavailable magazine still reserves the attempted squeeze. The seating tick remains reserved, so a held squeeze cannot become rifle support automatically afterward.
+
+Support release/disarm is centralized for tracking loss (including dominant-only loss), weapon replacement, explicit selection, holstering, ownership loss and trader transitions. Lifetime grab/release counters survive resets. A release observed while untracked or reserved cannot arm support. Actual hand posing additionally requires a visible weapon and both tracked hands for a support grasp; accepted palm/support/muzzle transforms and recoil order are unchanged.
+
+Weapon visuals measure magazine and action capabilities separately. Full physical reload still requires both plus successful insertion calibration and positive action travel. Missing, root, magazine or chassis action aliases cannot reach action-bone writes. The installed Bullpup exposes its measured magazine socket/grasp but no action capability; it remains on timed reload. Its visible translation probe stays disabled until a complete interaction needs it, preserving the resting magazine during startup. Pistol and dual action paths retain their measured parents and travel.

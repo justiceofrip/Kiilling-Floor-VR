@@ -46,6 +46,7 @@ var bool bManualArmed,bManualPrevious,bUseArmed,bUsePrevious;
 var int UseCount;
 var bool bMeleeTest,bArmTest,bNativeHandTest;
 var KFVRMeleeTarget MeleeTarget;
+var KFVRSupportGripState SupportGrip;
 var bool bSupportHeld,bSupportArmed,bSupportPrevious;
 var int SupportGrabs,SupportReleases,SupportFrames;
 var vector SupportPosition;
@@ -103,7 +104,7 @@ function PruneInventory()
     }
     if (ManualReload!=None && (ManualReload.Gun==None || ManualReload.Gun.Owner!=BoundPawn))
     { ManualReload.Destroy(); ManualReload=None; }
-    if (Gun==None || Gun.Owner!=BoundPawn) { if (Gun!=None) Gun.StopFire(0); Gun=None; Visual=None; bFiring=False; bTriggerArmed=False; }
+    if (Gun==None || Gun.Owner!=BoundPawn) { ResetSupport(); if (Gun!=None) Gun.StopFire(0); Gun=None; Visual=None; bFiring=False; bTriggerArmed=False; }
     for (I=0;I<InventoryCount;I++) if (InventoryWeapons[I]==Gun) ActiveIndex=I;
     if (Gun==None && InventoryCount>0) { Gun=InventoryWeapons[0]; ActiveIndex=0; }
     ManualReload=InventoryManuals[ActiveIndex];
@@ -188,7 +189,7 @@ function SelectInventoryWeapon(int Index)
     if (KFVRTrackedKnife(Previous)!=None) KFVRTrackedKnife(Previous).ResetMotion();
     if (ManualReload!=None && Previous==ManualReload.Gun) ManualReload.StoreForSwitch();
     if (Previous!=None) { Previous.StopFire(0); Previous.StopFire(1); }
-    bFiring=False; bTriggerArmed=False; Recoil=0.0; bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False;
+    bFiring=False; bTriggerArmed=False; Recoil=0.0; ResetSupport();
     Gun=InventoryWeapons[Index]; ActiveIndex=Index; Visual=InventoryVisuals[Index]; ManualReload=InventoryManuals[Index];
     PC.Pawn.PendingWeapon=Gun; PC.Pawn.ChangedWeapon();
     bHolstered=False; SwitchCount++; DrawCount++; PulseRight(0.25,18);
@@ -229,31 +230,48 @@ function UpdateInventoryVisuals()
     }
     Visual=InventoryVisuals[ActiveIndex];
 }
+// Keep reflected rig telemetry stable while ownership transitions are testable.
+function PublishSupport()
+{
+    if (SupportGrip==None) return;
+    bSupportHeld=SupportGrip.bHeld; bSupportArmed=SupportGrip.bArmed; bSupportPrevious=SupportGrip.bPrevious;
+    SupportGrabs=SupportGrip.Grabs; SupportReleases=SupportGrip.Releases; SupportFrames=SupportGrip.Frames;
+}
+function ResetSupport()
+{
+    if (SupportGrip!=None) SupportGrip.Reset();
+    bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False;
+    PublishSupport();
+}
 function rotator SupportedRotation()
 {
-    local bool Down,ValidSupport;
+    local bool Down,ValidSupport,Reserved,WithinReach,NearSupport;
     local vector Hands,LocalSupport;
     local rotator Result;
+    local int PreviousGrabs;
     Result=Tracking.RightRotation;
     Down=Tracking.LeftGrip>0.7;
     ValidSupport=KFVRTrackedBullpup(Gun)!=None && !bHolstered && (Tracking.Flags & 3)==3;
-    if (ManualReload!=None && (ManualReload.Ammo.Held>0 || ManualReload.bSlideHeld || Tracking.LeftTrigger>0.5)) ValidSupport=False;
-    if (!ValidSupport)
-    { if (bSupportHeld) SupportReleases++; bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False; return Result; }
-    LocalSupport=Visual.SupportLocal-Visual.PalmLocal;
-    SupportPosition=Tracking.RightPosition+((LocalSupport*(Tracking.UnitsPerMetre/Visual.ModelUnitsPerMetre))>>Result);
-    Hands=Tracking.LeftPosition-Tracking.RightPosition;
-    if (!Down) bSupportArmed=True;
-    if (bSupportHeld && (!Down || VSize(Hands)>0.85*Tracking.UnitsPerMetre || VSize(Hands)<0.1*Tracking.UnitsPerMetre || Abs(VSize(Hands)-VSize(LocalSupport)*(Tracking.UnitsPerMetre/Visual.ModelUnitsPerMetre))>0.18*Tracking.UnitsPerMetre))
-    { bSupportHeld=False; SupportReleases++; }
-    if (bSupportArmed && Down && !bSupportPrevious && VSize(Tracking.LeftPosition-SupportPosition)<0.18*Tracking.UnitsPerMetre)
-    { bSupportHeld=True; SupportGrabs++; PulseLeft(0.2,15); }
+    if (ManualReload!=None) Reserved=ManualReload.ReservesOffhand();
+    if (SupportGrip==None) SupportGrip=new class'KFVRSupportGripState';
+    if (ValidSupport && !Reserved)
+    {
+        LocalSupport=Visual.SupportLocal-Visual.PalmLocal;
+        SupportPosition=Tracking.RightPosition+((LocalSupport*(Tracking.UnitsPerMetre/Visual.ModelUnitsPerMetre))>>Result);
+        Hands=Tracking.LeftPosition-Tracking.RightPosition;
+        WithinReach=!(VSize(Hands)>0.85*Tracking.UnitsPerMetre || VSize(Hands)<0.1*Tracking.UnitsPerMetre || Abs(VSize(Hands)-VSize(LocalSupport)*(Tracking.UnitsPerMetre/Visual.ModelUnitsPerMetre))>0.18*Tracking.UnitsPerMetre);
+        NearSupport=VSize(Tracking.LeftPosition-SupportPosition)<0.18*Tracking.UnitsPerMetre;
+    }
+    PreviousGrabs=SupportGrip.Grabs;
+    SupportGrip.Update(ValidSupport,Reserved,Down,NearSupport,WithinReach);
+    PublishSupport();
+    if (SupportGrabs!=PreviousGrabs) PulseLeft(0.2,15);
     if (bSupportHeld)
     {
         Result=class'KFVRPoseMath'.static.AlignSupport(Result,LocalSupport,Hands);
-        SupportDirectionDot=Normal(LocalSupport>>Result) dot Normal(Hands); SupportFrames++;
+        SupportDirectionDot=Normal(LocalSupport>>Result) dot Normal(Hands);
     }
-    bSupportPrevious=Down; return Result;
+    return Result;
 }
 function bool Active()
 {
@@ -284,7 +302,7 @@ function ParkForTrader()
     if (GrenadeControl!=None) GrenadeControl.ResetInput();
     if (Gun!=None) { Gun.StopFire(0); Gun.StopFire(1); }
     bFiring=False; bTriggerArmed=False; bHolstered=True;
-    bSupportHeld=False; bSupportArmed=False; bGripArmed=False; bReloadArmed=False; bCycleArmed=False; bManualArmed=False;
+    ResetSupport(); bGripArmed=False; bReloadArmed=False; bCycleArmed=False; bManualArmed=False;
     for (I=0;I<InventoryCount;I++)
     {
         if (InventoryManuals[I]!=None) InventoryManuals[I].StoreForSwitch();
@@ -301,8 +319,7 @@ function ReleaseInput()
     local int I;
     if (Trader!=None) Trader.CloseShop();
     if (GrenadeControl!=None) GrenadeControl.ResetInput();
-    if (bSupportHeld) SupportReleases++;
-    bSupportHeld=False; bSupportArmed=False; bSupportPrevious=False;
+    ResetSupport();
     bManualArmed=False; bManualPrevious=False; bUseArmed=False; bUsePrevious=False;
     if (ManualReload!=None) ManualReload.Suspend();
     for (I=0;I<InventoryCount;I++) if (KFVRTrackedWelder(InventoryWeapons[I])!=None) KFVRTrackedWelder(InventoryWeapons[I]).ResetInput();
@@ -372,7 +389,7 @@ function UpdateHands()
         // provisional right-hand grasp until a matching profile is available.
         if (Gun.Class==class'Frag') RightGrasp=None;
         if (KFVRTrackedDualies(Gun)!=None) LeftGrasp=KFVRTrackedDualies(Gun).LeftVisual;
-        else if (bSupportHeld) LeftGrasp=Visual;
+        else if (bSupportHeld && Visual!=None && !Visual.bHidden && (Tracking.Flags & 3)==3) LeftGrasp=Visual;
         else if (ManualReload!=None && ManualReload.HeldMagazine>0 && Visual!=None && !Visual.bHidden && (Tracking.Flags & 3)==3) LeftGrasp=Visual.MagazineGrip;
         LeftRole=HandGripRole(True); RightRole=HandGripRole(False);
     }
@@ -407,7 +424,7 @@ function UpdateRig(float Delta)
     { ReleaseInput(); return; }
     if (Trader!=None && Trader.bOpen)
     {
-        Trader.UpdateDisplay();
+        ResetSupport(); Trader.UpdateDisplay();
         return;
     }
     if (Gun==None) { ReleaseInput(); return; }
@@ -420,9 +437,10 @@ function UpdateRig(float Delta)
             if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).StoreForSwitch();
             if (ManualReload!=None) ManualReload.StoreForSwitch();
             if (GrenadeControl!=None) GrenadeControl.ResetInput();
+            ResetSupport();
             Gun=InventoryWeapons[I]; ActiveIndex=I; ManualReload=InventoryManuals[I]; bFiring=False; bTriggerArmed=False; bHolstered=False;
         }
-    if (PC.Pawn.Weapon!=Gun) bHolstered=True;
+    if (PC.Pawn.Weapon!=Gun) { bHolstered=True; ResetSupport(); }
     UpdateInventoryVisuals();
     if (Visual==None)
     {
@@ -438,6 +456,7 @@ function UpdateRig(float Delta)
     if (StatusDisplay!=None) StatusDisplay.UpdateDisplay();
     if ((Tracking.Flags & 2)==0)
     {
+        ResetSupport();
         if (ManualReload!=None) ManualReload.Suspend();
         Visual.bHidden=True;
         if (Visual.MagazineGrip!=None) Visual.MagazineGrip.bHidden=True;
@@ -461,7 +480,7 @@ function UpdateRig(float Delta)
             { SelectInventoryWeapon(I); break; }
     }
     else if (bGripArmed && !bHolstered && !GripDown && bGripPrevious && VSize(Tracking.RightPosition-HolsterLocation)<0.18*Tracking.UnitsPerMetre)
-    { if (ManualReload!=None && ManualReload.Gun==Gun) ManualReload.StoreForSwitch(); if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).StoreForSwitch(); bHolstered=True; HolsterCount++; PulseRight(0.2,15); }
+    { if (ManualReload!=None && ManualReload.Gun==Gun) ManualReload.StoreForSwitch(); if (KFVRTrackedDualies(Gun)!=None) KFVRTrackedDualies(Gun).StoreForSwitch(); bHolstered=True; ResetSupport(); HolsterCount++; PulseRight(0.2,15); }
     bGripPrevious=GripDown;
     UseDown=(Tracking.Flags & 8)!=0;
     if (!UseDown) bUseArmed=True;
@@ -496,6 +515,7 @@ function UpdateRig(float Delta)
     bReloadPrevious=ReloadDown; bCyclePrevious=CycleDown;
     if (bHolstered)
     {
+        ResetSupport();
         Position=HolsterLocation; GunRotation=Tracking.BodyRotation; GunRotation.Pitch=-16384;
         bTriggerArmed=False;
     }
