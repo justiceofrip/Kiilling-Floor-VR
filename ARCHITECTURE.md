@@ -128,3 +128,12 @@ Installed syringe/welder meshes have upward-pointing idle working axes. KFVRWeap
 The normal gameplay package dynamically loads these meshes only when the private URL requests NativeHands. It takes the installed character hand material from the owned pistol after stock sleeve swapping and retains each native finger's measured roll while driving its pointing axis. No extracted geometry is compiled into KFVRGameplay. Staging validates all selected package/source hashes and existing destination ownership before copying. The developer arm experiment is a mutually exclusive mode.
 
 Both hand options now initialize as hidden actors during the living standalone pawn's ordinary Tick, before tracking starts. Visibility, poses and release still follow validated tracking on that Tick. The same preload path is covered by the default-hand regression; this does not establish a headset performance improvement. See docs/NATIVE_HANDS.md for local preparation and limitations.
+
+
+## Measured native grasps and hand evaluation order
+
+KFVRWeaponVisual captures sixteen coordinate frames per side from the installed idle animation before collapsing the stock arms. KFVRHandPoseMath centralizes the real bone names and quaternion pose interpolation. Native hands reuse those frames for held-weapon contact; only visual palms/fingers are adjusted. Raw tracking remains authoritative for interaction, firing and release. A right-hand palm-frame half-turn accounts for the local asset converter's rebasing. Grenades keep their provisional grasp because their stock toss pose belongs to the opposite hand.
+
+The rig completes weapon selection, support, recoil and mechanical controls before posing hands. Each hand sets its actor transform and all fifteen joint overrides before its first BoneRefresh/GetBoneCoords that Tick. Evaluating it earlier exposed the previous finger pose after abrupt wrist turns in actual readback. PresentationSerial marks completion; the read-only observer brackets frame arrays and rejects crossed-update samples for independent attachment checks.
+
+Native thumb touch interpolates from an articulated raised thumb to the measured native/weapon rest pose. Trigger-finger input remains independent; remaining fingers use the installed grasp. The supporting rifle palm follows the weapon foregrip with a separation-based release bound. This can displace the visual support palm from its raw controller and needs wearer comfort evaluation.

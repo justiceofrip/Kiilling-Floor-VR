@@ -20,6 +20,19 @@ def layout(o):
    d=o.read(int(row['address'],16),116);off=unpack(d,76);size=unpack(d,60)
    if unpack(d,56)==1 and size in [4,12] and 0<=off and off+size<=packet_size:
     fields.append(('KFVRWeaponRig','Tracking.'+row['name'],row['class'],base+off,size,unpack(d,112)))
+ # Expand measured native grip/finger frames through the reflected Coords
+ # members. These are read-only snapshots, independent of script error fields.
+ coords=[]
+ for row in o.rows:
+  if row['outer'].lower()=='coords' and row['class']=='StructProperty':
+   d=o.read(int(row['address'],16),116)
+   if unpack(d,56)==1 and unpack(d,60)==12:coords.append((row['name'],unpack(d,76)))
+ for row in o.rows:
+  if (row['outer'],row['name']) not in [('KFVRWeaponVisual','GripPose'),('KFVRHandVisual','FingerWorld'),('KFVRHandVisual','NativeBind')]:continue
+  d=o.read(int(row['address'],16),116);base=unpack(d,76);count=unpack(d,56);size=unpack(d,60)
+  if row['class']!='StructProperty' or size!=48 or count not in [15,32] or sorted(o for _,o in coords)!=[0,12,24,36]:raise ValueError('Unexpected measured grip frame layout')
+  for i in range(count):
+   for name,offset in coords:fields.append((row['outer'],f"{row['name']}.{i}.{name}",'StructProperty',base+i*size+offset,12,0))
  o.vr_fields=fields
  schema=[]
  for row in o.rows:
@@ -40,12 +53,12 @@ def sample(o):
  # Bracket multi-object reads with the rig's packet and completion counters.
  # A walking pawn may advance several UU between reads; crossed-Tick samples
  # are useful logs but cannot establish relative hand/weapon attachment.
- guards=[]
+ guards=[];stamps={}
  for row,fields,size_needed in o.vr_schema:
   if row['class']=='KFVRWeaponRig':
    for owner,name,typ,off,size,mask in fields:
-    if name in ['Tracking.Serial','LastSerial','AppliedFrames']:
-     at=int(row['address'],16)+off;guards.append((at,o.read(at,size)))
+    if name in ['Tracking.Serial','LastSerial','AppliedFrames','PresentationSerial']:
+     at=int(row['address'],16)+off;before=o.read(at,size);guards.append((at,before));stamps[name]=unpack(before)
  out=[]
  for row,fields,size_needed in o.vr_schema:
   address=int(row['address'],16);buffer=o.read(address,size_needed);values={}
@@ -77,7 +90,7 @@ def sample(o):
     cls=o.object_name(unpack(h,40))
     if cls in ['Nade','MedicNade','FlameNade']:
      o.vr_schema.append(object_layout(o,dict(address=hex(ptr),index=index,**{'class':cls})))
- o.rig_sample_consistent=bool(guards) and all(o.read(at,len(before))==before for at,before in guards)
+ o.rig_sample_consistent=bool(guards) and ('PresentationSerial' not in stamps or stamps['PresentationSerial']==stamps.get('Tracking.Serial')) and all(o.read(at,len(before))==before for at,before in guards)
  return out
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--seconds',type=float,default=20);a=p.parse_args()

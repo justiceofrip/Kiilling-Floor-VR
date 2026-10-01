@@ -2,6 +2,8 @@
 // the independent stereo world views. Asset coordinates are measured at runtime.
 class KFVRWeaponVisual extends Actor;
 var Weapon SourceWeapon;
+var coords GripPose[32]; // Left palm + 15 joints, then right palm + 15 joints.
+var bool bLeftGripPose,bRightGripPose;
 var vector BladeAxis,ToolAxis;
 var bool bToolAligned;
 var vector ToolFrameX,ToolFrameY,ToolFrameZ,MeasuredToolAxis;
@@ -13,6 +15,23 @@ var vector MagazineX,MagazineY,MagazineZ,SupportLocal;
 var bool bCalibrated,bTranslationCalibrated,bTranslationProbe,bPhysicalProfile;
 var name MagazineBone,ActionBone;
 var float ActionTravelMetres;
+simulated function bool CaptureGripPose(bool Left)
+{
+    local int I,GripBase;
+    local coords C,P;
+    if (!Left) GripBase=16;
+    P=GetBoneCoords(class'KFVRHandPoseMath'.static.SourceBone(Left,0));
+    if (VSize(P.Origin)<1) return False;
+    for (I=0;I<16;I++)
+    {
+        C=GetBoneCoords(class'KFVRHandPoseMath'.static.SourceBone(Left,I));
+        if (I>0 && (VSize(C.Origin-P.Origin)<0.1 || VSize(C.Origin-P.Origin)>100)) return False;
+        if (Abs(VSize(C.XAxis)-1)>0.01 || Abs(C.XAxis dot C.YAxis)>0.01) return False;
+        GripPose[GripBase+I]=C;
+    }
+    return True;
+}
+simulated function coords GripBone(int Index) { return GripPose[Clamp(Index,0,31)]; }
 simulated function bool Initialize(Weapon Source)
 {
     local coords Palm,Tip,Part;
@@ -38,6 +57,8 @@ simulated function bool Initialize(Weapon Source)
     // The world proxy may attach that measured offset to either VR controller.
     if (bOffhandGun || Source.Class==class'Frag') Palm=GetBoneCoords('Hands_LArmPalm');
     PalmLocal=Palm.Origin; TipLocal=Tip.Origin;
+    // Capture the installed idle grasp before hiding the stock arm hierarchy.
+    bLeftGripPose=CaptureGripPose(True); bRightGripPose=CaptureGripPose(False);
     // Toss starts in the left hand facing back toward the player. Bring its
     // grenade centre forward into the right controller grasp (provisional 4 cm).
     if (Source.Class==class'Frag') PalmLocal=TipLocal-vect(12,0,0);

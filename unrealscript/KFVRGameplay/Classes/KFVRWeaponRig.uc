@@ -55,6 +55,7 @@ var int LastSerial, AppliedFrames, TraceCount, HolsterCount, DrawCount;
 var float LastInputTime, Recoil;
 var bool bTracking, bTriggerArmed, bFiring, bHolstered, bGripPrevious, bGripArmed;
 
+var int PresentationSerial;
 function PulseRight(float Strength, int DurationMs)
 {
     Feedback.RightAmplitude=FClamp(Strength,0.0,1.0); Feedback.RightMs=Clamp(DurationMs,0,100);
@@ -232,7 +233,7 @@ function rotator SupportedRotation()
     SupportPosition=Tracking.RightPosition+((LocalSupport*(Tracking.UnitsPerMetre/Visual.ModelUnitsPerMetre))>>Result);
     Hands=Tracking.LeftPosition-Tracking.RightPosition;
     if (!Down) bSupportArmed=True;
-    if (bSupportHeld && (!Down || VSize(Hands)>0.85*Tracking.UnitsPerMetre || VSize(Hands)<0.1*Tracking.UnitsPerMetre))
+    if (bSupportHeld && (!Down || VSize(Hands)>0.85*Tracking.UnitsPerMetre || VSize(Hands)<0.1*Tracking.UnitsPerMetre || Abs(VSize(Hands)-VSize(LocalSupport)*(Tracking.UnitsPerMetre/Visual.ModelUnitsPerMetre))>0.18*Tracking.UnitsPerMetre))
     { bSupportHeld=False; SupportReleases++; }
     if (bSupportArmed && Down && !bSupportPrevious && VSize(Tracking.LeftPosition-SupportPosition)<0.18*Tracking.UnitsPerMetre)
     { bSupportHeld=True; SupportGrabs++; PulseLeft(0.2,15); }
@@ -337,7 +338,40 @@ function EnsureHandVisuals()
         if (RightHand!=None) RightHand.bHidden=True;
     }
 }
+// Pose hands after weapon support/recoil, switching and mechanical controls.
+// This avoids displaying the previous weapon frame or a stale grasp role.
 function Tick(float Delta)
+{
+    UpdateRig(Delta);
+    if (bTracking) UpdateHands();
+    PresentationSerial=Tracking.Serial;
+}
+function UpdateHands()
+{
+    local KFVRWeaponVisual LeftGrasp,RightGrasp;
+    local int LeftRole,RightRole;
+    if (Gun!=None && !bHolstered && (Trader==None || !Trader.bOpen))
+    {
+        RightGrasp=Visual;
+        // The grenade toss is authored in the opposite hand; retain its
+        // provisional right-hand grasp until a matching profile is available.
+        if (Gun.Class==class'Frag') RightGrasp=None;
+        if (KFVRTrackedDualies(Gun)!=None) LeftGrasp=KFVRTrackedDualies(Gun).LeftVisual;
+        else if (bSupportHeld) LeftGrasp=Visual;
+        LeftRole=HandGripRole(True); RightRole=HandGripRole(False);
+    }
+    if (LeftHand!=None)
+    {
+        LeftHand.bHidden=(Tracking.Flags & 1)==0;
+        if (!LeftHand.bHidden) LeftHand.PoseHand(Tracking.LeftPosition,Tracking.LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl,LeftRole,LeftGrasp,True);
+    }
+    if (RightHand!=None)
+    {
+        RightHand.bHidden=(Tracking.Flags & 2)==0;
+        if (!RightHand.bHidden) RightHand.PoseHand(Tracking.RightPosition,Tracking.RightRotation,Tracking.UnitsPerMetre,Tracking.RightThumb,Tracking.RightIndex,Tracking.RightCurl,RightRole,RightGrasp,False);
+    }
+}
+function UpdateRig(float Delta)
 {
     local vector X,Y,Z,Position;
     local rotator GunRotation;
@@ -358,8 +392,6 @@ function Tick(float Delta)
     if (Trader!=None && Trader.bOpen)
     {
         Trader.UpdateDisplay();
-        if (LeftHand!=None) { LeftHand.bHidden=(Tracking.Flags & 1)==0; if (!LeftHand.bHidden) LeftHand.PoseHand(Tracking.LeftPosition,Tracking.LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl,0); }
-        if (RightHand!=None) { RightHand.bHidden=(Tracking.Flags & 2)==0; if (!RightHand.bHidden) RightHand.PoseHand(Tracking.RightPosition,Tracking.RightRotation,Tracking.UnitsPerMetre,Tracking.RightThumb,Tracking.RightIndex,Tracking.RightCurl,0); }
         return;
     }
     if (Gun==None) { ReleaseInput(); return; }
@@ -380,16 +412,6 @@ function Tick(float Delta)
     {
         for (I=0;I<InventoryCount;I++) if (InventoryVisuals[I]!=None) { SelectInventoryWeapon(I); break; }
         if (Visual==None) { ReleaseInput(); return; }
-    }
-    if (LeftHand!=None)
-    {
-        LeftHand.bHidden=(Tracking.Flags & 1)==0;
-        if (!LeftHand.bHidden) LeftHand.PoseHand(Tracking.LeftPosition,Tracking.LeftRotation,Tracking.UnitsPerMetre,Tracking.LeftThumb,Tracking.LeftIndex,Tracking.LeftCurl,HandGripRole(True));
-    }
-    if (RightHand!=None)
-    {
-        RightHand.bHidden=(Tracking.Flags & 2)==0;
-        if (!RightHand.bHidden) RightHand.PoseHand(Tracking.RightPosition,Tracking.RightRotation,Tracking.UnitsPerMetre,Tracking.RightThumb,Tracking.RightIndex,Tracking.RightCurl,HandGripRole(False));
     }
     if (StatusDisplay==None && !bStatusFailed)
     {

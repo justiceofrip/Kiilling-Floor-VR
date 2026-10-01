@@ -14,6 +14,11 @@ class KFVRHandVisual extends KFVRWeaponVisual;
 #exec MESH DEFAULTANIM MESH=KFVRGloveLeft ANIM=KFVRGloveLeftAnim
 var bool bStandaloneGlove,bNativeHandMesh;
 var float NativeFingerRollCos[15],NativeFingerRollSin[15];
+var coords NativeBind[15],FingerWorld[15];
+var KFVRWeaponVisual GripVisual;
+var bool bGripPose,bGripSourceLeft;
+var float ThumbPoseBlend,LastPoseTime,ControllerPalmError;
+var vector TrackedPalmPosition,GripPalmTarget;
 var ConstantColor GloveMaterial,PadMaterial;
 var vector PalmForward,PalmRight,PalmUp,IndexDirection;
 var float PalmAxisError,IndexAxisError;
@@ -148,7 +153,7 @@ simulated function bool InitializeGlove(Weapon Source)
         // right-hand frames. Preserve that roll when driving a pointing axis.
         for (NativeFinger=0;NativeFinger<15;NativeFinger++)
         {
-            C=GetBoneCoords(FingerBones[NativeFinger]);
+            C=GetBoneCoords(FingerBones[NativeFinger]); NativeBind[NativeFinger]=C;
             RollLength=Sqrt(C.YAxis.Y*C.YAxis.Y+C.YAxis.Z*C.YAxis.Z);
             if (RollLength<0.1) return False;
             NativeFingerRollCos[NativeFinger]=C.YAxis.Y/RollLength;
@@ -176,19 +181,37 @@ simulated function bool InitializeGlove(Weapon Source)
 }
 simulated function PoseGlove(vector Position,rotator HandRotation,float Units)
 {
-    local int Finger,Joint;
-    local float Curl,Angle,Sign;
+    local int Finger,Joint,GripBase,Index;
+    local float Curl,Angle,Sign,Blend;
+    local rotator OpenRotation,ClosedRotation,FinalRotation;
     local vector X,Y,Z,DesiredX,DesiredY,DesiredZ,UnrolledY;
-    local coords C;
-    PoseAt(Position,HandRotation,Units);
+    local coords C,Closed;
+    TrackedPalmPosition=Position;
+    if (bGripPose)
+    {
+        if (!bGripSourceLeft) GripBase=16;
+        C=GripVisual.GripBone(GripBase);
+        Position=GripVisual.Location+((C.Origin*GripVisual.DrawScale)>>GripVisual.Rotation);
+        X=C.XAxis>>GripVisual.Rotation; Y=C.YAxis>>GripVisual.Rotation; Z=C.ZAxis>>GripVisual.Rotation;
+        // The converter rebases the right palm with a 180-degree X turn.
+        if (!bLeftHand) { Y=-Y; Z=-Z; }
+        HandRotation=OrthoRotation(X,Y,Z);
+    }
+    GripPalmTarget=Position;
+    // Do not call the weapon PoseAt/BoneRefresh here: that evaluates the
+    // skeleton with last frame's finger overrides. Queue the entire hand pose
+    // before its first skeletal evaluation on this Tick.
+    SetDrawScale(Units/ModelUnitsPerMetre); SetRotation(HandRotation);
+    SetLocation(Position-((PalmLocal*DrawScale)>>HandRotation)); bHidden=False;
     GetAxes(HandRotation,X,Y,Z); Sign=1; if (bLeftHand) Sign=-1;
     for (Finger=0;Finger<5;Finger++)
     {
-        if (Finger==0) Curl=ThumbCurl;
+        if (Finger==0) Curl=ThumbPoseBlend;
         else if (Finger==1) Curl=IndexCurl;
         else Curl=GripCurl;
         for (Joint=0;Joint<3;Joint++)
         {
+            if (bGripPose && (Finger==0 || (Finger==1 && GripRole==1))) Curl=0;
             if (Joint==0) Angle=1.3*Curl;
             else if (Joint==1) Angle=2.8*Curl;
             else Angle=3.7*Curl;
@@ -198,8 +221,11 @@ simulated function PoseGlove(vector Position,rotator HandRotation,float Units)
             DesiredY=Y*Cos(Angle)+X*(Sign*Sin(Angle)); DesiredZ=Z;
             if (Finger==0)
             {
-                // Oppose the thumb across the top of the grasp, progressively.
-                DesiredX=Normal(Z*(0.85-0.95*Curl)+X*(0.50-0.10*Curl)-Y*Sign*(0.15+0.65*Curl));
+                // Separate joint arcs: released thumb rises above the grasp.
+                // Touch settles to the measured native rest/weapon thumb pose.
+                Angle=0.95-float(Joint)*0.23;
+                DesiredX=Normal(X*Cos(Angle)+Z*Sin(Angle)-Y*Sign*0.10);
+                if (!bNativeHandMesh) DesiredX=Normal(DesiredX*(1-Curl)+(X*0.55-Y*Sign*0.7-Z*(float(Joint)*0.15))*Curl);
                 DesiredY=Normal(Y-DesiredX*(Y dot DesiredX));
                 DesiredZ=Normal(DesiredX cross DesiredY);
             }
@@ -209,12 +235,35 @@ simulated function PoseGlove(vector Position,rotator HandRotation,float Units)
                 DesiredY=UnrolledY*NativeFingerRollCos[Finger*3+Joint]+DesiredZ*NativeFingerRollSin[Finger*3+Joint];
                 DesiredZ=DesiredZ*NativeFingerRollCos[Finger*3+Joint]-UnrolledY*NativeFingerRollSin[Finger*3+Joint];
             }
-            SetBoneDirection(FingerBones[Finger*3+Joint],OrthoRotation(DesiredX,DesiredY,DesiredZ),,1.0,1);
+            Index=Finger*3+Joint;
+            OpenRotation=OrthoRotation(DesiredX,DesiredY,DesiredZ);
+            FinalRotation=OpenRotation;
+            if (bGripPose || (bNativeHandMesh && Finger==0))
+            {
+                if (bGripPose)
+                {
+                    Closed=GripVisual.GripBone(GripBase+1+Index);
+                    ClosedRotation=OrthoRotation(Closed.XAxis>>GripVisual.Rotation,Closed.YAxis>>GripVisual.Rotation,Closed.ZAxis>>GripVisual.Rotation);
+                }
+                else
+                {
+                    Closed=NativeBind[Index];
+                    ClosedRotation=OrthoRotation(Closed.XAxis>>HandRotation,Closed.YAxis>>HandRotation,Closed.ZAxis>>HandRotation);
+                }
+                Blend=1;
+                if (Finger==0) Blend=ThumbPoseBlend;
+                if (Finger==1 && GripRole==1) Blend=FClamp(IndexCurl/0.55,0,1);
+                FinalRotation=class'KFVRHandPoseMath'.static.BlendRotation(OpenRotation,ClosedRotation,Blend);
+                GetAxes(FinalRotation,DesiredX,DesiredY,DesiredZ);
+            }
+            SetBoneDirection(FingerBones[Index],FinalRotation,,1.0,1);
             if (Finger==1 && Joint==2) ExpectedIndexDirection=DesiredX;
         }
     }
     BoneRefresh(); C=GetBoneCoords(PalmBone);
     PalmWorld=C.Origin; PalmError=VSize(PalmWorld-Position);
+    ControllerPalmError=VSize(PalmWorld-TrackedPalmPosition);
+    for (Index=0;Index<15;Index++) FingerWorld[Index]=GetBoneCoords(FingerBones[Index]);
     PalmForward=C.XAxis; PalmRight=C.YAxis; PalmUp=C.ZAxis;
     PalmAxisError=FMax(VSize(C.XAxis-X),FMax(VSize(C.YAxis-Y),VSize(C.ZAxis-Z)));
     C=GetBoneCoords(FingerBones[3]); IndexBaseWorld=C.Origin;
@@ -297,20 +346,28 @@ simulated function PoseArm(vector Position,rotator HandRotation,float Units)
     C=GetBoneCoords(ElbowBone); MeasuredElbow=C.Origin; ArmElbowError=VSize(C.Origin-ArmElbow);
     C=GetBoneCoords(PalmBone); ArmWristError=VSize(C.Origin-Position); ArmFrames++;
 }
-simulated function PoseHand(vector Position, rotator HandRotation, float Units, float Thumb, float Index, float Grip, optional int GripKind)
+simulated function PoseHand(vector Position, rotator HandRotation, float Units, float Thumb, float Index, float Grip, optional int GripKind, optional KFVRWeaponVisual Grasp, optional bool SourceLeft)
 {
     local rotator Bend;
     local int Finger,Joint;
     local float Curl,Angle,Spread;
     local vector Forward,Side,Up;
     local coords C,Palm;
+    local float PoseDelta;
     local KFVRWeaponRig R;
     ThumbCurl=FClamp(Thumb,0.0,1.0); IndexCurl=FClamp(Index,0.0,1.0); GripCurl=FClamp(Grip,0.0,1.0);
     InputThumbCurl=ThumbCurl; InputIndexCurl=IndexCurl; InputGripCurl=GripCurl;
     GripRole=Clamp(GripKind,0,3);
+    GripVisual=Grasp; bGripSourceLeft=SourceLeft;
+    bGripPose=bNativeHandMesh && Grasp!=None && !Grasp.bHidden;
+    if (bGripPose) bGripPose=(SourceLeft && Grasp.bLeftGripPose) || (!SourceLeft && Grasp.bRightGripPose);
+    PoseDelta=Level.TimeSeconds-LastPoseTime;
+    if (PoseFrames==0 || PoseDelta>0.1) ThumbPoseBlend=ThumbCurl;
+    else ThumbPoseBlend+=(ThumbCurl-ThumbPoseBlend)*FClamp(PoseDelta*24,0,1);
+    LastPoseTime=Level.TimeSeconds;
     // A latched weapon remains held when the physical grip button is released.
     // Thumb/index capacitance still layers onto its resting grasp.
-    if (GripRole>0) { GripCurl=FMax(GripCurl,0.72); ThumbCurl=FMax(ThumbCurl,0.35); }
+    if (GripRole>0) GripCurl=FMax(GripCurl,0.72);
     if (GripRole==2) IndexCurl=FMax(IndexCurl,0.75);
     if (GripRole==3) IndexCurl=FMax(IndexCurl,0.45);
     if (bStandaloneGlove) { PoseGlove(Position,HandRotation,Units); return; }

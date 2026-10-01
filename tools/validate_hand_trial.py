@@ -69,6 +69,16 @@ def validate(folder):
     for n,side in [(13,True),(14,False)]:
         data=phase(n)
         checks[f'phase_{n}_only_lost_hand_hidden']=bool(data) and all(h['bHidden']==(h['bLeftHand']==side) for h in data)
+    # Capacitive thumb touch has its own articulated native rest pose. Release
+    # lifts each joint instead of flattening all three axes into one direction.
+    from validate_grip_pose import rotate
+    touched=phase(4);released=phase(3)
+    native_touched=[h for h in touched if h.get('bNativeHandMesh')]
+    if native_touched:
+        thumb_errors=[math.dist(h[f'FingerWorld.{j}.{axis}'],rotate(h[f'NativeBind.{j}.{axis}'],h['Rotation'])) for h in native_touched for j in range(3) for axis in ['XAxis','YAxis','ZAxis']]
+        checks['touched_thumb_matches_native_joint_frames']=max(thumb_errors)<.005
+        checks['touch_settles_without_forcing_grip_curl']=all(h['InputThumbCurl']==1 and h['ThumbPoseBlend']>.999 and h['GripCurl']==0 for h in native_touched)
+        checks['released_thumb_is_raised_and_articulated']=bool(released) and all(h['ThumbPoseBlend']<.001 and dot(h['FingerWorld.2.XAxis'],h['PalmUp'])>.4 and dot(h['FingerWorld.0.XAxis'],h['FingerWorld.2.XAxis'])<.94 for h in released)
     checks['focus_loss_hides_both']=bool(phase(11)) and all(h['bHidden'] for h in phase(11))
     final=objects('KFVRHandVisual',rows[-1:]);rigs=objects('KFVRWeaponRig')
     checks['stop_releases_presentation']=len(final)==2 and all(h['bHidden'] for h in final) and bool(rigs) and not rigs[-1]['bTracking']

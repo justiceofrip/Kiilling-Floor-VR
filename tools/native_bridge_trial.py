@@ -62,6 +62,10 @@ with (folder/'receiver-errors.txt').open('w') as errors:
    else:
     from validate_weapon_trial import validate as validate_weapon
     print(json.dumps(validate_weapon(folder),indent=2))
+  if a.inventory or a.heal or a.weld or a.dual:
+   from validate_grip_pose import validate as validate_grip
+   required=('KFVRTrackedSyringe:R',) if a.heal else ('KFVRTrackedWelder:R',) if a.weld else ('KFVRTrackedDualies:R','KFVRTrackedDualies:L') if a.dual else ('KFVRTrackedSingle:R','KFVRTrackedDeagle:R','KFVRTrackedBullpup:R','KFVRTrackedBullpup:L')
+   print(json.dumps(validate_grip(folder,required),indent=2))
   if a.weapon and not a.walking_aim and not a.hud and not a.hands and not a.arms and not a.trader and not a.grenade:
    from validate_status_display import validate as validate_status
    print(json.dumps(validate_status(folder,inventory=a.inventory,dual=a.dual,belt=a.dual_belt),indent=2))

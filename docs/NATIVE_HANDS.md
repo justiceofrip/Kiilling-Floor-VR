@@ -2,7 +2,7 @@
 
 The development source can build separate VR hands from the owner's installed `KF_Weapons_Trip.9mm_Trip` mesh. It retains the game's hand geometry, UVs and current character sleeve/hand material. These are actual KF assets, locally adapted for independent controllers. The ordinary launcher still uses KFVR's authored placeholder gloves; select `-NativeHands` explicitly for this prototype.
 
-The owner has not tested this option in the headset. Finger shapes, the flat dark wrist closure and hand-to-weapon contact remain provisional. It does not add arms, optical hand tracking or complete weapon-specific grasp animations. The existing capacitive controller inputs drive the fingers.
+The October 1 wearer session accepted basic movement and these hands as a proof of concept, while reporting thumb-touch mismatch and poor rifle grip contact. The subsequent grip/thumb corrections have desktop evidence only. Finger shapes, the flat dark wrist closure and physical comfort remain provisional. The existing capacitive controller inputs drive the fingers; this does not add arms or optical hand tracking.
 
 ## Build and launch
 
@@ -33,3 +33,12 @@ Use shared skin points and descending influence weights. The first triangle-expa
 The rig preloads hidden hands after a living local pawn is available. Tracking still controls when they appear. This moves asset loading out of the first tracking packet; no measured headset latency improvement is claimed.
 
 The `--hands`, `--inventory` and `--reload` desktop trials exercise the same native game/renderer with synthetic controller poses. Their numeric reports and eye images are complementary: a passing bone/interaction report alone does not establish correct mesh rendering or wearer comfort. Exact run IDs and failures are in `WORKLOG.md`.
+
+
+## Weapon contact and thumb touch
+
+With native hands enabled, the weapon proxy measures both palms and fifteen finger joints from its installed idle pose before hiding the original arms. The separate VR hand follows that grasp after the weapon has finished support/recoil and mechanical updates. The rifle support palm follows the authored foregrip; it releases when the controller separation differs from the weapon grip separation by more than the existing 18 cm grab radius. This presentation adjustment does not move the tracked interaction coordinates.
+
+Thumb touch blends independently into the native resting thumb pose, or the held weapon's thumb pose. Release raises the three thumb joints along separate arcs; holding a gun no longer forces thumb curl. The gun index finger still layers trigger input over the grasp. All hand joint overrides are queued before skeletal evaluation, preventing the previous pose from surviving for a frame after a sharp wrist turn.
+
+Coverage includes single/dual 9mm, Deagle, Bullpup, knife, syringe and welder. The grenade's opposite-hand toss pose and detached magazine grasp retain provisional poses. The common 9mm hand anatomy differs slightly from other weapons, so matching joint frames is not exact surface contact. Controller comfort and visual acceptance of these new corrections still require a future wearer session. Some paper-like polygons appeared near holstered weapons in the office fixture; their source is unresolved and may be unrelated map geometry/effects. A sleeve material experiment did not change them and was discarded.

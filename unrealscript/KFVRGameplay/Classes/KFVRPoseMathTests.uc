@@ -15,6 +15,13 @@ event int Main(string Params)
         Check((Normal(Source>>Result) dot Target)>0.999);
         GetAxes(Result,X,Y,Z); Check(Abs(X dot Y)<0.0001 && Abs(Y dot Z)<0.0001);
     }
+    // Native quaternion blend must use the short arc across rotator wrap.
+    Result=class'KFVRHandPoseMath'.static.BlendRotation(rot(0,32000,0),rot(0,-32000,0),0.5);
+    GetAxes(Result,X,Y,Z); Check(X.X< -0.999 && Abs(X.Y)<0.005);
+    Result=class'KFVRHandPoseMath'.static.BlendRotation(rot(0,0,0),rot(0,16384,0),0.5);
+    GetAxes(Result,X,Y,Z); Check(Abs(X.X-0.707107)<0.001 && Abs(X.Y-0.707107)<0.001);
+    Check(class'KFVRHandPoseMath'.static.SourceBone(True,10)=='Hands_LArmFinger32');
+    Check(class'KFVRHandPoseMath'.static.SourceBone(False,15)=='Hands_RArmFinger44');
     Log("KFVR_SUPPORT_TEST_RESULT checks=" $ Checks $ " failures=" $ Failures);
     if (Failures>0) return 1;
     return 0;
