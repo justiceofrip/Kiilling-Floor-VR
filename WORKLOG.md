@@ -673,3 +673,31 @@ Live evidence uses fresh private matches, native hands, synthetic controllers an
 Both traces restored entry/reset hooks and released resources; zero malformed/missing/busy reads, device resets or extra Tick inside Draw. Each recorded44 expired startup reads; discarded pairs were2/16. Both games exited normally and saved capacity-single-game.log/capacity-dual-game.log contain no script warnings/errors. Ordinary live runs used constant supply capacity15; changing capacity is exercised in engine commandlets and portable tests, not a live perk-switch sequence. No headset acceptance or public push.
 
 The installed Bullpup audit is also recorded in docs/WEAPONS.md. Its magazine path and grasp are measurable, but no independent bolt/charging-handle bone exists. Rifle physical mode remains disabled. Support ownership and separated mechanical capabilities are the next prerequisite work, excluded from this capacity checkpoint.
+
+
+## October 1: rifle support ownership and mechanical capabilities (b6b952e)
+
+The support-grip state reserves magazine/action ownership and fresh belt-grab intent before support alignment. It resets on dominant-only loss, external/explicit switching, holstering, trader transitions and ownership loss, requiring release/regrab. Accepted geometry, support distances, native grips, recoil and pose order are preserved. The new engine commandlet passes259 ownership cases.
+
+Magazine and native action capabilities are independent. Audited Bullpup Reload markers .62/.76 and grasp .62 calibrate its magazine socket/grasp; the native action remains absent, so this checkpoint still uses timed rifle reload. The unsupported .07 travel placeholder was removed. Missing/root/chassis action aliases are guarded. Independent review caught a potential new visible translation-probe displacement, so magazine-only rifle probing stays disabled at this checkpoint.
+
+Agents split support state, visual capability and diagnostic implementation. Approval review blocked a helper from editing the shared native driver; it supplied an unapplied patch, which root reviewed and integrated through its authorized path. No blocked action remains. The inventory extension preserves phases0-30 and adds two-second phases31-44 for actual right-only tracking loss, held-squeeze recovery, explicit release/regrab and pistol restoration. Default gloves follow controller palms; requested native hands additionally match installed grasp geometry, without silently falling back if their mesh fails.
+
+Initial MK23 interrupted trial091458 / trace091459-087291 passed41/42 checks. Full-slide position was correct (maximum0.00005913 UU), but only two coherent phase23 samples were captured against the required three. Non-alignment reload diagnostics now dwell two seconds on that pose (62 seconds total), retaining geometry and thresholds. Final MK23 evidence has nine full-slide samples.
+
+Inventory092036 / trace092036-970633 initially failed associations because Unreal exposes LeftHand as lowercase lefthand in its FName table. Case-insensitive pointer lookup fixes the reader. The failed report is preserved; the same saved evidence passes82 inventory,23 mechanical-profile,9 native-grip and22 status checks. Each new support phase has10-15 coherent samples. Tracking loss/recovery leaves the free palm at the controller; support returns only after release/regrab. The original workflow fires12 shots; the extension adds none. Received1,793 pairs, discarded0, startup expirations52. Actual rifle magazine rest is independently checked in196 poses (maximum0.00006496 UU position and0.00000007375 basis error). Support/lost-hand images were inspected.
+
+In-memory support validation passes53 helper checks for both native/default modes;16 negative cases reject. Standard, lower and mixed-case pointer names pass; absent/null/unknown/wrong-object pointers reject. Mechanical profile validation has26 positive/negative cases. These validate diagnostics, not headset comfort.
+
+Final native-hand regressions at1280 x960 per eye:
+
+- 092334 / native-trace-20261001-092335-443549: MK23 interrupted, 42 mechanism checks pass; 2658 pairs, startup expiry58, discarded1.
+- 092529 / native-trace-20261001-092530-356195: 9mm insertion stress, 54 mechanism checks pass; 2628 pairs, startup expiry64, discarded1.
+- 092716 / native-trace-20261001-092716-986170: dual belt, 32 mechanism checks pass; 2827 pairs, startup expiry58, discarded0.
+- 092943 / native-trace-20261001-092943-930768: Deagle normal, 38 mechanism checks pass; 2672 pairs, startup expiry46, discarded6.
+
+Each pistol also passes6 grip/10 status checks; dual passes13 status checks. Pistols each fire five stock shots. The9mm run preserves the pre-existing MK23 physical state. Dual has eight insertions and14 stock shots (8 right/6 left), maximum magazine error0.001100 UU. All final traces restore entry/reset hooks and release resources, without missing/malformed/busy input, device reset or extra Tick inside Draw. All games close normally. Final inventory/pistol/dual logs contain no script warnings/errors; the earlier coverage trial has the known stock pickup SteamStatsAndAchievements warning.
+
+Final native tests pass25/25 x86 and24/24 x64. Official SDK passes30,059 ammo checks plus20 parity checkpoints,25 pose,29,108 single-magazine,102 insertion,727 alignment,259 support ownership,10,500 melee,37,160 dual-feed,53,260 dual-magazine,4,326 arm and4,512 throw checks. Dual randomized counts vary with engine Rand. No tolerance was relaxed. No wearer acceptance or public push.
+
+User now explicitly supports implementing the absent Bullpup charging handle. New authored action/rail files are separate from b6b952e and were excluded from that checkpoint. A WORKLOG append initially failed due to Windows default codepage; this evidence entry uses explicit UTF-8 and follows in a documentation commit.
