@@ -14,6 +14,20 @@ static function name ActionBone(KFWeapon W)
     // Keep its physical action profile disabled until a presentation is authored.
     return '';
 }
+// Authored normalized markers, sampled from the owner's installed Reload.
+// Geometry/axes are measured at runtime, not copied out of the game assets.
+static function name InsertionChassis(KFWeapon W)
+{
+    if (KFVRTrackedSingle(W)!=None) return '9mm_Gun';
+    if (KFVRTrackedDeagle(W)!=None) return 'Gun';
+    return '';
+}
+static function vector InsertionFrames(KFWeapon W)
+{
+    if (KFVRTrackedSingle(W)!=None) return vect(0.55,0.60,0);
+    if (KFVRTrackedDeagle(W)!=None) return vect(0.62,0.66,0);
+    return vect(0,0,0);
+}
 static function float ActionTravel(KFWeapon W)
 {
     if (KFVRTrackedBullpup(W)!=None) return 0.07;

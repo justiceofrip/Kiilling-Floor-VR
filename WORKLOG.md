@@ -560,3 +560,38 @@ Final full-sequence regressions after both shared fixes:
 Both restored original entry/reset hooks, released bridge resources and observed no extra engine Tick inside Draw. Both test games exited normally and their saved logs have no Accessed None, ScriptWarning, Critical or Error entries. No KF/native receiver/native trace process remains. Fixture readiness now explicitly waited for all seven weapons before launching either test, and automatic window restoration preserved foreground focus. The corrected compiled gameplay package is staged; original game packages and the local native-hand geometry are unchanged.
 
 Final source checks: x86 24/24 and x64 23/23; official SDK suites pass (ammo 30,059; parity 20 checkpoints/20,000 actions; pose range 25; magazine 20,012; hand math 727; melee 10,075; dual feeds 37,160; dual magazines 34,341; arm geometry 4,326; throw velocity 3,674). Python parsing/diff checks pass; conflicting interruption/alignment CLI options reject before launching a process. This is a local desktop-verified checkpoint, with no new headset session or publication. Existing pre-alpha archive remains older than these fixes.
+
+
+## October 1: shared continuous pistol insertion
+
+Continued from 715a727 with two delegated tasks: installed-asset geometry/fixture work and a pure script insertion gate with independent integration review. All builds and game control remained coordinated by the primary agent. No headset or publication was requested for this increment.
+
+The live 9mm/Deagle adapter now seats through a continuous held-grip stroke, rather than a proximity-plus-release event. KFVRMagazineSocket measures each installed Reload relative to its weapon chassis over separate normal ticks, then derives its inward axis from the early root toward Idle. Profiles contain bone names and normalized markers (9mm .55/.60, Deagle .62/.66), not extracted geometric vectors. A later marker must move at least 5 mm closer and project positively within a broad 60-degree cone. Hidden owned visuals now preload the measurement. Existing accepted palm/grip transforms are unchanged. The magazine root is still the socket reference; feed-tip contact, collision surfaces and wearer tolerances remain unresolved.
+
+KFVRMagazineInsertion requires an outside approach, full-frame alignment and continuous travel, rejects speed/gap discontinuities, ignores duplicate/backwards samples and emits one seating event. The ammo ledger remains the only ammunition authority. Native recenter handling now emits one neutral game Tick even when both new eye/controller spaces arrive together, and dominant-hand-only loss suspends a held-magazine stroke. Lifetime speed/gap counters make rejection causes observable.
+
+Independent review caught an important timing defect before final live testing: the existing Tracking.Serial advances every game Tick, even on repeated mailbox reads. ABI14 now publishes a distinct InputSerial only for a fresh full-width mailbox sequence. The 128-byte script packet and all reflected member/type/size checks agree; presentation Serial retains its prior role. Gesture timing uses ordinary game time only when InputSerial advances. No controller packet TTL was extended.
+
+Initial development run native-bridge-20261001-072800 passed the new insertion/recenter/retention behavior but failed later slide/feed/shot assertions because the synthetic hand never released between held-grip seating and a slide grab. The driver now releases briefly and then deliberately regrips. Its old failure is preserved. The first attempted live fixture lookup had also exposed that weapon visuals existed only after tracking; hidden owned preload resolved this startup dependency.
+
+Final native-hand stress trials at 1280 x 960 per eye:
+
+- 073938 / trace073939-582284: 9mm passed 48 reload, 6 native-grip and 10 status checks, with 2,273 received pairs. Five stock shots consumed five rounds; maximum independently reconstructed socket-position error was 0.000002775 m. Native delivered 6,589 game packets from 2,225 fresh control samples.
+- 074120 / trace074120-991072: Deagle passed the same checks, with 2,316 pairs and five stock shots. The existing 9mm physical ledger remained unchanged. Maximum socket-position error was 0.000039078 m; 6,607 game packets came from 2,278 control samples.
+
+Both prove tilted-gun travel, a speed-limit rejection, partial stroke rejection, dominant-hand loss, exactly one reference-space reset, no automatic insertion on return, and seating before grip release. Actual magazine/palm bones, inserted rest frames, ammunition conservation, tactical plus-one and subsequent switching were checked. Both restored original entry/reset hooks and released resources; zero missing/malformed/busy inputs or device resets. Each discarded one pair; expired reads were 60/80. These coordinate errors quantify internal engine agreement, not physical headset tracking accuracy.
+
+The stress fixture exited normally. Its saved game log contains one installed DeaglePickup.InitDroppedPickupFor warning about missing SteamStatsAndAchievements during development inventory setup; no KFVR script error or crash was observed. Tilted approach, partial insertion and slide-pull images were inspected. Updated wearer acceptance remains pending.
+
+
+Completed shared-change regressions:
+
+- 074319 / trace074319-821873: 67 native-hand checks, 1,318 pairs.
+- 074401 / trace074401-689375: 25 inventory, 9 native-grip and 22 status checks, 894 pairs. Actual rifle support/grip capture inspected.
+- 074435 / trace074436-023694: Deagle wrong-roll strokes, 19 alignment + 6 grip + 10 status checks, 1,239 pairs.
+- 074521 / trace074522-381975: 9mm wrong-roll strokes, the same checks, 1,254 pairs. Negative trials now follow the same outside-to-seat trajectory as the valid stroke, so angular rejection cannot pass merely for lack of approach.
+- 074707 / trace074708-179016: default-glove interrupted 9mm reload, 33 reload + 10 status checks, 2,142 pairs. This also preserves the normal partial-slide-pull check omitted by the stress variant.
+
+All five restored entry/reset hooks and released resources, with no device reset or extra engine Tick inside Draw. Expired reads were64/60/52/60/58 and discarded pairs0/0/2/0/0, respectively. Native regression and fallback games closed normally; their saved logs contain no Accessed None, ScriptWarning, Critical, Error or profile-failure entries. No game/probe process remains at this checkpoint.
+
+Final source checks: x86 24/24 and x64 23/23; official SDK suites pass, including102 insertion checks,30,059 ammo checks and20 C++/script parity checkpoints. Python source parsing and diff checks pass. No assets were added to tracked files, no headset acceptance or publication is claimed. Subsequent MK23 adapter files are separate unbuilt work and are not part of this insertion checkpoint.

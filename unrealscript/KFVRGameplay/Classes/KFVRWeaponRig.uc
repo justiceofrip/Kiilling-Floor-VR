@@ -12,7 +12,7 @@ struct TrackingPacket
     var vector HeadPosition;
     var rotator BodyRotation;
     var float UnitsPerMetre;
-    var int Flags, Serial;
+    var int Flags, Serial, InputSerial;
 };
 struct FeedbackPacket
 {
@@ -192,6 +192,22 @@ function SelectInventoryWeapon(int Index)
     PC.Pawn.PendingWeapon=Gun; PC.Pawn.ChangedWeapon();
     bHolstered=False; SwitchCount++; DrawCount++; PulseRight(0.25,18);
 }
+// Preload hidden owned models/calibration before the first tracking packet.
+// World transforms, visibility and interactions still require valid tracking.
+function EnsureInventoryVisuals()
+{
+    local int I;
+    for (I=0;I<InventoryCount;I++)
+    {
+        if (InventoryWeapons[I]==None || InventoryWeapons[I].Owner!=PC.Pawn) continue;
+        if (InventoryVisuals[I]==None && InventoryVisualFailed[I]==0)
+        {
+            InventoryVisuals[I]=Spawn(class'KFVRWeaponVisual',self);
+            if (InventoryVisuals[I]!=None && !InventoryVisuals[I].Initialize(InventoryWeapons[I]))
+            { InventoryVisuals[I].Destroy(); InventoryVisuals[I]=None; InventoryVisualFailed[I]=1; }
+        }
+    }
+}
 function UpdateInventoryVisuals()
 {
     local int I;
@@ -202,12 +218,6 @@ function UpdateInventoryVisuals()
         {
             if (InventoryVisuals[I]!=None) InventoryVisuals[I].bHidden=True;
             continue;
-        }
-        if (InventoryVisuals[I]==None && InventoryVisualFailed[I]==0)
-        {
-            InventoryVisuals[I]=Spawn(class'KFVRWeaponVisual',self);
-            if (InventoryVisuals[I]!=None && !InventoryVisuals[I].Initialize(InventoryWeapons[I]))
-            { InventoryVisuals[I].Destroy(); InventoryVisuals[I]=None; InventoryVisualFailed[I]=1; }
         }
         if (InventoryVisuals[I]==None) continue;
         if (I!=ActiveIndex || bHolstered)
@@ -386,7 +396,7 @@ function UpdateRig(float Delta)
     PC=PlayerController(Owner);
     if (Level.NetMode!=NM_Standalone || PC==None || PC.Pawn==None || PC.Pawn.Health<=0 || Level.Pauser!=None)
     { ReleaseInput(); return; }
-    EnsureHandVisuals();
+    EnsureHandVisuals(); EnsureInventoryVisuals();
     if (Tracking.Serial!=LastSerial)
     {
         LastSerial=Tracking.Serial; LastInputTime=Level.TimeSeconds;
@@ -427,6 +437,7 @@ function UpdateRig(float Delta)
     if (StatusDisplay!=None) StatusDisplay.UpdateDisplay();
     if ((Tracking.Flags & 2)==0)
     {
+        if (ManualReload!=None) ManualReload.Suspend();
         Visual.bHidden=True;
         if (Visual.MagazineGrip!=None) Visual.MagazineGrip.bHidden=True;
         bTriggerArmed=False; bGripArmed=False; bGripPrevious=False;

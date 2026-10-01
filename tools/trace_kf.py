@@ -40,7 +40,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<15I',1120,13,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
+  p=snapshot['properties'];config=struct.pack('<15I',1120,14,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
   images={}
   def installed_image(file):
    if file not in images:
@@ -121,12 +121,12 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    rig=rigs[0];address=int(rig['address'],16);cls=struct.unpack('<I',observer.read(address+0x28,4))[0]
    field=next(row for row in observer.rows if row['class']=='StructProperty' and row['name']=='Tracking' and row['outer']=='KFVRWeaponRig')
    metadata=observer.read(int(field['address'],16),80);offset=struct.unpack_from('<I',metadata,76)[0]
-   if struct.unpack_from('<II',metadata,56)!=(1,124) or not 44<=offset<=8192:raise ValueError('Invalid tracked weapon packet')
-   fields=[('LeftPosition',0,12),('LeftRotation',12,12),('RightPosition',24,12),('RightRotation',36,12),('LeftTrigger',48,4),('LeftGrip',52,4),('RightTrigger',56,4),('RightGrip',60,4),('LeftThumb',64,4),('LeftIndex',68,4),('LeftCurl',72,4),('RightThumb',76,4),('RightIndex',80,4),('RightCurl',84,4),('HeadPosition',88,12),('BodyRotation',100,12),('UnitsPerMetre',112,4),('Flags',116,4),('Serial',120,4)]
+   if struct.unpack_from('<II',metadata,56)!=(1,128) or not 44<=offset<=8192:raise ValueError('Invalid tracked weapon packet')
+   fields=[('LeftPosition',0,12),('LeftRotation',12,12),('RightPosition',24,12),('RightRotation',36,12),('LeftTrigger',48,4),('LeftGrip',52,4),('RightTrigger',56,4),('RightGrip',60,4),('LeftThumb',64,4),('LeftIndex',68,4),('LeftCurl',72,4),('RightThumb',76,4),('RightIndex',80,4),('RightCurl',84,4),('HeadPosition',88,12),('BodyRotation',100,12),('UnitsPerMetre',112,4),('Flags',116,4),('Serial',120,4),('InputSerial',124,4)]
    for name,at,size in fields:
     row=next(row for row in observer.rows if row['name']==name and observer.path(int(row['address'],16)).endswith('KFVRWeaponRig.TrackingPacket.'+name))
     data=observer.read(int(row['address'],16),80)
-    expected='StructProperty' if size==12 else 'IntProperty' if name in ['Flags','Serial'] else 'FloatProperty'
+    expected='StructProperty' if size==12 else 'IntProperty' if name in ['Flags','Serial','InputSerial'] else 'FloatProperty'
     if row['class']!=expected or struct.unpack_from('<II',data,56)!=(1,size) or struct.unpack_from('<I',data,76)[0]!=at:raise ValueError('Tracked weapon member mismatch: '+name)
    feedback=next(row for row in observer.rows if row['class']=='StructProperty' and row['name']=='Feedback' and row['outer']=='KFVRWeaponRig')
    data=observer.read(int(feedback['address'],16),80);feedback_offset=struct.unpack_from('<I',data,76)[0]

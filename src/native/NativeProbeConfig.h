@@ -2,7 +2,7 @@
 #include <cstdint>
 namespace kfvr::native {
 struct NativeProbeConfig {
- std::uint32_t bytes=1120,version=13,durationMs=12000,maxFrames=180;
+ std::uint32_t bytes=1120,version=14,durationMs=12000,maxFrames=180;
  std::uint32_t controller=0,controllerIndex=0,viewport=0,level=0,levelIndex=0;
  std::uint32_t levelOffset=0,playerOffset=0,netModeOffset=0;
  // stereoTrial: 0 disabled, 1 parallel native, 2 asymmetric, 3 synthetic head pose.

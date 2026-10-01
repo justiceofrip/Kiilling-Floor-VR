@@ -3,6 +3,11 @@ class KFVRManualReload extends Info;
 var KFVRWeaponRig Rig;
 var KFWeapon Gun;
 var KFVRMagazineState Ammo;
+var KFVRMagazineInsertion Insertion;
+var vector InsertionPosition;
+var float InsertionProgress,InsertionLastDelta,InsertionLastDistance;
+var int InsertionSpeedRejects,InsertionGapRejects;
+var bool bInsertionApproached;
 var bool bLeftArmed,bLeftPrevious,bSlideHeld,bRecoveryPending;
 var int HeldInterruptions,RecoveryStowCount;
 var vector MagWell,SlideLocation,BeltLocation,SlideGrabLocal,MagazineWorld,MagazineTarget;
@@ -13,7 +18,9 @@ var bool bChambered,bValid;
 function bool Initialize(KFVRWeaponRig R,KFWeapon W)
 {
     if (W==None || class'KFVRWeaponProfile'.static.Manual(W)!=None || W.bIsReloading) return False;
+    if (R==None || R.Visual==None || !R.Visual.bInsertionCalibrated) return False;
     Rig=R; Gun=W; Ammo=new class'KFVRMagazineState';
+    Insertion=new class'KFVRMagazineInsertion';
     if (!Ammo.Initialize(W.MagCapacity,W.MagAmmoRemaining,W.AmmoAmount(0))) return False;
     class'KFVRWeaponProfile'.static.BindManual(Gun,self); Publish(); return True;
 }
@@ -33,6 +40,8 @@ function Reconcile()
 function Suspend()
 {
     bLeftArmed=False; bLeftPrevious=False;
+    if (Insertion!=None) Insertion.Reset();
+    InsertionProgress=0; bInsertionApproached=False;
     if (Ammo!=None && Ammo.Held>0)
     {
         if (!bRecoveryPending) HeldInterruptions++;
@@ -60,12 +69,12 @@ function EjectMagazine()
     if (Gun!=Rig.Gun || Rig.bHolstered || bSlideHeld) return;
     Catch=(Rig.Tracking.Flags & 1)!=0 && Rig.Tracking.LeftGrip>0.55 && VSize(Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation)-MagWell)<0.16*Rig.Tracking.UnitsPerMetre;
     if (Ammo.Eject(Catch))
-    { EjectCount++; Rig.PulseRight(0.3,20); Publish(); }
+    { EjectCount++; Insertion.Reset(); Rig.PulseRight(0.3,20); Publish(); }
 }
 function Update(float Delta)
 {
     local vector X,Y,Z,Relative,Displacement;
-    local bool Down,NearBelt,NearWell;
+    local bool Down,NearBelt;
     local float Before;
     local coords Part;
     if (Rig.Gun!=Gun || !Rig.Active() || Rig.bHolstered || (Rig.Tracking.Flags & 3)!=3)
@@ -77,7 +86,6 @@ function Update(float Delta)
     Down=Rig.Tracking.LeftGrip>0.7;
     NearBelt=VSize(Rig.Tracking.LeftPosition-BeltLocation)<0.18*Rig.Tracking.UnitsPerMetre;
     MagazineTarget=Rig.Visual.HeldMagazinePosition(Rig.Tracking.LeftPosition,Rig.Tracking.LeftRotation);
-    NearWell=VSize(MagazineTarget-MagWell)<0.12*Rig.Tracking.UnitsPerMetre;
     MagazineAlignment=Rig.Visual.MagazineAlignmentCos(Rig.Tracking.LeftRotation);
     Relative=(Rig.Tracking.LeftPosition-Rig.Tracking.RightPosition)<<Rig.Tracking.RightRotation;
     if (bRecoveryPending)
@@ -96,6 +104,15 @@ function Update(float Delta)
         { bSlideHeld=True; SlideGrabLocal=Relative; }
         else if (NearBelt && Ammo.GrabBelt()) { GrabCount++; Rig.PulseLeft(0.25,18); }
     }
+    // Geometry supplies a one-shot event; the ledger alone transfers ownership.
+    // A push can seat while grip stays held, without a release or animation timer.
+    InsertionPosition=Rig.Visual.MagazineSocketPosition(MagazineTarget,Rig.Tracking.UnitsPerMetre);
+    if (Insertion.Update(InsertionPosition,MagazineAlignment,Rig.Tracking.InputSerial,
+        Level.TimeSeconds,Ammo.Held,Down) && Ammo.Seat())
+    { SeatCount++; Rig.PulseLeft(0.4,25); }
+    InsertionProgress=Insertion.Progress; bInsertionApproached=Insertion.bApproached;
+    InsertionLastDelta=Insertion.LastDelta; InsertionLastDistance=Insertion.LastDistance;
+    InsertionSpeedRejects=Insertion.SpeedRejects; InsertionGapRejects=Insertion.GapRejects;
     if (bSlideHeld)
     {
         Displacement=Relative-SlideGrabLocal;
@@ -109,9 +126,7 @@ function Update(float Delta)
     }
     else if (bLeftArmed && !Down && bLeftPrevious && Ammo.Held>0)
     {
-        if (NearWell && MagazineAlignment>0.55 && Ammo.Seat())
-        { SeatCount++; Rig.PulseLeft(0.4,25); }
-        else if (NearBelt && Ammo.Stow()) { StowCount++; Rig.PulseLeft(0.2,15); }
+        if (NearBelt && Ammo.Stow()) { StowCount++; Rig.PulseLeft(0.2,15); }
         else if (Ammo.Drop()) DropCount++;
     }
     bLeftPrevious=Down;

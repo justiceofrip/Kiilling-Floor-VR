@@ -79,7 +79,7 @@ The default headset launch requests 100% of the runtime-recommended eye dimensio
 
 The new PhysicalReload ledger handles one or two closed-bolt detachable-magazine guns with persistent magazine identities and a shared supply. Geometry gates drive physical seating and partial/full action strokes; BeltReloadSession combines two independent docks with that one ledger. TrackedWeapon provides head-independent controller/model/muzzle transforms. The compiled KFVRReloadVisual samples four authored animation ranges on a presentation-only actor. These modules are not yet wired into live KF weapons. The physical ledger and old AmmoMachine/KFVRAmmoState must not both credit the same ammunition. See docs/MANUAL_RELOAD_INTERACTIONS.md for the exact current boundary and remaining calibration/server work.
 
-The September 27 standalone weapon increment is documented in docs/TRACKED_WEAPONS.md. Native request ABI v12 reflects a 124-byte game-thread tracking packet and a 28-byte script-to-native feedback packet. The live pistol adapters use standard WeaponFire ticking and ammo consumption, with a separate script magazine ledger in physical mode. Model/palm placement is independently measured from KF assets and separate hand actors render in both world views.
+The September 27 standalone weapon increment is documented in docs/TRACKED_WEAPONS.md. Native request ABI v14 reflects a 128-byte game-thread tracking packet and a 28-byte script-to-native feedback packet. The live pistol adapters use standard WeaponFire ticking and ammo consumption, with a separate script magazine ledger in physical mode. Model/palm placement is independently measured from KF assets and separate hand actors render in both world views.
 
 ## Live inventory and physical reload adapter
 

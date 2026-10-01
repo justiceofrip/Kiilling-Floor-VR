@@ -3,6 +3,10 @@
 class KFVRWeaponVisual extends Actor;
 var Weapon SourceWeapon;
 var KFVRMagazineGrip MagazineGrip;
+var KFVRMagazineSocket MagazineSocket;
+var vector InsertionAxis,InsertionX,InsertionY;
+var float InsertionSampleTravel,InsertionEndDistance,InsertionRestError;
+var bool bInsertionCalibrated,bInsertionFailed;
 var coords GripPose[32]; // Left palm + 15 joints, then right palm + 15 joints.
 var bool bLeftGripPose,bRightGripPose;
 var vector BladeAxis,ToolAxis;
@@ -121,6 +125,12 @@ simulated function bool Initialize(Weapon Source)
         if (MagazineGrip!=None && !MagazineGrip.InitializeMagazine(self))
         { Log("KFVR_MAGAZINE_GRIP_ERROR weapon=" $ Source.Class); MagazineGrip.Destroy(); MagazineGrip=None; }
     }
+    if (bPhysicalProfile && class'KFVRWeaponProfile'.static.InsertionChassis(KFWeapon(Source))!='')
+    {
+        MagazineSocket=Spawn(class'KFVRMagazineSocket',self);
+        if (MagazineSocket==None) bInsertionFailed=True;
+        else if (!MagazineSocket.Initialize(self)) { bInsertionFailed=True; MagazineSocket.Destroy(); }
+    }
     return true;
 }
 simulated function PoseAt(vector GripPosition, rotator GripRotation, float Units)
@@ -189,6 +199,14 @@ simulated function vector HeldMagazinePosition(vector HandPosition,rotator HandR
         return HandPosition-((MagazineGrip.PalmLocal*DrawScale)>>HandRotation);
     return HandPosition;
 }
+// The seat is the installed magazine root. Socket +Z follows measured travel.
+simulated function vector MagazineSocketPosition(vector WorldRoot,float Units)
+{
+    local vector D,P;
+    D=((WorldRoot-MagazineRest())<<Rotation)/Units;
+    P.X=D dot InsertionX; P.Y=D dot InsertionY; P.Z=D dot InsertionAxis;
+    return P;
+}
 // Full relative rotation of the held magazine versus its installed socket.
 // The trace of the measured orthonormal frames gives cos(angle), including
 // roll: matching forward directions alone also accepts an upside-down mag.
@@ -203,6 +221,7 @@ simulated function float MagazineAlignmentCos(rotator HandRotation)
 simulated function Destroyed()
 {
     if (MagazineGrip!=None) MagazineGrip.Destroy();
+    if (MagazineSocket!=None) MagazineSocket.Destroy();
     Super.Destroyed();
 }
 // Queue removal of every mechanical override before the next evaluation.
