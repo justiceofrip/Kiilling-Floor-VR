@@ -59,7 +59,12 @@ def validate(folder):
     def delta(a,b):return tuple(x-y for x,y in zip(a,b))
     checks['open_index_extends_forward_from_knuckle']=bool(opened) and all(dot(delta(h['IndexTipWorld'],h['IndexBaseWorld']),h['PalmForward'])>1 for h in opened)
     checks['knuckles_are_forward_of_palm']=bool(settled) and all(dot(delta(h['IndexBaseWorld'],h['PalmWorld']),h['PalmForward'])>1 for h in settled)
-    checks['thumb_and_index_side_is_above_little_finger']=bool(settled) and all(dot(delta(h['ThumbBaseWorld'],h['LittleBaseWorld']),h['PalmUp'])>2 and dot(delta(h['IndexBaseWorld'],h['LittleBaseWorld']),h['PalmUp'])>2 for h in settled)
+    # Native KF geometry has a measured 1.71 raw-unit thumb/little height
+    # difference (1.426 UU at 50/60 scale); the authored gloves are broader.
+    def landmark_height(h):return 1.0 if h.get('bNativeHandMesh') else 2.0
+    checks['thumb_and_index_side_is_above_little_finger']=bool(settled) and all(dot(delta(h['ThumbBaseWorld'],h['LittleBaseWorld']),h['PalmUp'])>landmark_height(h) and dot(delta(h['IndexBaseWorld'],h['LittleBaseWorld']),h['PalmUp'])>landmark_height(h) for h in settled)
+    native_requested=any(r.get('bNativeHandTest') for r in objects('KFVRWeaponRig'))
+    checks['requested_hand_asset_loaded']=bool(settled) and all(bool(h.get('bNativeHandMesh'))==native_requested for h in settled)
     checks['finger_positions_remain_hand_sized']=bool(settled) and all(.2<math.dist(h['PalmWorld'],h['IndexTipWorld'])<10 for h in settled)
     for n,side in [(13,True),(14,False)]:
         data=phase(n)
@@ -68,7 +73,7 @@ def validate(folder):
     final=objects('KFVRHandVisual',rows[-1:]);rigs=objects('KFVRWeaponRig')
     checks['stop_releases_presentation']=len(final)==2 and all(h['bHidden'] for h in final) and bool(rigs) and not rigs[-1]['bTracking']
     checks['no_firing_from_free_hand_gestures']=bool(rigs) and rigs[-1]['TraceCount']==rigs[0]['TraceCount']
-    report=dict(passed=all(checks.values()),checks=checks,max_errors={k:max((h[k] for h in settled),default=None) for k in ['PalmError','PalmAxisError','IndexAxisError']},max_external_axis_error=max(axis_errors,default=None),max_external_head_relative_error_metres=max(relative_errors,default=None),live_game=True,synthetic_controllers=True,headset_presented=False,visual_inspection_separate=True)
+    report=dict(passed=all(checks.values()),checks=checks,native_hands_requested=native_requested,max_errors={k:max((h[k] for h in settled),default=None) for k in ['PalmError','PalmAxisError','IndexAxisError']},max_external_axis_error=max(axis_errors,default=None),max_external_head_relative_error_metres=max(relative_errors,default=None),live_game=True,synthetic_controllers=True,headset_presented=False,visual_inspection_separate=True)
     (folder/'hand-validation.json').write_text(json.dumps(report,indent=2)+'\n')
     if not report['passed']:raise ValueError('Hand checks failed: '+', '.join(k for k,v in checks.items() if not v))
     return report

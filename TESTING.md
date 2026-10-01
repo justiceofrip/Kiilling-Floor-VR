@@ -4,7 +4,7 @@ Build.ps1 runs CTest for each architecture. Current deterministic coverage inclu
 
 New ammo tests exercise tactical full-mag-plus-chamber behavior, empty reload/charging, racking a live round, fire cadence, remove/stow/discard/partial magazines, switching/death/drop cancellation, stale ownership, replay/high-latency rejection, correction validation, tube feeding, manual cycling and 100,000 randomized actions with conservation checks. Melee tests include 10,000 wrist-waggle samples, retraction, cooldown, invalid tracking, teleports and range limits. Pose tests include all truncated packet lengths, invalid quaternions, quantization overflow, sequence wrap and server-clock gates.
 
-OpenXR controller tests use a fake API to cover bindings, predicted timing, focus/tracking loss, invalid samples, haptic limits, runtime errors and cleanup after partial initialization. Latest CTest results: x86 22/22, x64 21/21, including controller locomotion interruption and neutral-rearm coverage.
+OpenXR controller tests use a fake API to cover bindings, predicted timing, focus/tracking loss, invalid samples, haptic limits, runtime errors and cleanup after partial initialization. Latest CTest results: x86 24/24, x64 23/23, including controller locomotion interruption, neutral rearm and separate grip/aim presentation coverage.
 
 Hardware checks are separate from unit tests:
 
@@ -169,3 +169,14 @@ For tool checks, use a fresh private match with -Unattended -HealTest -DoorTest.
 Initial 183424 lacked several observation phases; it is preserved as a failed diagnostic, despite correct healing and sampled directions. The external observer now discovers objects on an independent reader while continuing samples. No acceptance tolerances were relaxed. Complete 183650 passes 24 healing/attachment plus 10 display/grasp checks; 183806 passes 26 welding/attachment plus 10 display/grasp checks. Actual stock health changes 40 -> 90, and the installed map door welds, unwelds and responds to Use. Both runs have restored native hooks/resources and no device reset. Tool-forward captures were inspected. These are synthetic-controller tests without OpenXR/headset presentation. Minor comfort, hand-to-tool contact and provisional syringe needle length remain wearer work.
 
 Final native suites: 24/24 x86, 23/23 x64. Official compiler/script suites pass; Python parse/diff checks pass. Final normal game exit is in tool-attachment-final-game.log. Publication remains held and the old rc1 archive does not include this checkpoint.
+
+
+## Optional native hands (September 30 local / October 1 UTC artifacts)
+
+See docs/NATIVE_HANDS.md for local asset preparation. Launch `Start-KFVRDev.ps1 -Unattended -NativeHands`, then run the existing bounded `native_bridge_trial.py --hands`, `--inventory` and `--reload` diagnostics against the exact private PID. The normal launcher tests authored gloves; neither launcher automatically starts OpenXR.
+
+Final corrected native-hand runs 033143, 033344 and 033451 pass 64 hand, 25 inventory + 22 display/grasp, and 24 physical reload + 10 display/grasp assertions respectively. Default-hand preload regression 031032 passes 64 checks. All report clean native restoration; exact trace IDs, counters and limits are in WORKLOG.md. Native/placeholder landmark thresholds differ with their measured anatomy; shared orientation tolerances were not relaxed. The validator explicitly verifies whether the requested native mesh option loaded.
+
+Geometry checks are not visual acceptance: initial triangle-expanded assets passed some full bone/interaction trials while palms visibly tore. The final shared-point/descending-influence exports remove that defect in inspected pistol, free-hand, rifle and magazine captures. Earlier failures and temporary bind/material isolation reports remain saved. No headset acceptance is claimed.
+
+Twelve final local-asset checks verify deterministic mesh/animation output, compiled input matches, normalized ordered skin weights, rigid caps, finite hand-only geometry, source/package hashes and release exclusion. Seven staging fixture checks independently verify preservation of unowned packages and that an invalid optional install cannot first update the main package. Both native architectures and official SDK/script suites pass. Runtime game logs close normally without script errors.

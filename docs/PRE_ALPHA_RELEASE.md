@@ -24,3 +24,6 @@ September 30 wearer feedback on aea9063: hand position was close, hand orientati
 
 
 Latest private September 30 wearer pass: runtime aim orientation at grip position substantially improves hand direction; the rifle feels best with a small comfort offset. The prior glove-geometry correction alone was insufficient. Welder and healing-tool attachment failed this wearer pass. Their measured model working axes are now corrected in development, with wearer testing deferred because the headset battery depleted. No head/HUD comfort acceptance, publication or refreshed release archive is implied. See WORKLOG.md for diagnostic and private regression evidence.
+
+
+The development checkout now supports optional native KF hand geometry converted locally from the owner's installation. Its derived package stays outside Git and the release ZIP; the published candidate workflow does not include it. The current default still uses authored gloves. Hidden hand preloading and the native-hand prototype have desktop evidence only; no new wearer acceptance or release archive is implied.

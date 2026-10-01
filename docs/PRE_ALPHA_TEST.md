@@ -55,7 +55,7 @@ Syringe: draw from left chest, touch the needle to the chest and squeeze right t
 - Original sleeve-free glove art is provisional; experimental arm IK is off. World scale, palm/needle alignment and holster ergonomics need wearer feedback.
 - Trader is an initial supported-firearm panel. It requires being at an actually open shop. Full catalog and general inventory/drop continuity are unfinished.
 
-Only `System/KFVRGameplay.u` is staged into the game. Normal launches do not auto-load VR. Close KF to remove the inactive native probe modules. To remove the staged mod, close KF and remove that KFVRGameplay.u file; original game files are not replaced. Keep the extracted folder's `reports/dev-install.json` with the package when reusing the same installation.
+The ordinary launch stages `System/KFVRGameplay.u` into the game. The source checkout also has an opt-in local native-hand prototype, documented in `docs/NATIVE_HANDS.md`; its separately recorded `KFVRLocalHands.u` is not in the release ZIP. Normal launches do not auto-load VR. Close KF to remove the inactive native probe modules. To remove the staged mod, close KF and remove that KFVRGameplay.u file; original game files are not replaced. Keep the extracted folder's `reports/dev-install.json` with the package when reusing the same installation.
 
 The optional `Start-KFVRDev.ps1 -VRProfile` uses separate INIs outside the game and launches the executable directly to avoid Steam's legacy INI quoting issue. It requires a project path without spaces. It is not the default or a promised performance fix.
 

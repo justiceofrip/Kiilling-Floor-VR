@@ -78,6 +78,7 @@ function Timer()
         }
         if (Rig==None) return;
         Rig.bArmTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRARMTEST=1")>=0;
+        Rig.bNativeHandTest=InStr(Caps(Level.GetLocalURL()),"KFVRNATIVEHANDS=1")>=0;
         Rig.PC=PC; Rig.bMeleeTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRMELEETEST=1")>=0;
         for (I=PC.Pawn.Inventory; I!=None; I=I.Inventory)
         {

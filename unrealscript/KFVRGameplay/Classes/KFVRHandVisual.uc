@@ -1,4 +1,4 @@
-// Original sleeve-free gloves. Legacy arms remain an explicit developer experiment.
+// Sleeve-free hand presentation: authored defaults or optional locally built KF art.
 class KFVRHandVisual extends KFVRWeaponVisual;
 #exec MESH MODELIMPORT MESH=KFVRGloveRight MODELFILE=Models\KFVRGloveRight.psk
 #exec MESH ORIGIN MESH=KFVRGloveRight X=0 Y=0 Z=0 YAW=0 PITCH=0 ROLL=0
@@ -12,7 +12,8 @@ class KFVRHandVisual extends KFVRWeaponVisual;
 #exec ANIM IMPORT ANIM=KFVRGloveLeftAnim ANIMFILE=Models\KFVRGloveLeft.psa IMPORTSEQS=1
 #exec ANIM DIGEST ANIM=KFVRGloveLeftAnim VERBOSE USERAWINFO
 #exec MESH DEFAULTANIM MESH=KFVRGloveLeft ANIM=KFVRGloveLeftAnim
-var bool bStandaloneGlove;
+var bool bStandaloneGlove,bNativeHandMesh;
+var float NativeFingerRollCos[15],NativeFingerRollSin[15];
 var ConstantColor GloveMaterial,PadMaterial;
 var vector PalmForward,PalmRight,PalmUp,IndexDirection;
 var float PalmAxisError,IndexAxisError;
@@ -115,8 +116,20 @@ simulated function bool InitializeHand(Weapon Source, bool LeftHand)
 simulated function bool InitializeGlove(Weapon Source)
 {
     local coords C;
+    local SkeletalMesh NativeMesh;
+    local int NativeFinger;
+    local float RollLength;
+    local string NativeName;
     SourceWeapon=Source; bStandaloneGlove=True; ModelUnitsPerMetre=100.0;
-    if (bLeftHand) LinkMesh(SkeletalMesh'KFVRGloveLeft');
+    if (KFVRWeaponRig(Owner)!=None && KFVRWeaponRig(Owner).bNativeHandTest)
+    {
+        NativeName="KFVRLocalHands.NativeHandRight";
+        if (bLeftHand) NativeName="KFVRLocalHands.NativeHandLeft";
+        NativeMesh=SkeletalMesh(DynamicLoadObject(NativeName,class'SkeletalMesh',True));
+        if (NativeMesh==None) { Log("KFVR_NATIVE_HAND_ERROR missing local hand package"); return False; }
+        LinkMesh(NativeMesh); bNativeHandMesh=True; ModelUnitsPerMetre=60.0;
+    }
+    else if (bLeftHand) LinkMesh(SkeletalMesh'KFVRGloveLeft');
     else LinkMesh(SkeletalMesh'KFVRGloveRight');
     SetLocation(vect(0,0,0)); SetRotation(rot(0,0,0)); SetDrawScale(1.0);
     SetDrawScale3D(vect(1,1,1));
@@ -128,11 +141,35 @@ simulated function bool InitializeGlove(Weapon Source)
     FingerBones[6]='Middle1'; FingerBones[7]='Middle2'; FingerBones[8]='Middle3';
     FingerBones[9]='Ring1'; FingerBones[10]='Ring2'; FingerBones[11]='Ring3';
     FingerBones[12]='Little1'; FingerBones[13]='Little2'; FingerBones[14]='Little3';
-    GloveMaterial=new(None) class'ConstantColor';
-    GloveMaterial.Color.R=115; GloveMaterial.Color.G=124; GloveMaterial.Color.B=118; GloveMaterial.Color.A=255;
-    PadMaterial=new(None) class'ConstantColor';
-    PadMaterial.Color.R=47; PadMaterial.Color.G=52; PadMaterial.Color.B=49; PadMaterial.Color.A=255;
-    Skins[0]=GloveMaterial; Skins[1]=PadMaterial; bUnlit=False; AmbientGlow=48;
+    if (bNativeHandMesh)
+    {
+        if (KFWeapon(Source)==None) return False;
+        // Native finger bones carry anatomical roll, including near-180-degree
+        // right-hand frames. Preserve that roll when driving a pointing axis.
+        for (NativeFinger=0;NativeFinger<15;NativeFinger++)
+        {
+            C=GetBoneCoords(FingerBones[NativeFinger]);
+            RollLength=Sqrt(C.YAxis.Y*C.YAxis.Y+C.YAxis.Z*C.YAxis.Z);
+            if (RollLength<0.1) return False;
+            NativeFingerRollCos[NativeFinger]=C.YAxis.Y/RollLength;
+            NativeFingerRollSin[NativeFinger]=C.YAxis.Z/RollLength;
+        }
+        KFWeapon(Source).HandleSleeveSwapping();
+        Skins.Length=2; Skins[0]=Source.Skins[KFWeapon(Source).SleeveNum];
+        PadMaterial=new(None) class'ConstantColor';
+        PadMaterial.Color.R=28; PadMaterial.Color.G=25; PadMaterial.Color.B=23; PadMaterial.Color.A=255; Skins[1]=PadMaterial;
+        if (Skins[0]==None) { Log("KFVR_NATIVE_HAND_ERROR missing stock hand material"); return False; }
+    }
+    else
+    {
+        GloveMaterial=new(None) class'ConstantColor';
+        GloveMaterial.Color.R=115; GloveMaterial.Color.G=124; GloveMaterial.Color.B=118; GloveMaterial.Color.A=255;
+        PadMaterial=new(None) class'ConstantColor';
+        PadMaterial.Color.R=47; PadMaterial.Color.G=52; PadMaterial.Color.B=49; PadMaterial.Color.A=255;
+        Skins[0]=GloveMaterial; Skins[1]=PadMaterial;
+    }
+    C=GetBoneCoords(PalmBone);
+    bUnlit=False; AmbientGlow=48;
     bCalibrated=VSize(PalmLocal)<0.01;
     Log("KFVR_GLOVE_CAL left=" $ bLeftHand $ " palm=" $ PalmLocal $ " X=" $ C.XAxis $ " Y=" $ C.YAxis $ " Z=" $ C.ZAxis);
     return bCalibrated;
@@ -141,7 +178,7 @@ simulated function PoseGlove(vector Position,rotator HandRotation,float Units)
 {
     local int Finger,Joint;
     local float Curl,Angle,Sign;
-    local vector X,Y,Z,DesiredX,DesiredY,DesiredZ;
+    local vector X,Y,Z,DesiredX,DesiredY,DesiredZ,UnrolledY;
     local coords C;
     PoseAt(Position,HandRotation,Units);
     GetAxes(HandRotation,X,Y,Z); Sign=1; if (bLeftHand) Sign=-1;
@@ -165,6 +202,12 @@ simulated function PoseGlove(vector Position,rotator HandRotation,float Units)
                 DesiredX=Normal(Z*(0.85-0.95*Curl)+X*(0.50-0.10*Curl)-Y*Sign*(0.15+0.65*Curl));
                 DesiredY=Normal(Y-DesiredX*(Y dot DesiredX));
                 DesiredZ=Normal(DesiredX cross DesiredY);
+            }
+            if (bNativeHandMesh)
+            {
+                UnrolledY=DesiredY;
+                DesiredY=UnrolledY*NativeFingerRollCos[Finger*3+Joint]+DesiredZ*NativeFingerRollSin[Finger*3+Joint];
+                DesiredZ=DesiredZ*NativeFingerRollCos[Finger*3+Joint]-UnrolledY*NativeFingerRollSin[Finger*3+Joint];
             }
             SetBoneDirection(FingerBones[Finger*3+Joint],OrthoRotation(DesiredX,DesiredY,DesiredZ),,1.0,1);
             if (Finger==1 && Joint==2) ExpectedIndexDirection=DesiredX;

@@ -43,7 +43,7 @@ var KFVRManualReload ManualReload;
 var KFVRManualReload InventoryManuals[8];
 var bool bManualArmed,bManualPrevious,bUseArmed,bUsePrevious;
 var int UseCount;
-var bool bMeleeTest,bArmTest;
+var bool bMeleeTest,bArmTest,bNativeHandTest;
 var KFVRMeleeTarget MeleeTarget;
 var bool bSupportHeld,bSupportArmed,bSupportPrevious;
 var int SupportGrabs,SupportReleases,SupportFrames;
@@ -316,6 +316,27 @@ function int HandGripRole(bool Left)
     if (ManualReload!=None && (ManualReload.HeldMagazine>0 || ManualReload.bSlideHeld)) return 3;
     return 0;
 }
+// Load the presentation while the private match starts, before XR requests its
+// first pair. The actors stay hidden until fresh controller input is delivered.
+function EnsureHandVisuals()
+{
+    if (HandSource==None) return;
+    if (LeftHand==None && !bLeftHandFailed)
+    {
+        LeftHand=Spawn(class'KFVRHandVisual',self);
+        if (LeftHand!=None && !LeftHand.InitializeHand(HandSource,True)) { LeftHand.Destroy(); LeftHand=None; bLeftHandFailed=True; }
+    }
+    if (RightHand==None && !bRightHandFailed)
+    {
+        RightHand=Spawn(class'KFVRHandVisual',self);
+        if (RightHand!=None && !RightHand.InitializeHand(HandSource,False)) { RightHand.Destroy(); RightHand=None; bRightHandFailed=True; }
+    }
+    if (!bTracking)
+    {
+        if (LeftHand!=None) LeftHand.bHidden=True;
+        if (RightHand!=None) RightHand.bHidden=True;
+    }
+}
 function Tick(float Delta)
 {
     local vector X,Y,Z,Position;
@@ -326,6 +347,7 @@ function Tick(float Delta)
     PC=PlayerController(Owner);
     if (Level.NetMode!=NM_Standalone || PC==None || PC.Pawn==None || PC.Pawn.Health<=0 || Level.Pauser!=None)
     { ReleaseInput(); return; }
+    EnsureHandVisuals();
     if (Tracking.Serial!=LastSerial)
     {
         LastSerial=Tracking.Serial; LastInputTime=Level.TimeSeconds;
@@ -358,16 +380,6 @@ function Tick(float Delta)
     {
         for (I=0;I<InventoryCount;I++) if (InventoryVisuals[I]!=None) { SelectInventoryWeapon(I); break; }
         if (Visual==None) { ReleaseInput(); return; }
-    }
-    if (LeftHand==None && !bLeftHandFailed)
-    {
-        LeftHand=Spawn(class'KFVRHandVisual',self);
-        if (LeftHand!=None && !LeftHand.InitializeHand(HandSource,True)) { LeftHand.Destroy(); LeftHand=None; bLeftHandFailed=True; }
-    }
-    if (RightHand==None && !bRightHandFailed)
-    {
-        RightHand=Spawn(class'KFVRHandVisual',self);
-        if (RightHand!=None && !RightHand.InitializeHand(HandSource,False)) { RightHand.Destroy(); RightHand=None; bRightHandFailed=True; }
     }
     if (LeftHand!=None)
     {
