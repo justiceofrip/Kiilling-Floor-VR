@@ -1,29 +1,31 @@
-# Kiilling Floor VR 0.1.0-prealpha.1
+# Pre-alpha source handoff — October 9, 2026
 
-Release candidate for original Killing Floor 1065 on Windows. Publication is on hold after the first wearer pass reported broken head/hand placement. Corrective work is underway; no public release has been created.
+Tag: `v0.1.0-prealpha-handoff.1`.
 
-Included: native stereo/head tracking, controller locomotion and snap turns, independent 6DoF weapon aim, capacitive hand poses, hip/shoulder/chest holsters, supported firearms and tools, physical single-pistol reloads, dual-pistol belt reloads, rifle support grip, physical knife/grenade interactions, offhand status and an initial world-space trader.
+This release publishes the current source and development history for forks and continuation. Development by the original owner is currently on hold. Gameplay is the `88f99da` checkpoint, with wearer feedback in `2b413d2`; handoff changes update documentation. This is an unfinished standalone prototype for the audited Windows Killing Floor 1065 build.
 
-Native test evidence: original candidate x86 23/23 and x64 22/22 suites; full-resolution standalone receiver passes 25 weapon and 22 HUD/grasp checks. Separate physical reload, dual reload, grenade, trader, syringe and door trials are recorded in WORKLOG.md. These use synthetic controllers in the real game and do not substitute for wearer acceptance.
+## Included
 
-Known limits: standalone only, three-minute sessions, provisional hand/arm art and calibration, incomplete weapons/menus/inventory/networking, and a CPU image-transfer bottleneck. Rough completion estimate is about 30% of the intended total conversion, not a release-readiness score. Use the [test guide](PRE_ALPHA_TEST.md).
+- Native stereo world rendering and head tracking through OpenXR.
+- Controller movement/snap turns, tracked weapons, capacitive hands, holsters, rifle support and initial status/trader interfaces.
+- Chest ammunition, magnetic magazine insertion, empty-magwell pistol slide cycling and a fixed left-hand overhand slide grip.
+- Bullpup/SCAR grab-and-pull magazine removal alongside button ejection.
+- Additional dual-belt reload, melee, healing, welding and grenade prototypes.
+- Local native-hand converter, build/test tools and plans for broader weapon mechanics, body IK and multiplayer visualization.
 
-The runtime ZIP contains only KFVR build outputs, the redistributable OpenXR loader, pinned pefile Python package, launch/audit tools and licenses. Original KF files, SDK/compiler files, personal INIs, machine logs and source extraction are excluded. Each member is recorded by SHA-256 in release-manifest.json, with a checksum for the complete archive.
+The October 1 wearer session accepted the new reload interactions. The final desktop reload checks cover 9mm, Deagle, MK23, Bullpup and SCAR; native builds passed 25 x86 and 24 x64 tests. These are recorded checkpoint results, not a new October 9 headset test.
 
-## First wearer pass and corrective candidate
+## Important open issues
 
-At 2072 x 2216 per eye the user confirmed native VR was visible but reported badly broken head/hand placement and deferred further troubleshooting. This fails wearer acceptance regardless of the passing synthetic checks. The game then exited normally before the native test deadline, so final probe/XR totals were not available.
+- **Pistol shots reportedly miss the visible aim; cause unresolved.** Bullpup aim was reported correct. Pistol comfort orientation needs later tuning.
+- Standalone only, sessions bounded to three minutes, incomplete game/weapon/menu coverage.
+- CPU frame-transfer bottleneck and remaining rendering/model polish.
+- Two-handed pistol support, full-body IK, launcher/shotgun flip reloads and multiplayer visualization are not implemented.
 
-Corrective candidate: startup captures position and yaw only, once headset focus is active. Initial head pitch/roll no longer tilt the tracking reference. Bounded incremental head/controller pose logs survive early exits. The launcher reports actual dimensions and fits oversized runtime recommendations to the bridge budget before injection. Early game exit produces a specific error instead of a missing-file traceback. These changes need a wearer retest; they do not establish that all placement/art issues are solved.
+## Getting started
 
-Corrective build checks: 24/24 x86 and 23/23 x64, including 48 tilted-startup camera/controller cases. No corrective wearer pass yet.
+Read [HANDOFF.md](HANDOFF.md), then [BUILDING.md](../BUILDING.md) and [PRE_ALPHA_TEST.md](PRE_ALPHA_TEST.md). GitHub's source archives contain the repository only. No prebuilt runtime ZIP, original game files, SDK, extracted native assets or private logs are attached. Build the native/script components and generate optional native hands from your own installation.
 
-Subsequent corrective work replaces normal legacy arm-based hand actors with original sleeve-free gloves and explicit controller-aligned palm/finger axes. The camera no longer rejects straight-up/down gaze. These changes are still private development work pending wearer review; the earlier rc1 archive does not contain them.
+The older private `0.1.0-prealpha.1-rc1` runtime archive and historical packaging manifest do not represent this checkpoint. `tools/package_prealpha.py` is retained as historical tooling and needs a refreshed file list/metadata before another runtime release.
 
-September 30 wearer feedback on aea9063: hand position was close, hand orientation was about 90 degrees wrong, and bullet impacts followed the displayed gun. The user closed the game; its log has a normal exit. A subsequent private correction reauthors the placeholder glove anatomy in the KF weapon frame and updates curls. It passes 63 hand checks plus inventory/HUD regressions, but has no wearer acceptance yet. These are original KFVR prototype gloves, not KF or Battlefield artwork.
-
-
-Latest private September 30 wearer pass: runtime aim orientation at grip position substantially improves hand direction; the rifle feels best with a small comfort offset. The prior glove-geometry correction alone was insufficient. Welder and healing-tool attachment failed this wearer pass. Their measured model working axes are now corrected in development, with wearer testing deferred because the headset battery depleted. No head/HUD comfort acceptance, publication or refreshed release archive is implied. See WORKLOG.md for diagnostic and private regression evidence.
-
-
-The development checkout now supports optional native KF hand geometry converted locally from the owner's installation. Its derived package stays outside Git and the release ZIP; the published candidate workflow does not include it. The current default still uses authored gloves. Hidden hand preloading and the native-hand prototype have desktop evidence only; no new wearer acceptance or release archive is implied.
+Authored source retains its [MIT license](../LICENSE); see [third-party notices](../THIRD_PARTY_NOTICES.md). Forks are welcome, with no promised completion date or support schedule.

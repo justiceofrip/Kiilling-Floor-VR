@@ -1,62 +1,60 @@
-# Kiilling Floor VR - pre-alpha test
+# Launching the source checkpoint
 
-This is a Windows 64-bit, standalone test build for original Killing Floor 1065. It renders two real native world views through OpenXR. It requires your own installed game; no original game binaries, maps or textures are included.
+Complete [BUILDING.md](../BUILDING.md) first. GitHub's source archive is not an installed runtime build. This checkpoint targets original Killing Floor 1065 on Windows, with SteamVR/OpenXR and your own game/SDK installation.
 
-## Start
+## Start the accepted development setup
 
-1. Install Python 3.12 **64-bit** with the Windows `py` launcher. The ZIP includes the small pinned Python dependency and the OpenXR loader. Native C++ runtimes are statically linked.
-2. Extract the complete ZIP to a short writable path, for example `C:\KFVR`. Keep Steam running. Connect the headset and start SteamVR with SteamVR selected as the OpenXR runtime.
-3. Open PowerShell in the extracted folder. Replace the example game path with your installed KillingFloor directory:
+Use a short checkout path without spaces. Close any existing KF process, keep Steam running, and run from the repository root:
 
 ```powershell
 $kfGame = 'F:\SteamLibrary\steamapps\common\KillingFloor'
 .\Check-KFVR.ps1 -Game $kfGame
-.\Start-KFVRDev.ps1 -Game $kfGame -Unattended
+.\Start-KFVRDev.ps1 -Game $kfGame -Unattended -NativeHands -VRProfile -PhysicalReloads
 ```
 
-Close any previous KF process before starting this match. The test automatically spawns you, grants the supported test firearms, enables god mode and holds zed spawning. It marks the session as using cheats. Wait until you are in the world.
+`-NativeHands` requires the locally generated hand package from the build guide. Omit it to use authored placeholder gloves, which differ from the accepted native-hand presentation. `-PhysicalReloads` enables the new physical reloads by default and requires `-Unattended`. The fixture automatically readies, grants its test inventory, enables god mode, holds zed spawning and marks progression as using cheats.
 
-4. Put on the headset, close the SteamVR dashboard, face forward and center both sticks. Start:
+`-VRProfile` creates separate INIs under ignored `local/play-profile/`; its legacy game parser requires a checkout path without spaces. It requests desktop VSync off and a 144 FPS game limit. It does not establish headset-rate frame delivery.
+
+Wait until the player has spawned in the world. Connect the headset, start SteamVR, close its dashboard and face forward with centered sticks:
 
 ```powershell
 .\Play-KFVR.ps1 -Game $kfGame -Weapons -Scale 100 -Seconds 180
 ```
 
-The session intentionally stops after three minutes. Run the same command again for another pass. A map change requires a new session. `-Scale 75` reduces each eye dimension if fresh-frame motion is too uneven; the default requests 100% of the runtime's recommended dimensions. The launcher prints the actual dimensions and automatically chooses the largest whole percentage that fits the current 256 MiB bridge budget. It never changes SteamVR settings.
+The session ends after three minutes. Run the command again for another pass; map travel requires a new session. `-Scale 75` reduces the eye dimensions. The launcher reports the actual size and fits runtime recommendations to the bridge's current memory budget without changing SteamVR settings.
 
-If Windows blocks local PowerShell scripts, launch the command in a new process with `powershell -NoProfile -ExecutionPolicy Bypass -File .\Play-KFVR.ps1 ...` and the same arguments. This does not change the machine's saved execution policy.
+## Controls and reloads
 
-## First pass: three minutes
+| Input | Action |
+| --- | --- |
+| Left stick / right stick | Walk / snap turn |
+| Right trigger | Fire or use the held tool |
+| Left X | Cycle available weapons |
+| Right grip at a holster | Draw; release near its slot to stow |
+| Right A | Use nearby door / open an available trader |
+| Right B, physical single-gun reload | Eject magazine; catching is optional |
+| Left grip near chest supply | Take replacement ammunition |
+| Held magazine near magwell | Magnetic capture, then push along the rail to seat |
+| Left grip at pistol slide | Grab, pull and return/release; no left trigger required |
+| Left grip at Bullpup/SCAR magazine | Pull to remove; a partial canceled pull returns it to the seat |
+| Left grip near rifle foregrip | Support grip when the hand is free |
+| Free left palm turned toward face | Reveal status display |
 
-| Time | Try | Report |
-| --- | --- | --- |
-| 0:00-0:30 | Turn and lean; look at nearby wall detail | World stability, flicker, clarity, scale |
-| 0:30-1:00 | Move with left stick, snap with right stick | Direction and turn comfort |
-| 1:00-1:45 | Aim the pistol independently of your head; shoot; press right B | Gun alignment, haptics, reload |
-| 1:45-2:30 | Open/close hands, touch/release trigger and thumb controls; draw at hip/shoulder slots | Finger response and reachable holsters |
-| 2:30-3:00 | Turn the free left palm toward your face and hold briefly; try the Bullpup support grip | HUD readability and two-hand aiming |
+The slide can be operated with no magazine inserted. Reloads preserve a tactical chamber and magazine identity. Without `-PhysicalReloads`, supported single pistols can toggle physical mode with left Y; right B otherwise requests stock reload. Physical reload mode in the fixed fixture stays enabled.
 
-Quick controls: right trigger fires, right B reloads, left X cycles available weapons, right A uses a nearby door or opens a currently available trader. Squeeze right grip at a holster to draw; release at the slot to stow. Holsters follow body heading. Right hip holds single/dual 9mm, left hip Deagle, right shoulder Bullpup, left shoulder knife, left chest syringe, right chest welder, rear-right waist grenades.
+Holsters: right hip single/dual 9mm, left hip Deagle, right shoulder Bullpup, left shoulder knife, left chest syringe, right chest welder, rear-right waist grenade. Syringe: touch chest and squeeze right trigger. Welder: right trigger at a closed door; hold left trigger before starting to unweld. Grenade: hold grip, press trigger to arm, release grip to throw. Knife: draw clear of the shoulder and swing deliberately.
 
-## Optional second pass
+## Additional fixtures
 
-With single 9mm or Deagle equipped, left Y toggles physical reload. Right B ejects the magazine; left grip handles/catches a magazine or takes one from the left belt supply, then seats it in the gun. Grip plus trigger at the slide, pull back and return to chamber an empty gun. Tactical chambered ammunition is retained. These gestures need wearer calibration.
+Restart the game with `-SCARTest` or `-MK23Test` added to the development launch to substitute the respective rifle/pistol. These require `-Unattended`. The standard fixture does not spawn every supported weapon at once.
 
-For dual 9mm, restart the private match with `-Unattended -DualTest`. Each trigger fires its own pistol. Left Y enables physical mode; aim the pistols down and eject, continuously bring their magazine wells onto the two belt magazines, then lift away. Empty guns use intentional slide assistance. This build does not require dropping one pistol to reload the other.
+For dual pistols use `-DualTest`. Each trigger fires its own pistol. Left Y enables belt reload mode; point down and press right B, bring each well to the corresponding belt magazine, seat and lift away. Empty chambers use belt slide assistance. Dual presentation/hip firing has an unresolved wearer report; it is not included in the latest single-gun reload acceptance.
 
-Syringe: draw from left chest, touch the needle to the chest and squeeze right trigger. Welder: right trigger at a closed door; hold left trigger before starting to unweld. Grenade: draw from rear-right waist, keep grip held, press trigger to arm, release grip to throw. The fuse begins when thrown; there is no cooking or physical pin pull yet. Knife uses deliberate swings after leaving the shoulder slot.
+## Limits and cleanup
 
-## Known limits
+Pistol shot alignment is an open issue. Native hand orientation, weapon model surfaces, lighting/rays, complete menus, item flows and performance need more work. Full-body IK and multiplayer are not implemented. [HANDOFF.md](HANDOFF.md) distinguishes working features from planned systems.
 
-- Standalone only; no multiplayer support or complete flat-player compatibility.
-- Three-minute sessions, development launch flow, and incomplete VR menus/pickup/drop coverage.
-- CPU texture transfer still limits fresh frame delivery. Full resolution is not a claim of headset-rate fresh rendering. Current native receiver measurements are roughly 45-50 pairs/sec at 2064 x 2208 per eye; headset presentation is a separate measurement.
-- Supported weapons are 9mm, dual 9mm, Deagle, Bullpup, knife, syringe, welder and stock frag grenades. Bullpup reload is timed. Full weapon/perk/server coverage is unfinished.
-- Original sleeve-free glove art is provisional; experimental arm IK is off. World scale, palm/needle alignment and holster ergonomics need wearer feedback.
-- Trader is an initial supported-firearm panel. It requires being at an actually open shop. Full catalog and general inventory/drop continuity are unfinished.
+The launcher stages generated `System/KFVRGameplay.u` and, when requested, `System/KFVRLocalHands.u`. It records them in `reports/dev-install.json` and `reports/native-hand-install.json`. Keep those manifests when reusing an installation. An unrecorded/changed destination package is deliberately rejected; do not overwrite it blindly. To undo a known KFVR installation, close KF and remove only the corresponding recorded generated packages. Original game packages are not replaced, and a normal game launch does not auto-load VR.
 
-The ordinary launch stages `System/KFVRGameplay.u` into the game. The source checkout also has an opt-in local native-hand prototype, documented in `docs/NATIVE_HANDS.md`; its separately recorded `KFVRLocalHands.u` is not in the release ZIP. Normal launches do not auto-load VR. Close KF to remove the inactive native probe modules. To remove the staged mod, close KF and remove that KFVRGameplay.u file; original game files are not replaced. Keep the extracted folder's `reports/dev-install.json` with the package when reusing the same installation.
-
-The optional `Start-KFVRDev.ps1 -VRProfile` uses separate INIs outside the game and launches the executable directly to avoid Steam's legacy INI quoting issue. It requires a project path without spaces. It is not the default or a promised performance fix.
-
-For feedback, describe which pass/control failed, headset and connection method, and whether clarity, aim alignment or motion changed. Logs are in `reports/native-headset-*` and `reports/native-trace-*`; review them before sharing because they contain local paths and game observations.
+Closing the game normally removes the inert diagnostic module left after hook shutdown. Do not install the diagnostic DLL as a D3D proxy. Reports under `reports/native-headset-*` and `reports/native-trace-*` include local paths and game observations; review them before sharing. Never run automated synthetic controller trials over a wearer session.

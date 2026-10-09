@@ -1,44 +1,63 @@
 # Kiilling Floor VR
 
-Pre-alpha candidate: see [test instructions and controls](docs/PRE_ALPHA_TEST.md) and [candidate release notes](docs/PRE_ALPHA_RELEASE.md). Publication is on hold after the first wearer pass reported head/hand alignment problems. Corrective work is underway.
+An experimental native OpenXR VR mod for **original Killing Floor 1** on Windows. Published as an unfinished **pre-alpha source checkpoint** so others can fork it, study it, or continue the conversion.
 
-Native VR mod development for the original Killing Floor. Source/builds live in `G:\KFVR`; the installed game is `F:\SteamLibrary\steamapps\common\KillingFloor`. This does not use the unrelated Unity workspace.
+**Start here: [developer handoff](docs/HANDOFF.md) · [build from source](BUILDING.md) · [launch and controls](docs/PRE_ALPHA_TEST.md) · [checkpoint notes](docs/PRE_ALPHA_RELEASE.md).**
 
-**Current status: native VR is an accepted proof of concept, with further conversion work underway.** The October 1 wearer tests accepted thumb touch, native weapon grips and steady aiming while walking. The later reload test worked broadly but identified two concrete problems: mandatory magazine catching and inability to operate a slide with no magazine inserted. The latest wearer test confirmed the reload works, then requested easier insertion, rifle magazine pull-removal and a consistent slide-hand pose. The current implementation adds magnetic magazine guidance, Bullpup/SCAR grab-and-pull removal and one authored overhand slide grasp. The subsequent wearer test accepted magnetic insertion, rifle pull-removal and the fixed slide grip. It also reported pistol shots landing away from the visible aim, while Bullpup aim was correct. That shot-alignment report needs investigation; remaining pistol holding-orientation comfort is a separate polish note. Chest ammunition uses an installed KF mesh; catching remains optional and empty-magwell slide operation remains available. SCAR joins the stock-derived tracked adapters and reuses the physical magazine pipeline. Its modeled charging handle remains stationary in the installed reload; a side-slap/bolt-release interaction is deferred. Broader weapon coverage, rendering polish, complete menus and multiplayer remain unfinished; publication stays on hold.
+The current gameplay checkpoint is `88f99da`, with October 1 wearer feedback recorded in `2b413d2`. The October 9 handoff updates documentation without changing that gameplay. This is a standalone development prototype, with explicitly launched sessions of up to three minutes. It requires your own game and SDK installation. There is no ready-to-install runtime bundle attached to this checkpoint.
 
-The Berserker work improves the knife's temporal blade contacts, withdrawal/cooldown handling and per-swing damage dispatch while preserving stock damage types and perk paths. [Body IK](docs/BODY_IK_PLAN.md) and a [flatscreen gesture visualizer](docs/NETWORK_VISUALIZER_PLAN.md) have dedicated implementation plans; neither is an implemented full-body or multiplayer feature yet. The [Demolitions reload plan](docs/DEMOLITIONS_RELOAD_PLAN.md) audits individual M32 chambers, sideways flick closure, and shared break-action closure for M79/BoomStick; those interactions are not enabled yet. Intentional faulty-light flicker and ceiling rays have a [VR presentation follow-up](ARCHITECTURE.md#intentional-light-flicker-and-ceiling-rays).
+**Maintenance status: on hold for the original developer.** The source is available for anyone interested in continuing the project.
 
-**New local hand option:** actual KF hand geometry now has a separate conversion/animation path with capacitive fingers and closed wrists. It is opt-in while appearance and wearer comfort are evaluated. See [native hand build and launch](docs/NATIVE_HANDS.md). Hands now preload hidden during match startup rather than waiting for the first tracking packet.
+## What works
 
-The development mutator includes controller-aimed 9mm, dual 9mm, Deagle, Bullpup, SCAR, knife, syringe, welder and stock grenades, capacitive finger poses, holsters, an offhand status display and an initial VR trader. Single-pistol physical reloads, dual belt reloads, rifle support and physical melee/throws are implemented. This remains a standalone prototype with incomplete weapon/menu/network coverage. The launcher requests the runtime's recommended resolution, fits it to the current transport budget and defaults to a bounded 120-second session. Full-resolution CPU transport still limits fresh frame cadence; stationary receiver measurements have reached about 50 fresh stereo pairs/sec at 2064 x 2208 per eye, without headset presentation.
+- Two native game-world eye views through OpenXR, head tracking, controller locomotion and snap turns.
+- Independent 6DoF weapon aiming, capacitive finger poses, holsters, rifle support grip, an offhand status display and an initial VR trader.
+- Optional native KF hand geometry, generated locally from the player's installation. The latest wearer feedback accepted thumb touch, weapon grips and steady weapon presentation while walking.
+- Physical pistol reloads: chest ammunition, magnetic magazine insertion, empty-magwell slide operation and a consistent left-hand slide grasp using left grip only.
+- Bullpup/SCAR magazine pull-out alongside button ejection, with partial-pull cancellation and retained magazine ammunition.
+- Additional implemented prototypes: dual-pistol belt reloads, physical knife swings, syringe/welder interactions and grenade throws.
 
-Implemented and verified:
+The October 1 wearer test accepted magnetic insertion, Bullpup pull-out and the pistol slide grasp. Desktop trials also cover 9mm, Deagle, MK23, Bullpup and SCAR reload profiles. This is not exhaustive headset acceptance of every weapon or interaction.
 
-- Read-only extraction of 2,381 embedded UnrealScript classes from the installed packages. Proprietary source stays in ignored `local/sdk`.
-- Read-only native object/property inspection, local player/viewport ownership and standalone-mode verification.
-- Bounded x86 native probes: 180 ticks, 180 player-view renders and 180 presents on one thread; no engine tick inside Draw; hooks disabled and original entry bytes verified afterward.
-- Native stereo world-render trials with fresh private cameras/targets, asymmetric frusta, synthetic head translation/rotation, visually verified parallax and measured extra callbacks. The accepted full-length headset run submitted 445 fresh pairs plus 192 retained-frame submissions; sustained operation remains open.
-- Native D3D9 multisample-resolved image capture, verified visually. The game uses ordinary D3D9, not D3D9Ex.
-- UE2 camera conversion tested against a captured native matrix, plus asymmetric per-eye transforms and explicit world-scale input.
-- Prototype non-Ex D3D9-to-D3D11 CPU pair bridge with MSAA resolve and real x86-to-x64 pixel verification. High-resolution transfer cost still needs improvement.
-- x86-to-x64 D3D11 stereo texture/pose transport, actual GPU pixel checks, resource generations, partial-pair cancellation and peer-loss recovery.
-- A compiled KFVRGameplay UnrealScript package, with 30,059 engine-run checks and C++/script action-stream comparison. Stock-derived standalone weapon/tool adapters are live; broader weapon coverage remains pending.
-- Physical detachable-magazine pipeline for single/dual guns: magazine identities, chest and belt supply, continuous insertion/action travel and independent chambers. Controller weapon/muzzle transforms and a four-stage UE2 pose driver also compile and pass headless tests; a separate game-thread script ledger now binds physical pistol reloads to actual KF ammunition. Dual-9mm belt reloads now also run in the standalone game with shared supply, separate chambers, retained magazines and belt slide assistance. See [manual reloads](docs/MANUAL_RELOAD_INTERACTIONS.md).
-- Conserved magazine/chamber/hand-magazine/reserve accounting, tactical and empty reloads, manual cycling, tube shells, replay rejection, mechanical timings and interrupted-action handling.
-- Physical melee eligibility with travel, speed, retraction and cooldown; 58-byte quantized tracked-pose packets with validation.
-- Portable comfort, recenter, weapon/UI math, rig topology checks and exact previous-write restoration retained from the 2142/BC2 work.
-- x64 OpenXR lifecycle, headset/eye poses and projection swapchains. Added grip/aim poses, trigger/grip/stick/menu actions and bounded haptics for standard controller profiles. Controller/haptic IPC also passes a real x64/x86 process test, including lost-focus/stale-input release. The physical diagnostic now verifies headset presentation and both controllers' triggers, grips, sticks and haptics. The bounded native left-stick binding passes a live engine movement/release trial; the wearer accepted left-stick movement. See [headset testing](docs/HEADSET_TESTING.md).
+## Known issues and unfinished work
 
-Start with [BUILDING](BUILDING.md), [TESTING](TESTING.md), [ARCHITECTURE](ARCHITECTURE.md), [feasibility](docs/FEASIBILITY.md), [weapon coverage](docs/WEAPONS.md), and [WORKLOG](WORKLOG.md).
+**Pistol shot alignment is unresolved:** the wearer reported bullets landing away from where the pistol points; Bullpup aim was reported correct. The saved observations do not establish the cause. Pistol grip-orientation comfort is a separate polish item. See the [next diagnostic step](docs/HANDOFF.md#first-gameplay-issue-pistol-shot-alignment).
 
-For the current development build, start a solo match with a living player, connect the headset and close the SteamVR dashboard, then run:
+- Standalone only. Multiplayer and a flatscreen gesture visualizer are not implemented.
+- CPU image transfer limits fresh stereo frame delivery. Runtime-recommended eye resolution does not mean headset-rate rendering.
+- Incomplete weapons, menus, scopes, pickup/drop flows, model surfaces and comfort settings. Some flat-game effects, such as intentionally flickering lights and ceiling rays, need VR presentation work.
+- Full-body IK, two-handed pistol support and shotgun/launcher flip reloads are still planned work.
+- Native-hand conversion is opt-in. Launching without `-NativeHands` uses authored placeholder gloves.
+- The native bridge is bounded; map travel requires another launch. Original game-build identity checks remain enabled.
+
+## Build and try
+
+Clone or fork this repository into a short path without spaces, such as `C:\KFVR`. Follow [BUILDING.md](BUILDING.md) for Visual Studio, Python, the OpenXR loader, script compilation and local native-hand preparation. No sibling Battlefield project checkout is required.
+
+After completing those steps, close any existing KF process and run from the repository root, replacing the example game path:
 
 ```powershell
-& G:\KFVR\Play-KFVR.ps1
+$kfGame = 'F:\SteamLibrary\steamapps\common\KillingFloor'
+.\Check-KFVR.ps1 -Game $kfGame
+.\Start-KFVRDev.ps1 -Game $kfGame -Unattended -NativeHands -VRProfile -PhysicalReloads
 ```
 
-Optional `-Scale 75`, `-Seconds 120` and `-SnapDegrees 30` control resolution, session length and right-stick angle. This remains an explicitly launched, bounded development session; map travel requires a new launch. No headset test is needed during the owner's current unattended session.
+Wait until the private match has spawned. With SteamVR running, the headset connected and its dashboard closed:
 
-Original game binaries, maps and assets are preserved. The ordinary development launcher adds our generated `System/KFVRGameplay.u`, tracked by `reports/dev-install.json`. Explicit `-NativeHands` also stages the separately recorded local-only `KFVRLocalHands.u`; original KF packages remain untouched. KF may save its normal settings on exit; this installer does not edit INI files. Probe DLLs are copied into private report directories and remain inert in the tested game process until it exits. Nothing auto-loads on a later game launch. Do not copy this diagnostic DLL into System as a mod installer.
+```powershell
+.\Play-KFVR.ps1 -Game $kfGame -Weapons -Seconds 180
+```
 
-For tracked weapons, close KF, run `G:\KFVR\Start-KFVRDev.ps1`, enter the private match, then run `G:\KFVR\Play-KFVR.ps1 -Weapons`. See [tracked weapons and hands](docs/TRACKED_WEAPONS.md) for controls, exact coverage and unattended testing.
+The development fixture uses god mode, holds zed spawning and marks progression as using cheats. [The test guide](docs/PRE_ALPHA_TEST.md) explains controls, extra weapon fixtures and cleanup.
+
+## Continue development
+
+[HANDOFF.md](docs/HANDOFF.md) maps the code, accepted behavior, known bugs and next tasks. [ARCHITECTURE.md](ARCHITECTURE.md) records engine boundaries; [TESTING.md](TESTING.md) explains reproducible checks; [WORKLOG.md](WORKLOG.md) preserves the development history, including failed experiments. Historical references to publication being on hold describe earlier checkpoints.
+
+Existing plans cover [body IK](docs/BODY_IK_PLAN.md), [multiplayer visualization](docs/NETWORK_VISUALIZER_PLAN.md), [Demolitions and break-action reloads](docs/DEMOLITIONS_RELOAD_PLAN.md), and [weapon coverage](docs/WEAPONS.md). These documents distinguish implemented systems from proposals.
+
+Forks and contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Private reports, screenshots, extracted game scripts, native game geometry and developer runtime inputs are excluded. Some historical audit helpers lived under ignored `reports/` and are not distributed; they are not required to build the runtime.
+
+## License and credits
+
+Authored mod code is available under the retained [MIT license](LICENSE), with BFVR/BF2142VR/BC2VR lineage and third-party notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). OpenXR and MinHook retain their respective licenses. Killing Floor belongs to its owners; this repository does not distribute the game or grant rights to its assets. The local native-hand converter requires assets from your own installation.

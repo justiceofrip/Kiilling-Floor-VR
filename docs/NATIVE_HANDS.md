@@ -2,7 +2,7 @@
 
 The development source can build separate VR hands from the owner's installed `KF_Weapons_Trip.9mm_Trip` mesh. It retains the game's hand geometry, UVs and current character sleeve/hand material. These are actual KF assets, locally adapted for independent controllers. The ordinary launcher still uses KFVR's authored placeholder gloves; select `-NativeHands` explicitly for this prototype.
 
-The October 1 follow-up wearer session accepted the corrected thumb touch and weapon grips on build `20a6bd4`, and confirmed steady weapon presentation while walking. The wearer described the thumb as perfect and the grips as great. Individual weapon/art polish and the flat dark wrist closure remain open. Detached-magazine grasps now have the desktop-tested path below, pending wearer review. The existing capacitive controller inputs drive the fingers; this does not add arms or optical hand tracking.
+The October 1 follow-up wearer session accepted the corrected thumb touch and weapon grips on build `20a6bd4`, and confirmed steady weapon presentation while walking. The wearer described the thumb as perfect and the grips as great. Individual weapon/art polish and the flat dark wrist closure remain open. The later October 1 wearer test accepted magnetic magazine insertion, Bullpup magazine pull-out and the fixed left-hand slide grasp; pistol shot alignment remains an open issue. The existing capacitive controller inputs drive the fingers; this does not add arms or optical hand tracking.
 
 ## Build and launch
 
@@ -11,6 +11,7 @@ Use the installed official KF SDK and the existing KFVR native/script build prer
 From the source checkout, with KF closed:
 
 ```powershell
+.\Build.ps1 -Architecture x64
 py -3.12 tools/build_scripts.py --game 'F:\SteamLibrary\steamapps\common\KillingFloor'
 py -3.12 tools/prepare_native_hands.py --game 'F:\SteamLibrary\steamapps\common\KillingFloor' --umodel 'local/asset-tools/umodel/umodel_64.exe'
 .\Start-KFVRDev.ps1 -NativeHands
@@ -50,4 +51,4 @@ Native hands now measure a left-hand magazine grasp from the installed 9mm or De
 
 When a magazine is held, its position is offset so the measured grasp's palm stays at the tracked hand. The actual magazine position is used for catch/insertion proximity. The existing ammunition ledger, release gestures, orientation gate and slide-cycle rules remain in control. Thumb touch remains independent. Stock timed reloads, rifle support and dual belt reloads keep their existing paths; authored fallback gloves keep the generic magazine grasp.
 
-The magazine/action overrides are queued before evaluating the physical weapon skeleton. An early evaluation had left the magazine at its previous pose briefly during sharp controller changes, despite correct settled samples. The new independent readback check compares actual magazine bones with actual hand palms across those transitions. This magazine-specific change has desktop evidence only; the earlier wearer acceptance applies to the normal weapon grips and thumb behavior.
+The magazine/action overrides are queued before evaluating the physical weapon skeleton. An early evaluation had left the magazine at its previous pose briefly during sharp controller changes, despite correct settled samples. The new independent readback check compares actual magazine bones with actual hand palms across those transitions. The later October 1 wearer pass accepted the guided single-gun magazine interactions and conventional slide grasp. See HANDOFF.md for the current checkpoint and the separate unresolved pistol shot-alignment report.
