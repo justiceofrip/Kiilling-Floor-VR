@@ -32,7 +32,7 @@ void ProbeStereo(void*,void*);
 void ReadStereo();
 void WriteStereo(const std::filesystem::path&);
 thread_local bool privateEye=false,nativeDrawValid=false;
-void BridgeLevel(void*,void*);
+kfvr::native::EyeBridgeResult BridgeLevel(void*,void*,bool=false);
 std::atomic<bool> replayed=false;
 using AuxCtor=void(__thiscall*)(void*,int,int,int);
 using SimpleCall=void(__thiscall*)(void*);
@@ -44,6 +44,54 @@ std::array<void*,9> targets{};std::atomic<bool> sampling=false;std::atomic<unsig
 LONG started=0;kfvr::native::NativeProbeConfig config;
 struct Record {unsigned levelRenders=0,actorAnimation=0,skeletalAnimation=0,skeletalFrames=0,scriptEvents=0,scriptOverflow=0;std::array<ScriptCount,48> scripts{};std::atomic<bool> ready=false;unsigned frame=0,thread=0,tickBefore=0,tickAfter=0,renders=0,presentBefore=0,presentAfter=0;std::uint32_t scene=0,renderInterface=0;std::array<float,3> origin{};std::array<int,3> rotation{};float fov=0;long long begin=0,end=0;bool sceneRead=false;std::array<float,96> matrices{};};
 std::array<Record,240> records;thread_local Record* current=nullptr;
+// Whole-session evidence is independent of the bounded detailed frame buffer.
+enum class ViewKind : unsigned {Outside,Desktop,Left,Right};
+thread_local ViewKind viewKind=ViewKind::Outside;
+struct ViewScope {
+ ViewKind previous;bool previousEye;
+ explicit ViewScope(ViewKind next):previous(viewKind),previousEye(privateEye){viewKind=next;privateEye=previousEye||next==ViewKind::Left||next==ViewKind::Right;}
+ ~ViewScope(){viewKind=previous;privateEye=previousEye;}
+};
+struct ViewCounters {
+ std::uint64_t outerViews=0,levelCalls=0,nestedLevelCalls=0,scriptCalls=0,getFrames=0,actorAnimation=0,skeletalAnimation=0,scriptOverflow=0;
+ std::uint64_t outerLevelTicks=0,outerLevelMaxTicks=0;
+ std::array<ScriptCount,64> scripts{};
+};
+struct RenderCounters {
+ std::uint64_t draws=0,playerRenders=0,presents=0,drawsWithTicks=0,rootWorldCalls=0,desktopSkipped=0,desktopFallback=0,unsafeAborts=0;
+ std::array<ViewCounters,4> views{};
+} renderCounters;
+std::atomic<bool> renderUnsafe=false;
+ViewCounters& CurrentView(){return renderCounters.views[unsigned(viewKind)];}
+void CountScript(void* function){
+ if(!nativeDrawValid)return;auto& view=CurrentView();++view.scriptCalls;
+ const auto at=reinterpret_cast<std::uint32_t>(function);unsigned name=0,owner=0,outer=0;SIZE_T got=0;
+ if(!ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(at+0x24),&name,4,&got)||got!=4||
+    !ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(at+0x1c),&outer,4,&got)||got!=4||
+    !ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(outer+0x24),&owner,4,&got)||got!=4){++view.scriptOverflow;return;}
+ for(auto& entry:view.scripts)if(!entry.calls||(entry.name==name&&entry.ownerName==owner)){entry.name=name;entry.ownerName=owner;++entry.calls;return;}
+ ++view.scriptOverflow;
+}
+void WriteRenderCounters(const std::filesystem::path& folder){
+ LARGE_INTEGER frequency{};QueryPerformanceFrequency(&frequency);
+ std::ofstream out(folder/L"native-render-views.json");out<<std::boolalpha
+  <<"{\"desktop_suppression_opt_in\":"<<bool(config.suppressDesktop)<<",\"draws\":"<<renderCounters.draws
+  <<",\"qpc_frequency\":"<<frequency.QuadPart<<",\"root_world_callbacks\":"<<renderCounters.rootWorldCalls<<",\"player_renders\":"<<renderCounters.playerRenders<<",\"presents\":"<<renderCounters.presents
+  <<",\"draws_with_engine_tick\":"<<renderCounters.drawsWithTicks<<",\"desktop_world_skipped\":"<<renderCounters.desktopSkipped
+  <<",\"desktop_fallbacks\":"<<renderCounters.desktopFallback<<",\"unsafe_aborts\":"<<renderCounters.unsafeAborts
+  <<",\"unsafe_state_latched\":"<<renderUnsafe.load()<<",\"views\":[";
+ const char* names[]={"outside_world","desktop","left","right"};
+ for(unsigned i=0;i<renderCounters.views.size();++i){const auto& view=renderCounters.views[i];if(i)out<<',';
+  out<<"{\"name\":\""<<names[i]<<"\",\"outer_views\":"<<view.outerViews<<",\"level_original_calls\":"<<view.levelCalls
+   <<",\"outer_level_qpc_ticks\":"<<view.outerLevelTicks<<",\"outer_level_max_qpc_ticks\":"<<view.outerLevelMaxTicks<<",\"nested_level_original_calls\":"<<view.nestedLevelCalls<<",\"script_calls\":"<<view.scriptCalls
+   <<",\"getframe_calls\":"<<view.getFrames<<",\"actor_animation_calls\":"<<view.actorAnimation
+   <<",\"skeletal_animation_calls\":"<<view.skeletalAnimation<<",\"script_overflow\":"<<view.scriptOverflow<<",\"scripts\":[";
+  bool first=true;for(const auto& entry:view.scripts){if(!entry.calls)continue;if(!first)out<<',';first=false;
+   out<<"{\"name_id\":"<<entry.name<<",\"owner_name_id\":"<<entry.ownerName<<",\"calls\":"<<entry.calls<<'}';}out<<"]}";
+ }
+ out<<"]}\n";
+}
+
 bool Read(std::uint32_t at,void* data,std::size_t bytes){SIZE_T got=0;return at>=0x10000&&bytes<=4096&&ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(at),data,bytes,&got)&&got==bytes;}
 std::uint32_t U32(std::uint32_t at){std::uint32_t value=0;Read(at,&value,4);return value;}
 bool LocalWorld(){unsigned char mode=255;return U32(config.controller+4)==config.controllerIndex&&U32(config.level+4)==config.levelIndex&&U32(config.controller+config.levelOffset)==config.level&&U32(config.controller+config.playerOffset)==config.viewport&&Read(config.level+config.netModeOffset,&mode,1)&&mode==0;}
@@ -59,15 +107,17 @@ kfvr::native::MovementDemand MovementInput(){
 }
 long long Qpc(){LARGE_INTEGER q;QueryPerformanceCounter(&q);return q.QuadPart;}
 void __fastcall DrawHook(void* self,void*,void* viewport,int blit,unsigned char* hit,int* size){
- Record* previous=current;Record* row=nullptr;const bool previousValid=nativeDrawValid;nativeDrawValid=false;
+ Record* previous=current;Record* row=nullptr;const bool previousValid=nativeDrawValid;nativeDrawValid=false;const auto tickBefore=ticks.load();
  if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld()){
-  nativeDrawValid=true;const auto index=count.fetch_add(1);if(index<config.maxFrames){row=&records[index];row->frame=index;row->thread=GetCurrentThreadId();row->tickBefore=ticks.load();row->presentBefore=presents.load();row->begin=Qpc();current=row;}
+  nativeDrawValid=true;++renderCounters.draws;const auto index=count.fetch_add(1);if(index<config.maxFrames){row=&records[index];row->frame=index;row->thread=GetCurrentThreadId();row->tickBefore=ticks.load();row->presentBefore=presents.load();row->begin=Qpc();current=row;}
  }
  drawOriginal(self,viewport,blit,hit,size);
+ if(nativeDrawValid&&ticks.load()!=tickBefore)++renderCounters.drawsWithTicks;
  if(row){row->end=Qpc();row->tickAfter=ticks.load();row->presentAfter=presents.load();row->ready.store(true,std::memory_order_release);}current=previous;nativeDrawValid=previousValid;
 }
 void __fastcall TickHook(void* self,void*,float dt){if(sampling.load(std::memory_order_relaxed))ticks.fetch_add(1);tickOriginal(self,dt);}
 void __fastcall RenderHook(void* self,void*,void* ri){
+ if(nativeDrawValid)++renderCounters.playerRenders;
  if(current){auto& row=*current;++row.renders;row.scene=reinterpret_cast<std::uint32_t>(self);row.renderInterface=reinterpret_cast<std::uint32_t>(ri);
   // These fields are backed by this build's FCameraSceneNode constructor,
   // retained in the private binary audit. This probe NEVER writes them.
@@ -77,11 +127,38 @@ void __fastcall RenderHook(void* self,void*,void* ri){
  ++playerDepth;renderOriginal(self,ri);--playerDepth;
 }
 
-void __fastcall LevelHook(void* self,void*,void* ri){const bool root=nativeDrawValid&&playerDepth&&!levelDepth&&!privateEye;if(current){++current->levelRenders;if(config.targetTrial&&root)ProbeTarget(self,ri);}++levelDepth;levelOriginal(self,ri);--levelDepth;if(config.stereoTrial&&root)ProbeStereo(self,ri);if(config.bridgeTrial&&root)BridgeLevel(self,ri);}
-void __fastcall ActorAnimationHook(void* self,void*,float dt){if(current)++current->actorAnimation;actorAnimationOriginal(self,dt);}
-int __fastcall SkeletalAnimationHook(void* self,void*,float dt){if(current)++current->skeletalAnimation;return skeletalAnimationOriginal(self,dt);}
-void __fastcall GetFrameHook(void* self,void*,void* actor,void* scene,void* vectors,int stride,int* countOut,unsigned long flags){if(current)++current->skeletalFrames;getFrameOriginal(self,actor,scene,vectors,stride,countOut,flags);}
+void __fastcall LevelHook(void* self,void*,void* ri){
+ const bool root=nativeDrawValid&&playerDepth&&!levelDepth&&!privateEye;
+ if(root)++renderCounters.rootWorldCalls;
+ if(current){++current->levelRenders;if(config.targetTrial&&root)ProbeTarget(self,ri);}
+ // A failed native restore cannot be followed by a speculative desktop render.
+ // Keep this hook resident on fatal failure; the bounded trial reports failure.
+ if(renderUnsafe.load(std::memory_order_relaxed)){if(nativeDrawValid)++renderCounters.unsafeAborts;return;}
+ bool attempted=false;
+ if(root&&config.suppressDesktop&&kfvr::native::EyeBridgeDesktopReady()){
+  attempted=true;const auto outcome=BridgeLevel(self,ri,true);
+  if(outcome==kfvr::native::EyeBridgeResult::FailedUnsafe){renderUnsafe=true;++renderCounters.unsafeAborts;return;}
+  if(outcome==kfvr::native::EyeBridgeResult::DesktopReplaced){++renderCounters.desktopSkipped;return;}
+ }
+ if(root&&config.suppressDesktop)++renderCounters.desktopFallback;
+ {
+  ViewScope view(root?ViewKind::Desktop:viewKind);
+  if(nativeDrawValid){auto& totals=CurrentView();++totals.levelCalls;if(levelDepth)++totals.nestedLevelCalls;if(root)++totals.outerViews;}
+  const bool outer=levelDepth==0;const auto begin=Qpc();
+  ++levelDepth;levelOriginal(self,ri);--levelDepth;
+  if(nativeDrawValid&&outer){auto& totals=CurrentView();const auto elapsed=std::uint64_t(Qpc()-begin);totals.outerLevelTicks+=elapsed;if(elapsed>totals.outerLevelMaxTicks)totals.outerLevelMaxTicks=elapsed;}
+ }
+ if(config.stereoTrial&&root)ProbeStereo(self,ri);
+ // Startup keeps the proven desktop-first preflight/mirror-probe ordering.
+ if(config.bridgeTrial&&root&&!attempted){
+  if(BridgeLevel(self,ri)==kfvr::native::EyeBridgeResult::FailedUnsafe){renderUnsafe=true;++renderCounters.unsafeAborts;}
+ }
+}
+void __fastcall ActorAnimationHook(void* self,void*,float dt){if(current)++current->actorAnimation;if(nativeDrawValid)++CurrentView().actorAnimation;actorAnimationOriginal(self,dt);}
+int __fastcall SkeletalAnimationHook(void* self,void*,float dt){if(current)++current->skeletalAnimation;if(nativeDrawValid)++CurrentView().skeletalAnimation;return skeletalAnimationOriginal(self,dt);}
+void __fastcall GetFrameHook(void* self,void*,void* actor,void* scene,void* vectors,int stride,int* countOut,unsigned long flags){if(current)++current->skeletalFrames;if(nativeDrawValid)++CurrentView().getFrames;getFrameOriginal(self,actor,scene,vectors,stride,countOut,flags);}
 void __fastcall ProcessEventHook(void* self,void*,void* function,void* params,void* result){
+ CountScript(function);
  if(current){auto& row=*current;++row.scriptEvents;const auto at=reinterpret_cast<std::uint32_t>(function);const auto name=U32(at+0x24),owner=U32(U32(at+0x1c)+0x24);const unsigned phase=privateEye?3:levelDepth?2:playerDepth?1:0;bool recorded=false;
   for(auto& entry:row.scripts){if(!entry.calls||(entry.name==name&&entry.ownerName==owner&&entry.phase==phase)){entry.name=name;entry.ownerName=owner;entry.phase=phase;++entry.calls;recorded=true;break;}}
   if(!recorded)++row.scriptOverflow;
@@ -113,7 +190,17 @@ void CaptureColor(void* renderer){
  if(SUCCEEDED(hr)){try{capture.pixels.resize(std::size_t(desc.Width)*desc.Height*4);for(unsigned y=0;y<desc.Height;++y)std::memcpy(capture.pixels.data()+std::size_t(y)*desc.Width*4,static_cast<const char*>(locked.pBits)+std::size_t(y)*locked.Pitch,desc.Width*4);}catch(...){hr=E_OUTOFMEMORY;}staging->UnlockRect();}
  capture.result=hr;capture.ready.store(true,std::memory_order_release);
 }
-void __fastcall PresentHook(void* self,void*,void* viewport){if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){presents.fetch_add(1);if(LocalWorld()){CaptureColor(self);if(config.targetTrial)ReadTarget();if(config.stereoTrial)ReadStereo();}}if(config.bridgeTrial)kfvr::native::EyeBridgePresent(reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld());presentOriginal(self,viewport);if(config.bridgeTrial)kfvr::native::EyeBridgePresent(reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld());}
+void __fastcall PresentHook(void* self,void*,void* viewport){
+ const bool worldValid=reinterpret_cast<std::uint32_t>(viewport)==config.viewport&&LocalWorld();
+ if(sampling.load(std::memory_order_relaxed)&&reinterpret_cast<std::uint32_t>(viewport)==config.viewport){
+  presents.fetch_add(1);if(nativeDrawValid)++renderCounters.presents;
+  if(worldValid){CaptureColor(self);if(config.targetTrial)ReadTarget();if(config.stereoTrial)ReadStereo();}
+ }
+ if(config.bridgeTrial){kfvr::native::EyeBridgePresent(worldValid);if(kfvr::native::EyeBridgeStateUnsafe())renderUnsafe=true;}
+ presentOriginal(self,viewport);
+ if(config.bridgeTrial){kfvr::native::EyeBridgePresent(worldValid);if(kfvr::native::EyeBridgeStateUnsafe())renderUnsafe=true;}
+}
+
 bool Executable(void* at,HMODULE owner){MEMORY_BASIC_INFORMATION m{};if(!VirtualQuery(at,&m,sizeof(m))||m.AllocationBase!=owner||m.State!=MEM_COMMIT||m.Protect&(PAGE_GUARD|PAGE_NOACCESS))return false;return (m.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))!=0;}
 struct TargetTrial {
  D3DVIEWPORT9 viewportBefore{},viewportAfter{};
@@ -175,41 +262,49 @@ void ReadTarget(){
 }
 
 
-bool RenderBridgePair(void* scene,void* ri,const kfvr::runtime::PresentationRequirements& requirements,const kfvr::runtime::TrackingFrame& tracking,kfvr::native::NativeSurfaces& surfaces){
+kfvr::native::EyeRenderResult RenderBridgePair(void* scene,void* ri,const kfvr::runtime::PresentationRequirements& requirements,const kfvr::runtime::TrackingFrame& tracking,kfvr::native::NativeSurfaces& surfaces){
+ using Result=kfvr::native::EyeRenderResult;
+ if(!tracking.headValid||!tracking.focused||!kfvr::native::ReadTrackedBody())return Result::FailedRestored;
  kfvr::native::CaptureWeaponAnchor(tracking);
  using Microsoft::WRL::ComPtr;
  const auto address=reinterpret_cast<unsigned>(ri),renderer=U32(address+4);auto* device=reinterpret_cast<IDirect3DDevice9*>(U32(renderer+0x495c));
  const auto stack=U32(address+0x59870),cache=U32(address+0x5940c);std::array<unsigned char,0x594> before{},after{};
  ComPtr<IDirect3DSurface9> original,depth;D3DVIEWPORT9 viewport{};
- if(stack>240||!Read(cache,before.data(),before.size())||FAILED(device->GetRenderTarget(0,&original))||FAILED(device->GetDepthStencilSurface(&depth))||FAILED(device->GetViewport(&viewport)))return false;
+ if(stack>240||!Read(cache,before.data(),before.size())||FAILED(device->GetRenderTarget(0,&original))||FAILED(device->GetDepthStencilSurface(&depth))||FAILED(device->GetViewport(&viewport))||!viewport.Width||!viewport.Height)return Result::FailedRestored;
  const auto push=reinterpret_cast<SimpleCall>(targetMethods[0]),pop=reinterpret_cast<SimpleCall>(targetMethods[1]);
  const auto bind=reinterpret_cast<int(__thiscall*)(void*,void*)>(targetMethods[2]);
  const auto setViewport=reinterpret_cast<void(__thiscall*)(void*,int,int,int,int)>(targetMethods[3]);
  const auto clear=reinterpret_cast<void(__thiscall*)(void*,int,unsigned,int,float,int,unsigned)>(targetMethods[4]);
- bool okay=true;
- for(unsigned eye=0;eye<2&&okay;++eye){
+ bool okay=true,stateRestored=true;
+ for(unsigned eye=0;eye<2&&okay&&stateRestored;++eye){
   alignas(16) std::array<unsigned char,64> aux;aux.fill(0xcd);auxCtor(aux.data(),int(requirements.width),int(requirements.height),5);push(ri);
   if(!bind(ri,aux.data()))okay=false;
   else {
    setViewport(ri,0,0,int(requirements.width),int(requirements.height));clear(ri,1,0xff000000,1,1.f,1,0);
-   privateEye=true;replayed=true;okay=kfvr::native::RenderTrackedCamera(scene,aux.data(),ri,tracking,eye,requirements.width,requirements.height,config.unitsPerMetre);privateEye=false;
+   {ViewScope view(eye?ViewKind::Right:ViewKind::Left);if(nativeDrawValid)++CurrentView().outerViews;
+    replayed=true;okay=kfvr::native::RenderTrackedCamera(scene,aux.data(),ri,tracking,eye,requirements.width,requirements.height,config.unitsPerMetre);
+    // False also covers original-scene/canary violations inside the camera
+    // helper, so GPU restoration alone cannot make desktop fallback safe.
+    if(!okay)stateRestored=false;}
    if(okay)okay=SUCCEEDED(device->GetRenderTarget(0,&surfaces[eye]));
    if(okay){D3DSURFACE_DESC desc{};okay=SUCCEEDED(surfaces[eye]->GetDesc(&desc))&&desc.Width==requirements.width&&desc.Height==requirements.height&&desc.MultiSampleType==D3DMULTISAMPLE_NONE&&desc.Format==D3DFMT_A8R8G8B8&&surfaces[eye].Get()!=original.Get();}
   }
   pop(ri);auxDtor(aux.data());
-  for(unsigned i=28;i<aux.size();++i)okay&=aux[i]==0xcd;
+  for(unsigned i=28;i<aux.size();++i)stateRestored&=aux[i]==0xcd;
   ComPtr<IDirect3DSurface9> restored,restoredDepth;D3DVIEWPORT9 restoredViewport{};
-  okay&=SUCCEEDED(device->GetRenderTarget(0,&restored))&&restored.Get()==original.Get()&&SUCCEEDED(device->GetDepthStencilSurface(&restoredDepth))&&restoredDepth.Get()==depth.Get()&&SUCCEEDED(device->GetViewport(&restoredViewport))&&std::memcmp(&viewport,&restoredViewport,sizeof(viewport))==0&&U32(address+0x59870)==stack&&U32(address+0x5940c)==cache&&Read(cache,after.data(),after.size())&&before==after;
+  stateRestored&=SUCCEEDED(device->GetRenderTarget(0,&restored))&&restored.Get()==original.Get()&&SUCCEEDED(device->GetDepthStencilSurface(&restoredDepth))&&restoredDepth.Get()==depth.Get()&&SUCCEEDED(device->GetViewport(&restoredViewport))&&std::memcmp(&viewport,&restoredViewport,sizeof(viewport))==0&&U32(address+0x59870)==stack&&U32(address+0x5940c)==cache&&Read(cache,after.data(),after.size())&&before==after;
  }
- return okay&&surfaces[0]&&surfaces[1]&&surfaces[0].Get()!=surfaces[1].Get();
+ if(!stateRestored)return Result::FailedUnsafe;
+ return okay&&surfaces[0]&&surfaces[1]&&surfaces[0].Get()!=surfaces[1].Get()?Result::Complete:Result::FailedRestored;
 }
-void BridgeLevel(void* scene,void* ri){
- if(!targetTrial.ready.load(std::memory_order_acquire))return;
- if(FAILED(targetTrial.result)||!targetTrial.targetsRestored||!targetTrial.depthRestored||!targetTrial.viewportRestored||!targetTrial.cacheRestored||!targetTrial.stackRestored||!targetTrial.canary){kfvr::native::StopEyeBridge();return;}
+kfvr::native::EyeBridgeResult BridgeLevel(void* scene,void* ri,bool replaceDesktop){
+ using Result=kfvr::native::EyeBridgeResult;
+ if(!targetTrial.ready.load(std::memory_order_acquire))return Result::NoPair;
+ if(FAILED(targetTrial.result)||!targetTrial.targetsRestored||!targetTrial.depthRestored||!targetTrial.viewportRestored||!targetTrial.cacheRestored||!targetTrial.stackRestored||!targetTrial.canary){kfvr::native::StopEyeBridge();return Result::NoPair;}
  const auto address=reinterpret_cast<unsigned>(ri),table=U32(address);
- for(unsigned slot=0;slot<5;++slot)if(U32(table+slot*4)!=reinterpret_cast<unsigned>(targetMethods[slot])){kfvr::native::StopEyeBridge();return;}
+ for(unsigned slot=0;slot<5;++slot)if(U32(table+slot*4)!=reinterpret_cast<unsigned>(targetMethods[slot])){kfvr::native::StopEyeBridge();return Result::NoPair;}
  auto* device=reinterpret_cast<IDirect3DDevice9*>(U32(U32(address+4)+0x495c));
- kfvr::native::EyeBridgeLevel(scene,ri,device,RenderBridgePair);
+ return kfvr::native::EyeBridgeLevel(scene,ri,device,RenderBridgePair,replaceDesktop);
 }
 
 struct StereoTrial {
@@ -280,7 +375,7 @@ void WriteStereo(const std::filesystem::path& folder){
 }
 extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(InterlockedCompareExchange(&started,1,0))return 10;
- if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=15||config.weaponTrial>1||(config.weaponTrial&&(!config.bridgeTrial||!config.movementTrial||config.rig<0x10000||config.rigTrackingOffset<44||config.rigTrackingOffset>8192||config.rigFeedbackOffset<44||config.rigFeedbackOffset>8192))||config.turningTrial>1||(config.turningTrial&&(!config.movementTrial||config.rotationOffset<44||config.rotationOffset>8192||config.snapDegrees<15||config.snapDegrees>90))||config.movementTrial>1||(config.movementTrial&&(!config.inputTrial||!config.bridgeTrial))||config.inputTrial>1||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>(config.bridgeTrial?180000u:15000u)||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
+ if(!Read(reinterpret_cast<std::uint32_t>(request),&config,sizeof(config))||config.bytes!=sizeof(config)||config.version!=16||config.suppressDesktop>1||(config.suppressDesktop&&!config.bridgeTrial)||config.weaponTrial>1||(config.weaponTrial&&(!config.bridgeTrial||!config.movementTrial||config.rig<0x10000||config.rigTrackingOffset<44||config.rigTrackingOffset>8192||config.rigFeedbackOffset<44||config.rigFeedbackOffset>8192))||config.turningTrial>1||(config.turningTrial&&(!config.movementTrial||config.rotationOffset<44||config.rotationOffset>8192||config.snapDegrees<15||config.snapDegrees>90))||config.movementTrial>1||(config.movementTrial&&(!config.inputTrial||!config.bridgeTrial))||config.inputTrial>1||config.bridgeTrial>1||(config.bridgeTrial&&(!config.cameraTrial||config.stereoTrial||config.channelToken[32]!=0||!config.channelToken[0]||!(config.unitsPerMetre>=1&&config.unitsPerMetre<=200)))||config.targetTrial>1||config.cameraTrial>config.targetTrial||(config.stereoTrial>3||(config.stereoTrial&&!config.cameraTrial))||config.durationMs>(config.bridgeTrial?180000u:15000u)||config.durationMs<100||!config.maxFrames||config.maxFrames>records.size()||config.reportPath[259]!=0||!config.reportPath[0]||!LocalWorld())return 11;
  const auto engine=GetModuleHandleW(L"Engine.dll"),renderer=GetModuleHandleW(L"D3D9Drv.dll"),core=GetModuleHandleW(L"Core.dll");if(!engine||!renderer||!core)return 12;
  const char* names[]={"?Draw@UGameEngine@@UAEXPAVUViewport@@HPAEPAH@Z","?Tick@UGameEngine@@UAEXM@Z","?Render@FPlayerSceneNode@@UAEXPAVFRenderInterface@@@Z","?Present@UD3D9RenderDevice@@UAEXPAVUViewport@@@Z","?Render@FLevelSceneNode@@UAEXPAVFRenderInterface@@@Z","?UpdateAnimation@AActor@@UAEXM@Z","?UpdateAnimation@USkeletalMeshInstance@@UAEHM@Z","?GetFrame@USkeletalMeshInstance@@UAEXPAVAActor@@PAVFLevelSceneNode@@PAVFVector@@HAAHK@Z","?ProcessEvent@UObject@@UAEXPAVUFunction@@PAX1@Z"};
  for(unsigned i=0;i<targets.size();++i){auto owner=i==3?renderer:i==8?core:engine;targets[i]=reinterpret_cast<void*>(GetProcAddress(owner,names[i]));std::array<unsigned char,16> bytes{};if(!targets[i]||!Executable(targets[i],owner)||!Read(reinterpret_cast<std::uint32_t>(targets[i]),bytes.data(),bytes.size())||std::memcmp(bytes.data(),config.prologues[i],16))return 13;}
@@ -304,7 +399,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(MH_Initialize()!=MH_OK)return 14;
  kfvr::native::ConfigureTrackedBody(config);
  kfvr::native::ConfigureWeaponRig(config);
- if(config.bridgeTrial&&!kfvr::native::StartEyeBridge(config.channelToken))return 23;
+ if(config.bridgeTrial&&!kfvr::native::StartEyeBridge(config.channelToken,config.suppressDesktop!=0))return 23;
  if(config.movementTrial)kfvr::native::SetMovementSource(MovementInput);
  if(config.inputTrial){std::array<unsigned,10> fields{};std::copy(std::begin(config.inputOffsets),std::end(config.inputOffsets),fields.begin());if(!kfvr::native::StartInputAudit(config.viewport,config.controller,fields,config.playerTickName,config.inputPrologue,InputWorld))return 24;}
  if(config.turningTrial&&!kfvr::native::StartTurningAudit(config.rotationOffset,config.rotationName,config.callPrologue)){kfvr::native::StopInputAudit();return 26;}
@@ -316,11 +411,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI KfvrRunNativeProbe(void* request){
  if(enabled){sampling.store(true,std::memory_order_release);const auto start=GetTickCount64();while((config.bridgeTrial||count.load()<config.maxFrames)&&GetTickCount64()-start<config.durationMs&&LocalWorld()&&(!config.bridgeTrial||!kfvr::native::EyeBridgeClosed()))Sleep(10);}
  if(config.bridgeTrial){kfvr::native::StopEyeBridge();const auto deadline=GetTickCount64()+5000;while(!kfvr::native::EyeBridgeClosed()&&GetTickCount64()<deadline)Sleep(10);}
  sampling.store(false,std::memory_order_release);
- const bool weaponStopped=kfvr::native::StopWeaponRig();const bool inputStopped=!config.inputTrial||kfvr::native::StopInputAudit();const bool mayDisable=(!config.bridgeTrial||kfvr::native::EyeBridgeClosed())&&inputStopped&&weaponStopped;bool disabled=mayDisable;for(unsigned i=0;mayDisable&&i<installed;++i){const auto result=MH_DisableHook(targets[i]);disabled&=result==MH_OK||result==MH_ERROR_DISABLED;}
+ const bool weaponStopped=kfvr::native::StopWeaponRig();const bool inputStopped=!config.inputTrial||kfvr::native::StopInputAudit();const bool mayDisable=!renderUnsafe.load(std::memory_order_acquire)&&(!config.bridgeTrial||kfvr::native::EyeBridgeClosed())&&inputStopped&&weaponStopped;bool disabled=mayDisable;for(unsigned i=0;mayDisable&&i<installed;++i){const auto result=MH_DisableHook(targets[i]);disabled&=result==MH_OK||result==MH_ERROR_DISABLED;}
  // Keep trampolines and this DLL resident: an original callback may be returning.
  Sleep(50);
  try{
 
+ WriteRenderCounters(std::filesystem::path(config.reportPath).parent_path());
  if(config.inputTrial){kfvr::native::WriteWeaponRigReport(std::filesystem::path(config.reportPath).parent_path());kfvr::native::WriteInputAudit(std::filesystem::path(config.reportPath).parent_path());}
  if(config.bridgeTrial)kfvr::native::WriteEyeBridgeReport(std::filesystem::path(config.reportPath).parent_path());
  if(config.stereoTrial)WriteStereo(std::filesystem::path(config.reportPath).parent_path());

@@ -53,8 +53,28 @@ For dual pistols use `-DualTest`. Each trigger fires its own pistol. Left Y enab
 
 ## Limits and cleanup
 
-Pistol shot alignment is an open issue. Native hand orientation, weapon model surfaces, lighting/rays, complete menus, item flows and performance need more work. Full-body IK and multiplayer are not implemented. [HANDOFF.md](HANDOFF.md) distinguishes working features from planned systems.
+The October 11 pistol hip-fire spread correction passes desktop firing checks; physical sight/impact alignment still needs a headset retest. Native hand orientation, weapon model surfaces, lighting/rays, complete menus, item flows and performance need more work. Full-body IK and multiplayer are not implemented. [HANDOFF.md](HANDOFF.md) distinguishes working features from planned systems.
 
 The launcher stages generated `System/KFVRGameplay.u` and, when requested, `System/KFVRLocalHands.u`. It records them in `reports/dev-install.json` and `reports/native-hand-install.json`. Keep those manifests when reusing an installation. An unrecorded/changed destination package is deliberately rejected; do not overwrite it blindly. To undo a known KFVR installation, close KF and remove only the corresponding recorded generated packages. Original game packages are not replaced, and a normal game launch does not auto-load VR.
 
 Closing the game normally removes the inert diagnostic module left after hook shutdown. Do not install the diagnostic DLL as a D3D proxy. Reports under `reports/native-headset-*` and `reports/native-trace-*` include local paths and game observations; review them before sharing. Never run automated synthetic controller trials over a wearer session.
+
+## Experimental GPU renderer
+
+Build both architectures from current source. Keep SteamVR ready before starting this short trial, close an existing KF process normally, then launch:
+
+```powershell
+.\Start-KFVRDev.ps1 -Game $kfGame -Unattended -NativeHands -VRProfile -PhysicalReloads -GpuRendererTrial
+```
+
+Once the private match has spawned, run:
+
+```powershell
+.\Play-KFVR.ps1 -Game $kfGame -Weapons -Mirror -Seconds 120
+```
+
+`-GpuRendererTrial` selects the Windows non-Ex D3D9On12 factory before KF creates its render device. The native bridge confirms the actual device and chooses GPU-only image transfer automatically. There is no silent CPU fallback after an On12 transfer error. The unchanged ordinary launch remains available for comparison and compatibility. This path has desktop game evidence on the development machine; it has not received headset acceptance or broad driver coverage.
+
+The GPU launcher requests normal game closure after 180 seconds from startup (`-GpuTrialSeconds 15..180`). Start the headset session promptly; its duration must fit inside the remaining game lifetime. Startup receipts are under ignored `reports/on12-launch-*`. Original game binaries and runtime registration are unchanged; the existing development-package staging still applies. Normal process exit removes the resident startup module.
+
+`-Mirror` can also be used with the ordinary CPU launch. After a successful mirror preflight, fresh stereo frames replace the extra desktop world draw with a cropped left-eye mirror. Both native eye world renders remain. When no complete focused pair is available, stock desktop rendering continues. The mirror replaces the desktop HUD image; VR world-space status/trader displays are unaffected by that composition policy. Scene correctness and headset pacing still need broader testing.

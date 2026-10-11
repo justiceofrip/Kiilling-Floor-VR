@@ -154,7 +154,14 @@ struct Host {
         Check(api.CreateReferenceSpace(session,&spaceInfo,&headSpace),"Create VIEW reference space");
         Check(api.EnumerateSwapchainFormats(session,0,&count,nullptr),"Swapchain format count");Require(count<=4096,"Invalid swapchain format count");
         std::vector<int64_t> formats(count);Check(api.EnumerateSwapchainFormats(session,count,&count,formats.data()),"Swapchain formats");
-        for(auto format:{DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_B8G8R8A8_UNORM})if(std::find(formats.begin(),formats.end(),int64_t(format))!=formats.end()){req.format=format;break;}
+        Require(count<=formats.size(),"Invalid returned swapchain format count");
+        formats.resize(count);report.advertisedSwapchainFormats=formats;report.swapchainFormatsEnumerated=true;
+        req.format=graphics::SelectSwapchainFormat(formats);
+        // Emit once before swapchain creation so unsupported-format failures
+        // retain the actual runtime capability list as well as the final report.
+        std::cerr<<"swapchain_formats={\"advertised\":[";
+        for(std::size_t i=0;i<formats.size();++i){if(i)std::cerr<<',';std::cerr<<formats[i];}
+        std::cerr<<"],\"selected\":"<<req.format<<'}'<<std::endl;
         Require(req.format!=0,"Runtime has no supported RGBA8/BGRA8 swapchain format");
         for(unsigned eye=0;eye<2;++eye){
             XrSwapchainCreateInfo chain{XR_TYPE_SWAPCHAIN_CREATE_INFO};chain.usageFlags=XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT|XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT;

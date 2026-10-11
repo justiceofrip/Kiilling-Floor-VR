@@ -31,6 +31,7 @@ function DoFireEffect()
     R.TraceCount++; R.PulseRight(0.45,35);
     R.LastTraceStart=R.MuzzleLocation;
     R.LastTraceDirection=vector(Aim);
+    R.RecordShot(Weapon,ThisModeNum,R.MuzzleLocation,R.AimRotation,Aim,Spread,Spread);
     DoTrace(R.MuzzleLocation, Aim);
 }
 function rotator AdjustAim(vector Start, float InAimError)

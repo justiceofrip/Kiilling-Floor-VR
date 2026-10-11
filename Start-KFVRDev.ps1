@@ -4,6 +4,9 @@ param(
  [ValidatePattern('^KF-[A-Za-z0-9_-]+$')][string]$Map='KF-Offices',
  [switch]$Unattended,
  [switch]$VRProfile,
+ [switch]$GpuRendererTrial,
+ [switch]$RendererTest,
+ [ValidateRange(15,180)][int]$GpuTrialSeconds=180,
  [ValidateRange(60,240)][int]$VRFrameLimit=144,
  [switch]$MeleeTest,
  [switch]$HealTest,
@@ -19,6 +22,8 @@ param(
  [switch]$PhysicalReloads
 )
 $ErrorActionPreference='Stop'
+if($GpuRendererTrial -and (!$VRProfile -or !$Unattended)){throw 'GpuRendererTrial requires VRProfile and Unattended for its bounded standalone launch.'}
+if($RendererTest -and (!$Unattended -or !$VRProfile -or $Map -cne 'KF-Offices')){throw 'RendererTest requires Unattended, VRProfile and Map exactly KF-Offices.'}
 if($ArmTest -and $NativeHands){throw 'Choose NativeHands or the legacy ArmTest, not both.'}
 if($GrenadeTest -and !$Unattended){throw 'GrenadeTest requires explicit Unattended mode.'}
 if($TraderTest -and !$Unattended){throw 'TraderTest requires explicit Unattended mode.'}
@@ -40,6 +45,7 @@ if($NativeHands){$kfStageArgs+='--native-hands'}
 if($LASTEXITCODE -ne 0){throw 'Development package staging failed.'}
 $kfUrl=$Map+'.rom?Game=KFMod.KFGameType?Mutator=KFVRGameplay.KFVRDevMutator?Difficulty=1'
 if($Unattended){$kfUrl+='?KFVRUnattended=1'}
+if($RendererTest){$kfUrl+='?KFVRRendererTest=1'}
 if($MeleeTest){$kfUrl+='?KFVRMeleeTest=1'}
 if($HealTest){$kfUrl+='?KFVRHealTest=1'}
 if($DoorTest){$kfUrl+='?KFVRDoorTest=1'}
@@ -55,7 +61,9 @@ if($PhysicalReloads){$kfUrl+='?KFVRPhysicalReloads=1'}
 $kfSteam=(Get-ItemProperty HKCU:\Software\Valve\Steam).SteamExe
 $kfLaunchArgs=@('-applaunch','1250',$kfUrl,'-windowed')
 if($VRProfile){
- $kfProfileJson=& py -3.12 (Join-Path $PSScriptRoot 'tools\prepare_vr_profile.py') --game $Game --output (Join-Path $PSScriptRoot 'local\play-profile') --max-fps $VRFrameLimit
+ $kfProfileOptions=@()
+ if($RendererTest){$kfProfileOptions=@('--renderer-test')}
+ $kfProfileJson=& py -3.12 (Join-Path $PSScriptRoot 'tools\prepare_vr_profile.py') --game $Game --output (Join-Path $PSScriptRoot 'local\play-profile') --max-fps $VRFrameLimit @kfProfileOptions
  if($LASTEXITCODE -ne 0){throw 'Separate VR configuration could not be prepared.'}
  $kfProfile=$kfProfileJson | ConvertFrom-Json
  # UE2's legacy INI parser retains Steam's closing quote; use unquoted paths.
@@ -66,7 +74,19 @@ if($VRProfile){
 if($VRProfile){
  # Steam's -applaunch re-quotes name=value tokens even with no spaces. The
  # legacy engine then treats the trailing quote as part of the INI filename.
+ if($GpuRendererTrial){
+  $kfGpuLauncher=Join-Path $PSScriptRoot 'build\x86\KFVRD3D9On12Launch.exe'
+  $kfGpuBootstrap=Join-Path $PSScriptRoot 'build\x86\KFVRD3D9On12Bootstrap.dll'
+  if(!(Test-Path -LiteralPath $kfGpuLauncher) -or !(Test-Path -LiteralPath $kfGpuBootstrap)){throw 'Build the x86 On12 launcher and bootstrap first.'}
+  $kfGpuReports=Join-Path $PSScriptRoot ('reports\on12-launch-'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff'))
+  New-Item -ItemType Directory -Path $kfGpuReports | Out-Null
+  $kfGpuReport=Join-Path $kfGpuReports 'startup.json'
+  $kfGpuArgs='--game "{0}" --dll "{1}" --url "{2}" --engine-ini "{3}" --user-ini "{4}" --report "{5}" --seconds {6}' -f ([IO.Path]::GetFullPath($Game).TrimEnd('\')),$kfGpuBootstrap,$kfUrl,$kfProfile.engine_ini,$kfProfile.user_ini,$kfGpuReport,$GpuTrialSeconds
+  Start-Process -FilePath $kfGpuLauncher -ArgumentList $kfGpuArgs -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $kfGpuReports 'output.txt') -RedirectStandardError (Join-Path $kfGpuReports 'errors.txt')
+  Write-Host "Optional GPU renderer trial: up to $GpuTrialSeconds seconds. Startup receipt: $kfGpuReport"
+ }else{
  Start-Process -FilePath $kfExe -ArgumentList ($kfLaunchArgs[2..($kfLaunchArgs.Count-1)] -join ' ') -WorkingDirectory (Split-Path $kfExe) -WindowStyle Hidden
+ }
 }else{
  Start-Process -FilePath $kfSteam -ArgumentList $kfLaunchArgs -WindowStyle Hidden
 }

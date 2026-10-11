@@ -23,7 +23,8 @@ def validate_eye_packet(camera,eye_data,pose_trial,asymmetric_trial):
  summary['camera_packet_valid']=matrices_valid
  return summary
 
-def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False,channel_token=None,input_trial=False,movement_trial=False,turning_trial=False,snap_degrees=30,duration_ms=15000,weapon_trial=False):
+def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False,asymmetric_trial=False,pose_trial=False,channel_token=None,input_trial=False,movement_trial=False,turning_trial=False,snap_degrees=30,duration_ms=15000,weapon_trial=False,suppress_desktop=False):
+ if suppress_desktop and not channel_token:raise ValueError("Desktop suppression requires a bounded bridge session")
  if not 100<=duration_ms<=(180000 if channel_token else 15000):raise ValueError("Invalid native session duration")
  movement_trial=movement_trial or turning_trial or weapon_trial
  if movement_trial and not channel_token:raise ValueError("Movement requires a bounded bridge session")
@@ -40,7 +41,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   controller=controllers[0];level_address=controller['values']['Actor.Level']['address'];viewport=int(controller['values']['PlayerController.Player']['address'],16)
   level=next(r for r in snapshot['observations'] if r['address']==level_address)
   if level['values']['LevelInfo.NetMode']!=0:raise ValueError('Experimental native trace requires NM_Standalone')
-  p=snapshot['properties'];config=struct.pack('<15I',1120,15,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
+  p=snapshot['properties'];config=struct.pack('<15I',1124,16,duration_ms if channel_token else min(duration_ms,12000),240 if channel_token else 180,int(controller['address'],16),controller['index'],viewport,int(level_address,16),level['index'],p['Actor.Level']['offset'],p['PlayerController.Player']['offset'],p['LevelInfo.NetMode']['offset'],int(target_trial),int(camera_trial),(3 if pose_trial else 2 if asymmetric_trial else int(stereo_trial)))
   images={}
   def installed_image(file):
    if file not in images:
@@ -153,7 +154,8 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
     body_offsets[i]=prop['offset']
    if controller['values'].get('PlayerController.ViewTarget')!=controller['values'].get('Controller.Pawn'):raise ValueError('Tracked view must belong to the living local pawn')
   config+=struct.pack('<2I',*body_offsets)
-  assert len(config)==1120
+  config+=struct.pack('<I',int(suppress_desktop))
+  assert len(config)==1124
   request_path=directory/'request.bin';request_path.write_bytes(config)
   source=root/'build/x86/KFVRNativeProbe.dll';dll=directory/'KFVRNativeProbe.dll';dll.write_bytes(source.read_bytes())
   launcher=root/'build/x86/KFVRNativeTrace.exe'
@@ -162,7 +164,7 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
   (directory/'launcher.txt').write_text(result.stdout+result.stderr)
   if result.returncode:raise RuntimeError('Native launcher failed ('+str(result.returncode)+'): '+(result.stdout+result.stderr).strip()+'; evidence: '+str(directory))
   restored=all(observer.read(e['address'],16).hex()==e['expected'] for e in evidence+input_evidence)
-  summary=dict(pid=pid,launcher_exit=result.returncode,entry_bytes_restored=restored,native_trace_modified_game_files=False,development_package_required=weapon_trial,report=str(report_path),module_resident_until_exit=True)
+  summary=dict(pid=pid,launcher_exit=result.returncode,entry_bytes_restored=restored,native_trace_modified_game_files=False,development_package_required=weapon_trial,desktop_suppression_opt_in=suppress_desktop,report=str(report_path),module_resident_until_exit=True)
   if report_path.exists():
    report=json.loads(report_path.read_text());summary.update(frames=len(report['frames']),hooks_disabled=report['hooks_disabled'],render_counts=sorted(set(f['renders'] for f in report['frames'])),engine_ticks_observed_inside_draw=any(f['ticks_before']!=f['ticks_after'] for f in report['frames']))
   if report_path.exists():
@@ -221,14 +223,27 @@ def trace(pid,game,root,target_trial=False,camera_trial=False,stereo_trial=False
    body_valid=body.get('source')=='pawn_location_plus_eye_height_controller_yaw' and len(body_rows)>=10 and all(all(math.isfinite(v) for v in r['origin']+r['pawn']+[r['eye_height']]) and math.dist(r['origin'],[r['pawn'][0],r['pawn'][1],r['pawn'][2]+r['eye_height']])<.001 for r in body_rows)
    bridge_passed=bridge_passed and body_valid
    summary.update(bridge_trial_passed=bridge_passed,bridge=bridge,body_anchor_passed=body_valid,body_anchor_samples=len(body_rows))
+  render_views_passed=True
+  views_path=directory/'native-render-views.json'
+  if channel_token:
+   view_report=json.loads(views_path.read_text()) if views_path.exists() else {}
+   views={v.get('name'):v for v in view_report.get('views',[])}
+   render_views_passed=set(views)=={'outside_world','desktop','left','right'} and view_report.get('draws',0)>0 and view_report.get('draws_with_engine_tick')==0 and view_report.get('unsafe_aborts')==0 and view_report.get('unsafe_state_latched') is False
+   if render_views_passed:
+    render_views_passed=views['left'].get('outer_views')==views['right'].get('outer_views')==bridge.get('rendered_pairs') and views['desktop'].get('outer_views',0)+view_report.get('desktop_world_skipped',0)==view_report.get('root_world_callbacks') and all(v.get('script_overflow')==0 for v in views.values())
+   if suppress_desktop:
+    render_views_passed=render_views_passed and bridge.get('desktop_suppression_opt_in') is True and bridge.get('desktop_replacements',0)>0 and bridge.get('desktop_replacements')==view_report.get('desktop_world_skipped')==bridge.get('mirrored_replacements') and bridge.get('mirror_copies',0)>bridge.get('desktop_replacements',0) and bridge.get('mirror_failures')==0 and bridge.get('mirror_state_failures')==0 and bridge.get('restored_render_failures')==0 and bridge.get('unsafe_render_failures')==0
+   else:
+    render_views_passed=render_views_passed and view_report.get('desktop_world_skipped')==0 and bridge.get('mirror_attempts')==0
+   summary.update(render_view_counters_passed=render_views_passed,render_views=view_report)
   weapon_passed=True
   if weapon_trial:
    weapon_path=directory/'native-weapon.json';weapon=json.loads(weapon_path.read_text()) if weapon_path.exists() else {};weapon_passed=weapon.get('valid',0)>10 and weapon.get('failed',1)==0
    summary.update(weapon_pose_delivery_passed=weapon_passed,weapon_valid_packets=weapon.get('valid',0))
   (directory/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
-  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed or not input_passed or not movement_passed or not turning_passed or not weapon_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
+  if result.returncode or not restored or not target_passed or not camera_passed or not stereo_passed or not bridge_passed or not input_passed or not movement_passed or not turning_passed or not weapon_passed or not render_views_passed:raise RuntimeError('Native trace or restoration failed; inspect saved reports')
   return summary
  finally:observer.close()
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');p.add_argument('--asymmetric-trial',action='store_true');p.add_argument('--pose-trial',action='store_true');p.add_argument('--channel-token');p.add_argument('--input-trial',action='store_true');p.add_argument('--movement-trial',action='store_true');p.add_argument('--turning-trial',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],bool(a.channel_token) or a.target_trial or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,bool(a.channel_token) or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.asymmetric_trial or a.pose_trial,a.pose_trial,a.channel_token,a.input_trial,a.movement_trial,a.turning_trial)
+ p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--target-trial',action='store_true');p.add_argument('--camera-trial',action='store_true');p.add_argument('--stereo-trial',action='store_true');p.add_argument('--asymmetric-trial',action='store_true');p.add_argument('--pose-trial',action='store_true');p.add_argument('--channel-token');p.add_argument('--input-trial',action='store_true');p.add_argument('--movement-trial',action='store_true');p.add_argument('--turning-trial',action='store_true');p.add_argument('--suppress-desktop',action='store_true');a=p.parse_args();trace(a.pid,a.game,pathlib.Path(__file__).resolve().parents[1],bool(a.channel_token) or a.target_trial or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,bool(a.channel_token) or a.camera_trial or a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.stereo_trial or a.asymmetric_trial or a.pose_trial,a.asymmetric_trial or a.pose_trial,a.pose_trial,a.channel_token,a.input_trial,a.movement_trial,a.turning_trial,suppress_desktop=a.suppress_desktop)
 

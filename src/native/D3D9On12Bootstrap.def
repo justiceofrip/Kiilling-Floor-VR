@@ -1,0 +1,3 @@
+LIBRARY KFVRD3D9On12Bootstrap
+EXPORTS
+ KfvrInitializeD3D9On12=_KfvrInitializeD3D9On12@4

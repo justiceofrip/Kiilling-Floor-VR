@@ -83,8 +83,9 @@ void Bitmap(const std::filesystem::path& path,const std::vector<unsigned>& pixel
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,leftPistolReload=false,rifleReload=false,reloadUx=false,reloadGuide=false,reloadInterrupt=false,reloadAlignment=false,reloadInsertion=false,reloadClock=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false;unsigned width=640,height=480;ReloadFixture reloadFixture;std::wstring reloadSelector;
- for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--reload-guide")reloadGuide=reloadUx=reload=weapon=movement=true;else if(arg==L"--reload-ux")reloadUx=reload=weapon=movement=true;else if(arg==L"--rifle-reload")rifleReload=reload=weapon=movement=true;else if(arg==L"--rifle-reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i],true);else if(arg==L"--reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i]);else if(arg==L"--reload-clock")reloadClock=reload=weapon=movement=true;else if(arg==L"--reload-insertion")reloadInsertion=reload=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload"||arg==L"--mk23-reload"){Require(reloadSelector.empty()||reloadSelector==arg,"Choose either --deagle-reload or --mk23-reload");reloadSelector=arg;leftPistolReload=reload=weapon=movement=true;}else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(argc>=2,"Usage: KFVRNativeBridgeProbe output-directory [--movement] [--turning] [--width W --height H]");bool movement=false,turning=false,weapon=false,inventory=false,reload=false,leftPistolReload=false,rifleReload=false,reloadUx=false,reloadGuide=false,reloadInterrupt=false,reloadAlignment=false,reloadInsertion=false,reloadClock=false,melee=false,dual=false,dualBelt=false,heal=false,weld=false,arms=false,trader=false,grenade=false,cadence=false,hands=false,hud=false,walkingAim=false,pistolAim=false,pistolAimDrawFirst=false;unsigned width=640,height=480;ReloadFixture reloadFixture;std::wstring reloadSelector;
+ for(int i=2;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--pistol-aim")pistolAim=weapon=movement=true;else if(arg==L"--pistol-aim-draw-first")pistolAimDrawFirst=pistolAim=weapon=movement=true;else if(arg==L"--walking-aim")walkingAim=weapon=movement=true;else if(arg==L"--hud")hud=weapon=movement=true;else if(arg==L"--hands")hands=turning=weapon=movement=true;else if(arg==L"--cadence")cadence=movement=true;else if(arg==L"--grenade")grenade=turning=weapon=movement=true;else if(arg==L"--trader")trader=weapon=movement=true;else if(arg==L"--arms")arms=weapon=movement=true;else if(arg==L"--weld")weld=weapon=movement=true;else if(arg==L"--heal")heal=weapon=movement=true;else if(arg==L"--dual-belt")dualBelt=weapon=movement=true;else if(arg==L"--dual")dual=weapon=movement=true;else if(arg==L"--melee")melee=turning=weapon=movement=true;else if(arg==L"--reload-guide")reloadGuide=reloadUx=reload=weapon=movement=true;else if(arg==L"--reload-ux")reloadUx=reload=weapon=movement=true;else if(arg==L"--rifle-reload")rifleReload=reload=weapon=movement=true;else if(arg==L"--rifle-reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i],true);else if(arg==L"--reload-fixture"&&i+1<argc)reloadFixture=ReadReloadFixture(argv[++i]);else if(arg==L"--reload-clock")reloadClock=reload=weapon=movement=true;else if(arg==L"--reload-insertion")reloadInsertion=reload=weapon=movement=true;else if(arg==L"--reload-alignment")reloadAlignment=reload=weapon=movement=true;else if(arg==L"--reload-interrupt")reloadInterrupt=reload=weapon=movement=true;else if(arg==L"--deagle-reload"||arg==L"--mk23-reload"){Require(reloadSelector.empty()||reloadSelector==arg,"Choose either --deagle-reload or --mk23-reload");reloadSelector=arg;leftPistolReload=reload=weapon=movement=true;}else if(arg==L"--reload")reload=weapon=movement=true;else if(arg==L"--inventory")inventory=weapon=movement=true;else if(arg==L"--weapon")weapon=movement=true;else if(arg==L"--movement")movement=true;else if(arg==L"--turning")turning=movement=true;else if(arg==L"--width"&&i+1<argc)width=std::stoul(argv[++i]);else if(arg==L"--height"&&i+1<argc)height=std::stoul(argv[++i]);else throw std::runtime_error("Unknown receiver option");}
+ Require(!pistolAim||!(walkingAim||inventory||reload||melee||dual||dualBelt||heal||weld||arms||trader||grenade||cadence||hands||hud||turning),"Pistol aim uses a separate stationary protocol");
  Require(unsigned(reloadInterrupt)+unsigned(reloadAlignment)+unsigned(reloadInsertion)+unsigned(reloadClock)<=1,"Choose one reload diagnostic variant per trial");
  reloadInsertion=reloadInsertion||reloadClock;
  Require(!reloadGuide||(!reloadInterrupt&&!reloadAlignment&&!reloadInsertion),"Guide trial uses its own extended UX protocol");
@@ -103,7 +104,7 @@ int wmain(int argc,wchar_t** argv){try{
  ipc::FrameChannel channel;Require(channel.CreateHost(),"Create native receiving channel");std::wcout<<channel.Token()<<std::endl;
  graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};unsigned hapticEvents=0,hapticPulses=0;unsigned pairs=0,timeouts=0,minColors=UINT_MAX,minDifferences=UINT_MAX;std::uint64_t lastFrame=0;std::vector<double> latencies;
  const auto start=GetTickCount64();ULONGLONG firstPair=0;unsigned capturePhase=0;ULONGLONG capturePhaseStart=0;std::array<bool,96> captured{};std::array<unsigned,96> phasePairs{};std::ofstream controls;if(movement)controls.open(folder/L"controls.jsonl");LARGE_INTEGER frequency,sourceStart;QueryPerformanceFrequency(&frequency);QueryPerformanceCounter(&sourceStart);
- const unsigned trialMs=walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reloadGuide?104000:reloadUx?62000:reloadAlignment?37000:rifleReload?83000:reload?62000:inventory?54700:7500;
+ const unsigned trialMs=pistolAim?15000:walkingAim?22500:hud?27000:hands?36000:cadence?20000:grenade?80000:trader?128000:arms?28000:weld?37000:heal?28000:dualBelt?62000:dual?49000:melee?22000:reloadGuide?104000:reloadUx?62000:reloadAlignment?37000:rifleReload?83000:reload?62000:inventory?54700:7500;
  for(std::uint64_t attempt=1;(movement?(!firstPair||GetTickCount64()-firstPair<trialMs):pairs<12)&&GetTickCount64()-start<(trader?175000:grenade?150000:reloadGuide?145000:rifleReload?120000:reload||dual||dualBelt||heal||weld||arms||hands||hud?90000:inventory?90000:35000);++attempt){
   const auto feedback=channel.ReceiveHaptics();if(feedback[0].milliseconds||feedback[1].milliseconds)++hapticEvents;for(const auto& pulse:feedback)if(pulse.milliseconds)++hapticPulses;
   const auto now=GetTickCount64();
@@ -154,6 +155,10 @@ int wmain(int argc,wchar_t** argv){try{
    if(hud)phase=std::min(17u,unsigned(elapsed/1500));
    if(cadence)phase=0;
    if(walkingAim)phase=std::min(14u,unsigned(elapsed/1500));
+   if(pistolAim){
+    constexpr unsigned aimEnds[]={500,1000,1500,3000,5100,6000,6500,7000,8500,10600,12000,15000};
+    phase=0;while(phase<11&&elapsed>=aimEnds[phase])++phase;
+   }
    xr::ControllerFrame input{};input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;input.focused=phase!=4;input.hands[0].gripValid=input.hands[1].gripValid=true;
    if(phase==1||phase==4||phase==5||phase==9)input.hands[0].stickY=.4f;
    if(phase==3)input.hands[0].stickX=.4f;
@@ -589,12 +594,22 @@ int wmain(int argc,wchar_t** argv){try{
      if(phase==6||phase==13)input.hands[0].stickX=-.4f;
      for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
     }
+    if(pistolAim){
+     // Draw the 9mm only when the read-only startup selection requires it.
+     // Six 120 ms trigger pulses at 350 ms intervals preserve stock
+     // semi-auto cadence while exercising its recent-shot spread history.
+     input={};input.focused=phase!=11;input.spaceGeneration=0x200000001ULL;input.predictedNs=sampleNs;
+     for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripValid=hand.aimValid=true;hand.gripPose.position={h?.2f:-.2f,-.25f,-.5f};hand.thumbTouchActive=hand.triggerTouchActive=true;}
+     if(phase==6||phase==7){right.gripPose.position={-.22f,-.62f,.05f};right.squeeze=phase==7?1.f:0.f;}
+     if(phase==4||phase==9){const auto burstMs=elapsed-(phase==4?3000:8500);right.trigger=burstMs%350<120?1.f:0.f;}
+     for(auto& hand:input.hands)hand.aimPose=hand.gripPose;
+    }
     if(!hands)right.aimPose=right.gripPose;
     if(capturePhase!=phase||!capturePhaseStart){capturePhase=phase;capturePhaseStart=now;}
    }
    const auto sent=phase==8&&!weapon?ipc::ChannelResult::Timeout:channel.SendInput(input);
-   const auto left=input.hands[0].gripPose.position;
-   controls<<"{\"uptime_ms\":"<<now<<",\"phase\":"<<phase<<",\"sent\":"<<(sent==ipc::ChannelResult::Ok?"true":"false")<<",\"predicted_ns\":"<<input.predictedNs<<",\"source_ns\":"<<sampleNs<<",\"space_generation\":"<<input.spaceGeneration<<",\"left_grip_position\":["<<left.x<<','<<left.y<<','<<left.z<<"],\"focused\":"<<(input.focused?"true":"false")<<",\"left_grip_valid\":"<<(input.hands[0].gripValid?"true":"false")<<",\"right_grip_valid\":"<<(input.hands[1].gripValid?"true":"false")<<",\"left_squeeze\":"<<input.hands[0].squeeze<<",\"right_squeeze\":"<<input.hands[1].squeeze<<",\"left_trigger\":"<<input.hands[0].trigger<<",\"left_secondary\":"<<(input.hands[0].secondary?"true":"false")<<",\"right_secondary\":"<<(input.hands[1].secondary?"true":"false")<<",\"right_trigger\":"<<input.hands[1].trigger<<",\"reload_guide\":"<<(reloadGuide?"true":"false")<<",\"reload_phase_ms\":"<<(reload?elapsed%1000:0)<<"}\n";
+   const auto left=input.hands[0].gripPose.position;const auto rightPosition=input.hands[1].gripPose.position;const auto rightAim=input.hands[1].aimPose.orientation;
+   controls<<"{\"uptime_ms\":"<<now<<",\"phase\":"<<phase<<",\"sent\":"<<(sent==ipc::ChannelResult::Ok?"true":"false")<<",\"predicted_ns\":"<<input.predictedNs<<",\"source_ns\":"<<sampleNs<<",\"space_generation\":"<<input.spaceGeneration<<",\"left_grip_position\":["<<left.x<<','<<left.y<<','<<left.z<<"],\"focused\":"<<(input.focused?"true":"false")<<",\"left_grip_valid\":"<<(input.hands[0].gripValid?"true":"false")<<",\"right_grip_valid\":"<<(input.hands[1].gripValid?"true":"false")<<",\"left_squeeze\":"<<input.hands[0].squeeze<<",\"right_squeeze\":"<<input.hands[1].squeeze<<",\"left_trigger\":"<<input.hands[0].trigger<<",\"left_secondary\":"<<(input.hands[0].secondary?"true":"false")<<",\"right_secondary\":"<<(input.hands[1].secondary?"true":"false")<<",\"right_trigger\":"<<input.hands[1].trigger<<",\"pistol_aim\":"<<(pistolAim?"true":"false")<<",\"pistol_aim_draw_first\":"<<(pistolAimDrawFirst?"true":"false")<<",\"right_grip_position\":["<<rightPosition.x<<','<<rightPosition.y<<','<<rightPosition.z<<"],\"right_aim_orientation\":["<<rightAim.x<<','<<rightAim.y<<','<<rightAim.z<<','<<rightAim.w<<"],\"reload_guide\":"<<(reloadGuide?"true":"false")<<",\"reload_phase_ms\":"<<(reload?elapsed%1000:0)<<"}\n";
   }
   runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=0x200000001ULL;tracking.predictedNs=sampleNs;tracking.focused=tracking.headValid=true;
   if(reloadInsertion&&!reloadClock&&capturePhase>=19&&capturePhase<=50)tracking.spaceGeneration++;
@@ -603,7 +618,7 @@ int wmain(int argc,wchar_t** argv){try{
   if(arms&&capturePhase==6)tracking.head.orientation={-.537300f,0,0,.843391f};
   if(arms&&capturePhase==4)tracking.head.orientation={.382683f,0,0,.923880f};
   if(heal&&(capturePhase==4||capturePhase==10))tracking.head.orientation={-.537300f,0,0,.843391f};
-  if(weapon&&!walkingAim&&!melee&&!dual&&!dualBelt&&!heal&&!weld&&!arms&&!trader&&!grenade&&!hands&&!hud&&capturePhase==(inventory?6u:4u))tracking.head.orientation={-.537300f,0,0,.843391f};
+  if(weapon&&!pistolAim&&!walkingAim&&!melee&&!dual&&!dualBelt&&!heal&&!weld&&!arms&&!trader&&!grenade&&!hands&&!hud&&capturePhase==(inventory?6u:4u))tracking.head.orientation={-.537300f,0,0,.843391f};
   if(hud)tracking.head.orientation={-.17364818f,0,0,.98480775f};
   if(hands){tracking.head.orientation={-.17364818f,0,0,.98480775f};
    if(capturePhase==10){tracking.head.position={.1f,.2f,.05f};tracking.head.orientation={-.2391176f,.3696438f,.0990458f,.8923991f};}
@@ -628,15 +643,27 @@ int wmain(int argc,wchar_t** argv){try{
   Require(minColors>64&&minDifferences>1024,"Missing native geometry or differing eye views");
   if(pairs==0||(!movement&&pairs==11)){Bitmap(folder/(pairs?L"last-left.bmp":L"first-left.bmp"),left,req.width,req.height);Bitmap(folder/(pairs?L"last-right.bmp":L"first-right.bmp"),right,req.width,req.height);}
   }
-  if(weapon&&!captured[capturePhase]&&firstPair&&now-capturePhaseStart>(hud?400u:150u)){
+  if(weapon&&(!pistolAim||capturePhase==3||capturePhase==8)&&!captured[capturePhase]&&firstPair&&now-capturePhaseStart>(hud?400u:150u)){
    const auto left=Pixels(context.Get(),output.Get(),staging.Get(),0,req.width,req.height);
    Bitmap(folder/(L"weapon-phase-"+std::to_wstring(capturePhase)+L".bmp"),left,req.width,req.height);captured[capturePhase]=true;
   }
   ++phasePairs[capturePhase];++pairs;if(!firstPair)firstPair=GetTickCount64();if(!cadence)Sleep(2);
  }
+ // Freeze throughput before diagnostic readback. The final pair is captured
+ // after suppression has armed, rather than validating only its startup pair.
+ const auto sampleEnd=GetTickCount64();
  // Leave time for producer to observe the final consumed acknowledgement.
- Sleep(40);channel.Close();double sum=0,max=0;for(double v:latencies){sum+=v;max=std::max(max,v);}
- std::ofstream report(folder/L"receiver.json");report<<"{\"pairs\":"<<pairs<<",\"trial_elapsed_ms\":"<<(firstPair?GetTickCount64()-firstPair:0)<<",\"timeouts_or_busy\":"<<timeouts<<",\"minimum_eye_colors\":"<<minColors<<",\"minimum_differing_eye_pixels\":"<<minDifferences<<",\"width\":"<<req.width<<",\"height\":"<<req.height<<",\"request_to_copy_average_ms\":"<<(pairs?sum/pairs:0)<<",\"request_to_copy_max_ms\":"<<max<<",\"pixel_checked_pairs\":"<<(movement?(pairs?1:0):pairs)<<",\"haptic_events\":"<<hapticEvents<<",\"haptic_pulses\":"<<hapticPulses<<",\"synthetic_tracking\":true,\"headset_presented\":false}\n";report.close();
+ Sleep(40);channel.Close();
+ bool lastPixelChecked=false;
+ if(cadence&&pairs){
+  const auto left=Pixels(context.Get(),output.Get(),staging.Get(),0,req.width,req.height),right=Pixels(context.Get(),output.Get(),staging.Get(),1,req.width,req.height);
+  for(const auto* pixels:{&left,&right}){std::set<unsigned> colors(pixels->begin(),pixels->end());minColors=std::min(minColors,unsigned(colors.size()));}
+  unsigned different=0;for(std::size_t i=0;i<left.size();++i)different+=left[i]!=right[i];minDifferences=std::min(minDifferences,different);
+  Require(minColors>64&&minDifferences>1024,"Final native pair lost geometry or eye separation");
+  Bitmap(folder/L"last-left.bmp",left,req.width,req.height);Bitmap(folder/L"last-right.bmp",right,req.width,req.height);lastPixelChecked=true;
+ }
+ double sum=0,max=0;for(double v:latencies){sum+=v;max=std::max(max,v);}
+ std::ofstream report(folder/L"receiver.json");report<<"{\"diagnostic_mode\":\""<<(cadence?"cadence":pistolAim?"pistol_aim":!movement?"stereo_pixels":"other_gameplay")<<"\",\"requested_duration_ms\":"<<(movement?trialMs:0)<<",\"pairs\":"<<pairs<<",\"trial_elapsed_ms\":"<<(firstPair?sampleEnd-firstPair:0)<<",\"timeouts_or_busy\":"<<timeouts<<",\"minimum_eye_colors\":"<<minColors<<",\"minimum_differing_eye_pixels\":"<<minDifferences<<",\"width\":"<<req.width<<",\"height\":"<<req.height<<",\"request_to_copy_average_ms\":"<<(pairs?sum/pairs:0)<<",\"request_to_copy_max_ms\":"<<max<<",\"pixel_checked_pairs\":"<<(movement?(pairs?1u+unsigned(lastPixelChecked):0u):pairs)<<",\"last_pixel_checked\":"<<(lastPixelChecked?"true":"false")<<",\"last_frame_id\":"<<lastFrame<<",\"haptic_events\":"<<hapticEvents<<",\"haptic_pulses\":"<<hapticPulses<<",\"synthetic_tracking\":true,\"headset_presented\":false}\n";report.close();
  if(hands){std::ofstream phaseReport(folder/L"hand-eye-pairs.json");phaseReport<<'[';for(unsigned i=0;i<18;++i){if(i)phaseReport<<',';phaseReport<<phasePairs[i];}phaseReport<<"]\n";}
  Require(movement?(pairs>=12&&firstPair&&GetTickCount64()-firstPair>=trialMs):pairs==12,"Incomplete bounded native stereo trial");std::cout<<"Received "<<pairs<<" live KF stereo pairs across x86 to x64\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

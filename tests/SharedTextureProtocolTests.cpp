@@ -9,5 +9,18 @@ int main(){
     t.sequence=0x7fffffffffffffffULL;CHECK(Valid(t,d));
     for(const auto format:{29u,91u}){auto srgb=d;srgb.format=format;CHECK(Valid(srgb));}
     CHECK(CopyCompatibleFormats(27,29));CHECK(CopyCompatibleFormats(28,29));CHECK(CopyCompatibleFormats(90,91));CHECK(!CopyCompatibleFormats(29,91));CHECK(!CopyCompatibleFormats(27,27+3));CHECK(!CopyCompatibleFormats(0,0));
+    const auto select=[](std::initializer_list<std::int64_t> advertised){
+        return SelectSwapchainFormat(std::span<const std::int64_t>(advertised.begin(),advertised.size()));
+    };
+    CHECK(select({})==0);
+    CHECK(select({0,-1,10,27,90,0x10000005bLL})==0); // Unknown and typeless are not swapchain choices.
+    CHECK(select({29})==29);CHECK(select({28})==28); // RGBA-only runtimes remain supported.
+    CHECK(select({91})==91);CHECK(select({87})==87);
+    CHECK(select({87,29})==29);CHECK(select({29,87})==29); // Do not trade sRGB for native byte order.
+    CHECK(select({28,91})==91);CHECK(select({91,28})==91);
+    CHECK(select({28,87})==28);CHECK(select({87,28})==28);
+    CHECK(select({29,91})==29);CHECK(select({91,29})==29);
+    CHECK(select({28,29,87,91})==29);CHECK(select({91,87,29,28})==29);
+    CHECK(select({-91,0x10000005bLL,29,29,27})==29); // Exact advertised values, including fallback.
     return 0;
 }

@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <type_traits>
 
 namespace kfvr::graphics {
@@ -39,6 +40,14 @@ static_assert(std::is_trivially_copyable_v<TextureDescriptor> && std::is_trivial
 inline bool CopyCompatibleFormats(std::uint32_t a,std::uint32_t b) noexcept {
     const auto group=[](std::uint32_t f){return (f==27||f==28||f==29)?1:(f==90||f==87||f==91)?2:0;};
     return group(a)!=0 && group(a)==group(b);
+}
+// OpenXR advertises signed 64-bit DXGI values. Select only an exact advertised
+// typed format; never truncate an unknown value into a supported enum. Preserve
+// sRGB interpretation and the established RGBA-first fallback order.
+inline constexpr std::uint32_t SelectSwapchainFormat(std::span<const std::int64_t> advertised) noexcept {
+    for(const auto preferred:std::array<std::uint32_t,4>{29,91,28,87})
+        for(const auto format:advertised)if(format==std::int64_t(preferred))return preferred;
+    return 0;
 }
 inline bool Valid(const TextureDescriptor& d) noexcept {
     bool any=false;for(auto b:d.session)any|=b!=0;

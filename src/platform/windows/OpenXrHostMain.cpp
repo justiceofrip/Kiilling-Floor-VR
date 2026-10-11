@@ -9,6 +9,9 @@
 #include <string>
 namespace {
 std::string Json(const std::string& input){std::string out="\"";const char* hex="0123456789abcdef";for(unsigned char c:input){if(c=='"'||c=='\\'){out+='\\';out+=char(c);}else if(c<32){out+="\\u00";out+=hex[c>>4];out+=hex[c&15];}else out+=char(c);}return out+'"';}
+std::string FormatsJson(const std::vector<std::int64_t>& formats){
+    std::string out="[";for(std::size_t i=0;i<formats.size();++i){if(i)out+=',';out+=std::to_string(formats[i]);}return out+']';
+}
 }
 int wmain(int argc,wchar_t** argv){
     try {
@@ -32,6 +35,8 @@ int wmain(int argc,wchar_t** argv){
             <<",\n  \"instance_created\":"<<report.instanceCreated<<",\n  \"system_available\":"<<report.systemAvailable<<",\n  \"session_created\":"<<report.sessionCreated
             <<",\n  \"adapter_luid_low\":"<<report.requirements.adapterLow<<",\n  \"adapter_luid_high\":"<<report.requirements.adapterHigh
             <<",\n  \"minimum_feature_level\":"<<report.minimumFeatureLevel<<",\n  \"eye_width\":"<<report.requirements.width<<",\n  \"eye_height\":"<<report.requirements.height
+            <<",\n  \"swapchain_formats_enumerated\":"<<report.swapchainFormatsEnumerated
+            <<",\n  \"advertised_swapchain_formats\":"<<FormatsJson(report.advertisedSwapchainFormats)
             <<",\n  \"format\":"<<report.requirements.format<<",\n  \"waited_frames\":"<<report.waitedFrames<<",\n  \"ended_frames\":"<<report.endedFrames
             <<",\n  \"valid_tracking_frames\":"<<report.validTrackingFrames<<",\n  \"submitted_pairs\":"<<report.submittedPairs<<",\n  \"rejected_pairs\":"<<report.rejectedPairs<<",\n  \"reprojected_frames\":"<<report.reprojectedFrames<<",\n  \"empty_frames\":"<<report.emptyFrames<<",\n  \"max_empty_between_fresh\":"<<report.maxEmptyBetweenFresh
             <<",\n  \"suggested_controller_profiles\":"<<report.suggestedControllerProfiles<<",\n  \"valid_controller_samples\":"<<report.validControllerSamples<<",\n  \"focused_frames\":"<<report.focusedFrames

@@ -1,10 +1,10 @@
-# Developer handoff — October 9, 2026
+# Developer handoff — updated October 11, 2026
 
-This is a public source checkpoint of an unfinished native VR conversion for original Killing Floor. Forks can continue from the existing implementation; development by the original project owner is currently on hold. The checkpoint preserves the development history and license notices.
+This is a public source checkpoint of an unfinished native VR conversion for original Killing Floor. Forks can continue from the existing implementation. Development resumed on October 11; the original October 9 tagged handoff remains unchanged. The checkpoint preserves the development history and license notices.
 
-## Exact checkpoint
+## Historical source checkpoint
 
-- `88f99da`: magnetic magazine guidance, rifle pull removal and fixed slide-hand pose; last gameplay change.
+- `88f99da`: magnetic magazine guidance, rifle pull removal and fixed slide-hand pose; last gameplay change in the original handoff.
 - `2b413d2`: wearer acceptance and the newly reported pistol shot-alignment issue.
 - Tag `v0.1.0-prealpha-handoff.1`: those changes plus the public handoff documentation.
 
@@ -34,9 +34,13 @@ Detailed receipts and failed attempts are summarized in [WORKLOG.md](../WORKLOG.
 
 **Already checked:** pistol/rifle `DoFireEffect` implementations use the rig's controller-driven muzzle and aim; inherited traces consume the supplied direction. Native Idle muzzle-bone +X is essentially model +X. Saved coherent samples show the displayed firearm rotation equals rig aim, and muzzle/palm positions remain attached.
 
-**Missing evidence:** `LastTraceStart` and `LastTraceDirection` persist after a shot. Comparing them with a later hand pose confounds movement and recoil. There is no immutable shot-time pose/serial in the current recording. These checks do not disprove the wearer report.
+**October 11 diagnosis:** immutable firing-call measurements reproduced extra hip-fire dispersion while the controllers stayed fixed. Six-shot bursts reached 4.989 degrees of 9mm deviation and 3.359 degrees of Deagle deviation. The installed `KFFire.GetSpread` increases recent-shot spread; physical controller aiming does not activate the stock desktop ADS flag.
 
-**Next measurement:** inside the firing call, record weapon identity, input/presentation serial, actual muzzle/tip frame, pre-spread aim, post-spread direction and actual trace endpoint. Compare stationary and moving shots with the visible sight line. Preserve normal stock damage, cadence and perk-modified spread. Do not hide the problem with an arbitrary grip rotation; comfort calibration is a separate task.
+**Implemented:** tracked 9mm, Deagle, MK23 and each dual-9mm hand pass their selected aim directly to the inherited trace. Stock firing cadence, ammunition, damage/perk callbacks and fallback spread state remain inherited. Bullpup/SCAR spread policy is unchanged. The corrected 9mm/Deagle desktop run recorded six shots and six spent rounds each, with zero shot-time aim/direction difference. The 197 installed-class compatibility checks pass.
+
+**Evidence boundary:** `KFVRWeaponRig.RecordShot` captures weapon, input/presentation identities, muzzle position, intended/final direction, stock/applied spread and game time. An odd/even publication sequence protects external reads. These are the actual arguments passed to the inherited trace, not an independent measurement of visible sights or the damage impact point. The observer never substitutes a later hand pose for the shot-time aim.
+
+**Next wearer check:** confirm pistol impacts against physical sights, including quick shots and moving hands. Pistol comfort calibration and two-handed support remain separate work; no speculative grip rotation has been applied. See [TESTING.md](../TESTING.md) and [WORKLOG.md](../WORKLOG.md) for diagnostic commands, additional weapon coverage and retained failures.
 
 ## Code map
 
@@ -44,7 +48,8 @@ Detailed receipts and failed attempts are summarized in [WORKLOG.md](../WORKLOG.
 | --- | --- |
 | Native game admission and trace launcher | `tools/native_profile.py`, `tools/observe_kf.py`, `tools/trace_kf.py`, `src/native/NativeProbe.cpp` |
 | Native stereo, camera and input | `src/native/NativeEyeBridge.cpp`, `NativeCameraTrial.cpp`, `NativeWeaponRig.cpp`; `src/engine/Ue2Camera.cpp` |
-| Image transfer and host | `src/graphics/d3d9/D3D9CpuPair.cpp`, `src/graphics/d3d11/`, `src/ipc/`, `src/xr/OpenXrHost.cpp` |
+| Image transfer and host | `src/graphics/d3d9/D3D9CpuPair.cpp`, `D3D9GpuPair.cpp`; `src/graphics/d3d11/`, `src/ipc/`, `src/xr/OpenXrHost.cpp` |
+| Optional GPU startup | `src/platform/windows/D3D9On12Launch.cpp`, `src/native/D3D9On12Bootstrap.cpp`, `Start-KFVRDev.ps1` |
 | Script rig and native hand/weapon presentation | `unrealscript/KFVRGameplay/Classes/KFVRWeaponRig.uc`, `KFVRWeaponVisual.uc`, `KFVRHandVisual.uc`, `KFVRWeaponProfile.uc` |
 | Live single-gun reload authority | `KFVRManualReload.uc`, `KFVRMagazineState.uc`, `KFVRMagazineGuide.uc`, `KFVRMagazinePull.uc`, `KFVRActionRail.uc` |
 | Actual shots | `KFVRSingleFire.uc`, `KFVRDeagleFire.uc`, `KFVRMK23Fire.uc`, `KFVRBullpupFire.uc`, `KFVRSCARFire.uc`; stock-derived tracked weapon classes |
@@ -56,7 +61,9 @@ Unqualified `.uc` entries in the table are in `unrealscript/KFVRGameplay/Classes
 
 ## Next useful contributions
 
-1. Resolve pistol shot alignment, then implement a stable two-handed pistol support grip.
+**Current priority: renderer.** The optional GPU path removes per-frame CPU eye transfer; the mirror skips the extra desktop world when a complete pair is available. Desktop evidence is recorded in [WORKLOG.md](../WORKLOG.md). Next renderer work is headset pacing/latency, broader scenes/effects and lifecycle handling. A single traversal with draw replay remains unimplemented and must preserve view-dependent culling and animation behavior.
+
+1. Confirm the pistol spread correction in the headset, investigate any remaining sight/impact mismatch, then implement a stable two-handed pistol support grip.
 2. Expand native weapon coverage with profile-specific contact and mechanism measurements. Bullpup has no invented charging handle; SCAR's modeled handle/side-slap interaction is deferred.
 3. Implement the chamber/hinge foundation in [DEMOLITIONS_RELOAD_PLAN.md](DEMOLITIONS_RELOAD_PLAN.md): individual M32 rounds and side-flick closure, plus M79/BoomStick flip closure. Closing must not refill or reset chamber identity.
 4. Improve melee against real Zeds, walls and perk conditions; current knife fixtures are narrower than that acceptance scope.

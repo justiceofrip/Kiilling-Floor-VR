@@ -28,10 +28,14 @@ function DoFireEffect()
     local rotator Aim;
     R=Rig();
     if (R == None || !R.ActiveFor(Weapon)) { Super.DoFireEffect(); return; }
-    Aim=rotator(vector(R.AimRotation) + VRand()*FRand()*Spread);
+    // Physical pistol sights own the tracked ray. Keep the inherited fire
+    // cadence, perk/damage handling and bloom state for stock fallback, but
+    // do not add desktop hip-fire dispersion to the controller's aim.
+    Aim=R.AimRotation;
     R.TraceCount++; R.PulseRight(0.45,35);
     R.LastTraceStart=R.MuzzleLocation;
     R.LastTraceDirection=vector(Aim);
+    R.RecordShot(Weapon,ThisModeNum,R.MuzzleLocation,R.AimRotation,Aim,Spread,0.0);
     DoTrace(R.MuzzleLocation, Aim);
 }
 function rotator AdjustAim(vector Start, float InAimError)

@@ -4,9 +4,11 @@ An experimental native OpenXR VR mod for **original Killing Floor 1** on Windows
 
 **Start here: [developer handoff](docs/HANDOFF.md) · [build from source](BUILDING.md) · [launch and controls](docs/PRE_ALPHA_TEST.md) · [checkpoint notes](docs/PRE_ALPHA_RELEASE.md).**
 
-The current gameplay checkpoint is `88f99da`, with October 1 wearer feedback recorded in `2b413d2`. The October 9 handoff updates documentation without changing that gameplay. This is a standalone development prototype, with explicitly launched sessions of up to three minutes. It requires your own game and SDK installation. There is no ready-to-install runtime bundle attached to this checkpoint.
+Development resumed on October 11 after the October 9 source handoff. The historical `v0.1.0-prealpha-handoff.1` tag remains available; current source includes subsequent fixes. This is a standalone development prototype, with explicitly launched sessions of up to three minutes. It requires your own game and SDK installation. There is no ready-to-install runtime bundle attached to this checkpoint.
 
-**Maintenance status: on hold for the original developer.** The source is available for anyone interested in continuing the project.
+**Maintenance status: active development resumed.** Forks and contributions remain welcome. This is still an unfinished pre-alpha.
+
+**October 11 renderer checkpoint:** optional GPU-only eye transfer and a desktop eye mirror improved matched-view desktop throughput from **41.55 to 91.45 stereo pairs/second** at **2500x2676 per eye** (about **2.2x**, one run per mode). Two native eye renders remain; headset pacing is unverified. See [measurements and limits](WORKLOG.md#gpu-renderer-checkpoint-2026-10-11) and [experimental launch instructions](docs/PRE_ALPHA_TEST.md#experimental-gpu-renderer).
 
 ## What works
 
@@ -21,10 +23,10 @@ The October 1 wearer test accepted magnetic insertion, Bullpup pull-out and the 
 
 ## Known issues and unfinished work
 
-**Pistol shot alignment is unresolved:** the wearer reported bullets landing away from where the pistol points; Bullpup aim was reported correct. The saved observations do not establish the cause. Pistol grip-orientation comfort is a separate polish item. See the [next diagnostic step](docs/HANDOFF.md#first-gameplay-issue-pistol-shot-alignment).
+**Pistol hip-fire spread corrected; headset confirmation pending.** Stationary desktop bursts reproduced almost 5 degrees of extra 9mm dispersion. Tracked pistols now use their physical aim directly; the corrected 9mm/Deagle trial recorded zero difference between shot-time aim and firing direction. Sight geometry and pistol grip comfort still need wearer confirmation. See the [measurement and remaining limits](docs/HANDOFF.md#first-gameplay-issue-pistol-shot-alignment).
 
 - Standalone only. Multiplayer and a flatscreen gesture visualizer are not implemented.
-- CPU image transfer limits fresh stereo frame delivery. Runtime-recommended eye resolution does not mean headset-rate rendering.
+- Ordinary launches retain CPU image transfer. An optional D3D9On12 GPU transport and desktop eye mirror now pass private game trials; headset acceptance is pending. Two native eye world renders remain. See [renderer trials](docs/PRE_ALPHA_TEST.md#experimental-gpu-renderer).
 - Incomplete weapons, menus, scopes, pickup/drop flows, model surfaces and comfort settings. Some flat-game effects, such as intentionally flickering lights and ceiling rays, need VR presentation work.
 - Full-body IK, two-handed pistol support and shotgun/launcher flip reloads are still planned work.
 - Native-hand conversion is opt-in. Launching without `-NativeHands` uses authored placeholder gloves.

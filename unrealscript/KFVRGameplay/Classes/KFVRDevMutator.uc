@@ -1,21 +1,78 @@
 // Standalone-only development entry point. No player config or original package edits.
 class KFVRDevMutator extends Mutator;
 var KFVRWeaponRig Rig;
-var bool bUnattended,bDualTest,bMK23Test,bSCARTest;
+var bool bUnattended,bDualTest,bMK23Test,bSCARTest,bRendererTest;
 var Pawn TestPawn;
+var Pawn RendererPawn;
 var KFVRDoorTest DoorTest;
 var KFVRTraderTest TraderTest;
 var KFVRReloadTimeTest ReloadTimeTest;
 var KFVRMeleeTarget GrenadeTarget;
+static function string LocalURLOption(string LocalURL, string Key)
+{
+    local int Query;
+    // GameInfo.ParseOption accepts an options suffix beginning with '?'.
+    Query=InStr(LocalURL,"?");
+    if (Query<0) return "";
+    return class'GameInfo'.static.ParseOption(Mid(LocalURL,Query),Key);
+}
+static function string LocalURLMap(string LocalURL)
+{
+    local int Query;
+    // Actor.GetURLMap can still report Entry during this level's startup.
+    // The map and options must come from the same Level.GetLocalURL value.
+    Query=InStr(LocalURL,"?");
+    if (Query>=0) LocalURL=Left(LocalURL,Query);
+    return Caps(LocalURL);
+}
+static function bool RendererFixtureAllowed(string LocalURL, bool AllowedNetMode)
+{
+    local string MapName;
+    MapName=LocalURLMap(LocalURL);
+    return AllowedNetMode && LocalURLOption(LocalURL,"KFVRRendererTest")=="1"
+        && LocalURLOption(LocalURL,"KFVRUnattended")=="1"
+        && (MapName=="KF-OFFICES" || MapName=="KF-OFFICES.ROM");
+}
 function PostBeginPlay()
 {
+    local string LocalURL,MapName;
     Super.PostBeginPlay();
     if (Level.NetMode!=NM_Standalone) { Destroy(); return; }
     bUnattended=InStr(Caps(Level.GetLocalURL()),"KFVRUNATTENDED=1")>=0;
     bDualTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRDUALTEST=1")>=0;
     bMK23Test=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRMK23TEST=1")>=0;
     bSCARTest=bUnattended && InStr(Caps(Level.GetLocalURL()),"KFVRSCARTEST=1")>=0;
+    LocalURL=Level.GetLocalURL(); MapName=LocalURLMap(LocalURL);
+    if (LocalURLOption(LocalURL,"KFVRRendererTest")=="1")
+    {
+        bRendererTest=RendererFixtureAllowed(LocalURL,Level.NetMode==NM_Standalone);
+        if (!bRendererTest) Log("KFVR_RENDERER_FIXTURE_REJECTED map=" $ MapName $ " unattended=" $ bUnattended $ " local_url=" $ LocalURL);
+    }
     SetTimer(0.5,True);
+}
+function PlaceRendererPawn(PlayerController PC)
+{
+    // One attempt for each living pawn, separate from inventory setup. A failed
+    // location is logged once; this fixture never pins the player every Timer.
+    if (!bRendererTest || PC==None || PC.Pawn==None || PC.Pawn.Health<=0 || RendererPawn==PC.Pawn) return;
+    RendererPawn=PC.Pawn;
+    // The explicit benchmark launcher supplies a separate mouse-disabled INI.
+    // Verify its effect through the public getter; never mutate private input.
+    if (PC.GetMouseSensitivity()!=0)
+    {
+        Log("KFVR_RENDERER_FIXTURE_FAILED pawn=" $ RendererPawn $ " mouse_sensitivity=" $ PC.GetMouseSensitivity());
+        return;
+    }
+    if (!RendererPawn.SetLocation(vect(-28.2195969,1652.75513,-1140)))
+    {
+        Log("KFVR_RENDERER_FIXTURE_FAILED pawn=" $ RendererPawn $ " location=" $ RendererPawn.Location);
+        return;
+    }
+    PC.SetRotation(rot(0,-16320,0)); RendererPawn.SetRotation(rot(0,-16320,0));
+    RendererPawn.Velocity=vect(0,0,0); RendererPawn.Acceleration=vect(0,0,0);
+    Log("KFVR_RENDERER_FIXTURE_READY pawn=" $ RendererPawn $ " location=" $ RendererPawn.Location $ " rotation=" $ PC.Rotation
+        $ " mouse_disabled=True mouse_sensitivity=" $ PC.GetMouseSensitivity()
+        $ " local_map=" $ LocalURLMap(Level.GetLocalURL()));
 }
 function class<KFWeapon> Replacement(KFWeapon W)
 {
@@ -80,6 +137,7 @@ function Timer()
             if (PC.Pawn==None && Level.Game.bWaitingToStartMatch && PC.PlayerReplicationInfo!=None) PC.ServerRestartPlayer();
         }
         if (PC.Pawn==None || PC.Pawn.Health<=0) continue;
+        PlaceRendererPawn(PC);
         if (Rig==None || Rig.Owner!=PC)
         {
             if (Rig!=None) Rig.Destroy();

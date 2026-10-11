@@ -71,14 +71,14 @@ def sample(o):
  for row,fields,size_needed in o.vr_schema:
   if row['class']=='KFVRWeaponRig':
    for owner,name,typ,off,size,mask in fields:
-    if name in ['Tracking.Serial','LastSerial','AppliedFrames','PresentationSerial']:
+    if name in ['Tracking.Serial','LastSerial','AppliedFrames','PresentationSerial','LastShotSequence']:
      at=int(row['address'],16)+off;before=o.read(at,size);guards.append((at,before));stamps[name]=unpack(before)
  out=[]
  for row,fields,size_needed in o.vr_schema:
   address=int(row['address'],16);buffer=o.read(address,size_needed);values={}
   for owner,name,typ,off,size,mask in fields:
    data=buffer[off:off+size]
-   if typ=='StrProperty' and owner in ['KFVRStatusDisplay','KFVRTraderPanel','KFVRAmmoSupplyVisual']:
+   if typ=='StrProperty' and owner in ['KFVRStatusDisplay','KFVRTraderPanel','KFVRAmmoSupplyVisual','KFVRWeaponRig']:
     pointer,count,capacity=struct.unpack('<III',data)
     if count==0:value=''
     elif 0<count<=capacity<=1024:value=o.read(pointer,count*2).decode('utf-16le').rstrip('\x00')
@@ -109,7 +109,7 @@ def sample(o):
     cls=o.object_name(unpack(h,40))
     if cls in ['Nade','MedicNade','FlameNade']:
      o.vr_schema.append(object_layout(o,dict(address=hex(ptr),index=index,**{'class':cls})))
- o.rig_sample_consistent=bool(guards) and ('PresentationSerial' not in stamps or stamps['PresentationSerial']==stamps.get('Tracking.Serial')) and all(o.read(at,len(before))==before for at,before in guards)
+ o.rig_sample_consistent=bool(guards) and stamps.get('LastShotSequence',0)%2==0 and ('PresentationSerial' not in stamps or stamps['PresentationSerial']==stamps.get('Tracking.Serial')) and all(o.read(at,len(before))==before for at,before in guards)
  return out
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--pid',type=int,required=True);p.add_argument('--game',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--seconds',type=float,default=20);p.add_argument('--sample-interval',type=float,default=.1);p.add_argument('--discovery-interval',type=float,default=1);a=p.parse_args()

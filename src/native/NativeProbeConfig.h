@@ -2,7 +2,7 @@
 #include <cstdint>
 namespace kfvr::native {
 struct NativeProbeConfig {
- std::uint32_t bytes=1120,version=15,durationMs=12000,maxFrames=180;
+ std::uint32_t bytes=1124,version=16,durationMs=12000,maxFrames=180;
  std::uint32_t controller=0,controllerIndex=0,viewport=0,level=0,levelIndex=0;
  std::uint32_t levelOffset=0,playerOffset=0,netModeOffset=0;
  // stereoTrial: 0 disabled, 1 parallel native, 2 asymmetric, 3 synthetic head pose.
@@ -18,6 +18,8 @@ struct NativeProbeConfig {
  std::uint32_t turningTrial=0,rotationOffset=0,rotationName=0;float snapDegrees=30;std::uint8_t callPrologue[16]{};
  std::uint32_t weaponTrial=0,rig=0,rigIndex=0,rigClass=0,rigTrackingOffset=0,rigTickName=0,ownerOffset=0,rigFeedbackOffset=0;
  std::uint32_t eyeHeightOffset=0,viewTargetOffset=0;
+ // Fresh stereo only, after an actual native backbuffer mirror probe succeeds.
+ std::uint32_t suppressDesktop=0;
 };
-static_assert(sizeof(NativeProbeConfig)==1120);
+static_assert(sizeof(NativeProbeConfig)==1124);
 }

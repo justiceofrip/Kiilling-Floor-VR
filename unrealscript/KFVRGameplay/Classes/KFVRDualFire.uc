@@ -20,18 +20,21 @@ function DoFireEffect()
     local KFVRTrackedDualies D;
     local KFVRWeaponRig R;
     local vector Position;
-    local rotator Aim;
+    local rotator Aim, IntendedAim;
     D=Pair(); if (D==None) return;
     R=D.VRRig;
     if (R==None || !R.ActiveFor(Weapon)) { Super.DoFireEffect(); return; }
     if (ThisModeNum==1) { Position=D.LeftMuzzle; Aim=D.LeftAim; }
     else { Position=R.MuzzleLocation; Aim=R.AimRotation; }
-    Aim=rotator(vector(Aim)+VRand()*FRand()*Spread);
+    IntendedAim=Aim;
+    // Each tracked pistol fires along its own physical sight direction.
+    // KFFire still owns cadence, perks and its stock fallback spread state.
     if (ThisModeNum==1)
     { D.LeftShots++; D.LeftTraceStart=Position; D.LeftTraceDirection=vector(Aim); R.PulseLeft(0.45,35); }
     else
     { D.RightShots++; D.RightTraceStart=Position; D.RightTraceDirection=vector(Aim); R.PulseRight(0.45,35); }
     R.TraceCount++; R.LastTraceStart=Position; R.LastTraceDirection=vector(Aim);
+    R.RecordShot(Weapon,ThisModeNum,Position,IntendedAim,Aim,Spread,0.0);
     DoTrace(Position,Aim);
 }
 function rotator AdjustAim(vector Start,float InAimError)

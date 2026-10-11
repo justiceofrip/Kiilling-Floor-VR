@@ -59,7 +59,31 @@ var int LastSerial, AppliedFrames, TraceCount, HolsterCount, DrawCount;
 var float LastInputTime, Recoil;
 var bool bTracking, bTriggerArmed, bFiring, bHolstered, bGripPrevious, bGripArmed;
 
+// Immutable shot-time data for the read-only observer. Current hand poses can
+// change after a shot; they must never be used to diagnose an older trace.
+// Odd/even sequence brackets publication for readers outside the game thread.
+var int LastShotSequence, LastShotSerial, LastShotInputSerial, LastShotPresentationSerial;
+var int LastShotFireMode;
+var float LastShotTime, LastShotStockSpread, LastShotAppliedSpread;
+var string LastShotWeapon;
+var vector LastShotStart, LastShotAimDirection, LastShotDirection;
 var int PresentationSerial;
+function RecordShot(Weapon W, int FireMode, vector Start, rotator IntendedAim, rotator FiredAim, float StockSpread, float AppliedSpread)
+{
+    LastShotSequence++;
+    LastShotInputSerial=Tracking.InputSerial;
+    LastShotPresentationSerial=PresentationSerial;
+    LastShotTime=Level.TimeSeconds;
+    LastShotWeapon=string(W.Class);
+    LastShotFireMode=FireMode;
+    LastShotStart=Start;
+    LastShotAimDirection=vector(IntendedAim);
+    LastShotDirection=vector(FiredAim);
+    LastShotStockSpread=StockSpread;
+    LastShotAppliedSpread=AppliedSpread;
+    LastShotSerial++;
+    LastShotSequence++;
+}
 function PulseRight(float Strength, int DurationMs)
 {
     Feedback.RightAmplitude=FClamp(Strength,0.0,1.0); Feedback.RightMs=Clamp(DurationMs,0,100);
